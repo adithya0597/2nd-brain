@@ -360,3 +360,236 @@ def format_error(message: str) -> list[dict]:
     return [
         _section(f":x: *Error*\n{message}"),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Projects Dashboard
+# ---------------------------------------------------------------------------
+
+def format_projects_dashboard(projects: list, tasks: list, dimensions: list) -> list[dict]:
+    """Build Block Kit blocks for the project dashboard.
+
+    Args:
+        projects: List of dicts with "name", "status", "goal", "dimension",
+                  "done_tasks", "total_tasks", "blocked", "deadline".
+        tasks: List of blocked/overdue task dicts with "description", "project", "age_days".
+        dimensions: List of dicts with "dimension", "project_count", "pending_tasks",
+                    "attention_score", "status".
+    """
+    blocks = [
+        _header("Project Dashboard"),
+    ]
+
+    # Summary stats
+    active_count = len(projects)
+    total_tasks = sum(p.get("total_tasks", 0) for p in projects)
+    blocked_count = len(tasks)
+    blocks.append(_section(
+        f"*Active projects:* {active_count} | *Tasks pending:* {total_tasks} | *Blocked items:* {blocked_count}"
+    ))
+
+    blocks.append(_divider())
+
+    # Projects by status
+    for status_label in ("Doing", "Planned", "Ongoing"):
+        status_projects = [p for p in projects if p.get("status", "").lower() == status_label.lower()]
+        if not status_projects:
+            continue
+
+        status_emoji = {"Doing": ":hammer_and_wrench:", "Planned": ":clipboard:", "Ongoing": ":repeat:"}.get(status_label, ":file_folder:")
+        lines = []
+        for p in status_projects:
+            name = p.get("name", "Untitled")
+            goal = p.get("goal", "—")
+            dim = p.get("dimension", "—")
+            done = p.get("done_tasks", 0)
+            total = p.get("total_tasks", 0)
+            blocked = p.get("blocked", 0)
+            deadline = p.get("deadline", "—")
+
+            line = f"• *{name}*"
+            if goal != "—":
+                line += f" → {goal}"
+            line += f"\n  {dim} | {done}/{total} tasks"
+            if blocked > 0:
+                line += f" | :warning: {blocked} blocked"
+            if deadline != "—":
+                line += f" | Due: {deadline}"
+            lines.append(line)
+
+        blocks.append(_section(f"{status_emoji} *{status_label}*\n\n" + "\n\n".join(lines)))
+
+    blocks.append(_divider())
+
+    # Cross-dimensional view
+    if dimensions:
+        dim_lines = []
+        for d in dimensions:
+            dim_name = d.get("dimension", "Unknown")
+            proj_count = d.get("project_count", 0)
+            pending = d.get("pending_tasks", 0)
+            score = d.get("attention_score", 0)
+            status = d.get("status", "—")
+
+            status_emoji = {"Balanced": ":white_check_mark:", "Overloaded": ":warning:", "Gap": ":red_circle:"}.get(status, ":white_circle:")
+            dim_lines.append(f"  {status_emoji} *{dim_name}* — {proj_count} projects, {pending} tasks pending (attn: {score:.1f})")
+
+        blocks.append(_section("*Cross-Dimensional View*\n\n" + "\n".join(dim_lines)))
+
+    blocks.append(_divider())
+
+    # Blocked/overdue items
+    if tasks:
+        task_lines = "\n".join(
+            f"- :warning: *{t.get('description', 'N/A')[:80]}* — {t.get('project', '?')} ({t.get('age_days', '?')}d)"
+            for t in tasks[:10]
+        )
+        blocks.append(_section(f"*Blocked & Overdue*\n{task_lines}"))
+    else:
+        blocks.append(_section(":white_check_mark: *No blocked or overdue items*"))
+
+    blocks.append(_context(f"Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
+    return blocks
+
+
+# ---------------------------------------------------------------------------
+# Resources Catalog
+# ---------------------------------------------------------------------------
+
+def format_resources_catalog(resources: list, concepts: list, recently_added: list) -> list[dict]:
+    """Build Block Kit blocks for the resource catalog.
+
+    Args:
+        resources: List of dicts with "title", "type", "dimension", "mentions", "status".
+        concepts: List of concept dicts with "title", "status", "mention_count",
+                  "last_mentioned", "icor_elements".
+        recently_added: List of dicts with "title", "type", "dimension", "date_added".
+    """
+    blocks = [
+        _header("Knowledge Base Catalog"),
+    ]
+
+    # Summary stats
+    total = len(resources)
+    evergreen = sum(1 for c in concepts if c.get("status") == "evergreen")
+    growing = sum(1 for c in concepts if c.get("status") == "growing")
+    seedling = sum(1 for c in concepts if c.get("status") == "seedling")
+    new_count = len(recently_added)
+
+    blocks.append(_section(
+        f"*Total resources:* {total} | *Evergreen:* {evergreen} | *Growing:* {growing} | *Seedling:* {seedling} | *New this month:* {new_count}"
+    ))
+
+    blocks.append(_divider())
+
+    # Resources grouped by type
+    type_groups: dict[str, list] = {}
+    for r in resources:
+        rtype = r.get("type", "Other")
+        type_groups.setdefault(rtype, []).append(r)
+
+    type_emojis = {
+        "Book": ":books:", "Reference": ":bookmark:", "Tool": ":wrench:",
+        "Template": ":page_facing_up:", "Recipe": ":memo:", "Lecture": ":mortar_board:",
+        "Course": ":mortar_board:", "Web Clip": ":link:", "Framework": ":gear:",
+    }
+
+    for rtype, items in type_groups.items():
+        emoji = type_emojis.get(rtype, ":file_folder:")
+        lines = []
+        for item in items[:8]:
+            title = item.get("title", "Untitled")
+            dim = item.get("dimension", "—")
+            mentions = item.get("mentions", 0)
+            lines.append(f"  • *{title}* — {dim} ({mentions} mentions)")
+
+        extra = f"\n  _...and {len(items) - 8} more_" if len(items) > 8 else ""
+        blocks.append(_section(f"{emoji} *{rtype}* ({len(items)})\n\n" + "\n".join(lines) + extra))
+
+    blocks.append(_divider())
+
+    # Recently added
+    if recently_added:
+        recent_lines = "\n".join(
+            f"- *{r.get('title', 'Untitled')}* ({r.get('type', '?')}) — {r.get('dimension', '?')} | {r.get('date_added', '?')}"
+            for r in recently_added[:10]
+        )
+        blocks.append(_section(f"*Recently Added (30 days)*\n{recent_lines}"))
+
+    blocks.append(_divider())
+
+    # Knowledge health (concepts)
+    if concepts:
+        health_lines = [
+            f"  :large_green_circle: Evergreen: {evergreen}",
+            f"  :large_yellow_circle: Growing: {growing}",
+            f"  :seedling: Seedling: {seedling}",
+        ]
+        blocks.append(_section("*Knowledge Health*\n\n" + "\n".join(health_lines)))
+
+    blocks.append(_context(f"Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
+    return blocks
+
+
+# ---------------------------------------------------------------------------
+# Notion Sync Report
+# ---------------------------------------------------------------------------
+
+def format_sync_report(result) -> list[dict]:
+    """Build Block Kit blocks for a Notion sync report.
+
+    Args:
+        result: SyncResult dataclass with sync counts, errors, and warnings.
+    """
+    has_errors = bool(result.errors)
+    status_emoji = ":warning:" if has_errors else ":white_check_mark:"
+    status_text = "Completed with errors" if has_errors else "Completed successfully"
+
+    blocks = [
+        _header(f"Notion Sync {status_text}"),
+    ]
+
+    # Sync counts
+    counts = []
+    if result.tasks_pushed:
+        counts.append(f":arrow_up: Tasks pushed: {result.tasks_pushed}")
+    if result.tasks_status_synced:
+        counts.append(f":arrows_counterclockwise: Task statuses synced: {result.tasks_status_synced}")
+    if result.projects_pulled:
+        counts.append(f":arrow_down: Projects pulled: {result.projects_pulled}")
+    if result.goals_pulled:
+        counts.append(f":arrow_down: Goals pulled: {result.goals_pulled}")
+    if result.tags_synced:
+        counts.append(f":label: Tags synced: {result.tags_synced}")
+    if result.notes_pushed:
+        counts.append(f":arrow_up: Journal notes pushed: {result.notes_pushed}")
+    if result.concepts_pushed:
+        counts.append(f":arrow_up: Concepts pushed: {result.concepts_pushed}")
+    if result.people_synced:
+        counts.append(f":busts_in_silhouette: People synced: {result.people_synced}")
+    if result.ai_calls:
+        counts.append(f":brain: AI decisions: {result.ai_calls}")
+
+    if counts:
+        blocks.append(_section("*Sync Summary*\n" + "\n".join(counts)))
+    else:
+        blocks.append(_section("No changes needed — everything is in sync."))
+
+    # Errors
+    if result.errors:
+        blocks.append(_divider())
+        error_text = "\n".join(f":x: {e}" for e in result.errors[:10])
+        if len(result.errors) > 10:
+            error_text += f"\n_...and {len(result.errors) - 10} more errors_"
+        blocks.append(_section(f"*Errors ({len(result.errors)})*\n{error_text}"))
+
+    # Warnings
+    if result.warnings:
+        blocks.append(_divider())
+        warning_text = "\n".join(f":warning: {w}" for w in result.warnings[:10])
+        if len(result.warnings) > 10:
+            warning_text += f"\n_...and {len(result.warnings) - 10} more warnings_"
+        blocks.append(_section(f"*Warnings ({len(result.warnings)})*\n{warning_text}"))
+
+    blocks.append(_context(f"{status_emoji} Sync completed at {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
+    return blocks

@@ -18,6 +18,8 @@ from config import (
     DIMENSION_CHANNELS,
     DIMENSION_KEYWORDS,
     OWNER_SLACK_ID,
+    PROJECT_KEYWORDS,
+    RESOURCE_KEYWORDS,
 )
 from core.db_ops import insert_action_item
 from core.formatter import format_capture_confirmation, format_error
@@ -82,6 +84,18 @@ def _classify_dimension_ai(text: str) -> str:
 def _is_actionable(text: str) -> bool:
     """Heuristic check for whether text looks like an action item."""
     return bool(_ACTION_PATTERNS.search(text))
+
+
+def _detect_project_mention(text: str) -> bool:
+    """Check if text mentions project-related keywords."""
+    text_lower = text.lower()
+    return sum(1 for kw in PROJECT_KEYWORDS if kw in text_lower) >= 2
+
+
+def _detect_resource_mention(text: str) -> bool:
+    """Check if text mentions resource-related keywords."""
+    text_lower = text.lower()
+    return sum(1 for kw in RESOURCE_KEYWORDS if kw in text_lower) >= 2
 
 
 def _process_capture(client, event, channel_ids: dict):
@@ -157,6 +171,59 @@ def _process_capture(client, event, channel_ids: dict):
                     },
                 ],
             )
+
+        # 4b. Cross-post to PARA channels if keywords match
+        if _detect_project_mention(text):
+            projects_ch = channel_ids.get("brain-projects")
+            if projects_ch:
+                client.chat_postMessage(
+                    channel=projects_ch,
+                    text=f"Project-related capture from inbox",
+                    blocks=[
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f":file_folder: *Project-related capture:*\n> {text}",
+                            },
+                        },
+                        {
+                            "type": "context",
+                            "elements": [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": f"Cross-posted from #brain-inbox → #{target_channel_name} | {today}",
+                                }
+                            ],
+                        },
+                    ],
+                )
+
+        if _detect_resource_mention(text):
+            resources_ch = channel_ids.get("brain-resources")
+            if resources_ch:
+                client.chat_postMessage(
+                    channel=resources_ch,
+                    text=f"Resource-related capture from inbox",
+                    blocks=[
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f":books: *Resource-related capture:*\n> {text}",
+                            },
+                        },
+                        {
+                            "type": "context",
+                            "elements": [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": f"Cross-posted from #brain-inbox → #{target_channel_name} | {today}",
+                                }
+                            ],
+                        },
+                    ],
+                )
 
         # 5. Reply in thread in #brain-inbox
         blocks = format_capture_confirmation(text, dimension, target_channel_name)

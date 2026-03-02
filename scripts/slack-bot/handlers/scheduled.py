@@ -15,6 +15,11 @@ from slack_sdk import WebClient
 from config import (
     ANTHROPIC_API_KEY,
     ANTHROPIC_MODEL,
+    DB_PATH,
+    NOTION_COLLECTIONS,
+    NOTION_REGISTRY_PATH,
+    NOTION_TOKEN,
+    VAULT_PATH,
 )
 from core.context_loader import (
     build_claude_messages,
@@ -32,7 +37,10 @@ from core.db_ops import (
 from core.formatter import (
     format_dashboard,
     format_error,
+    format_sync_report,
 )
+from core.notion_client import NotionClientWrapper
+from core.notion_sync import NotionSync
 
 logger = logging.getLogger(__name__)
 
@@ -209,13 +217,42 @@ def job_dashboard_refresh(client: WebClient, channel_ids: dict):
 
 
 def job_notion_sync(client: WebClient, channel_ids: dict):
-    """Daily 10pm: Silent Notion sync (log only, post on error)."""
+    """Daily 10pm: Python-native Notion sync (post summary on error)."""
+    if not NOTION_TOKEN:
+        logger.warning("NOTION_TOKEN not set — skipping Notion sync")
+        return
     try:
-        logger.info("Running Notion sync job")
-        # The actual sync logic lives in the sync-notion command.
-        # For the scheduled job, we call it and only post if there's an error.
-        result = _call_claude("sync-notion")
-        logger.info("Notion sync completed: %s", result[:200])
+        logger.info("Running Notion sync job (Python-native)")
+
+        async def _do_sync():
+            notion = NotionClientWrapper(token=NOTION_TOKEN)
+            try:
+                syncer = NotionSync(
+                    client=notion,
+                    registry_path=NOTION_REGISTRY_PATH,
+                    db_path=DB_PATH,
+                    vault_path=VAULT_PATH,
+                    collection_ids=NOTION_COLLECTIONS,
+                    ai_client=anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None,
+                    ai_model=ANTHROPIC_MODEL,
+                )
+                return await syncer.run_full_sync()
+            finally:
+                await notion.close()
+
+        result = _run_async(_do_sync())
+        logger.info("Notion sync completed: %s", result.summary())
+
+        # Post summary if there were errors
+        if result.errors:
+            ch = channel_ids.get("brain-daily")
+            if ch:
+                blocks = format_sync_report(result)
+                client.chat_postMessage(
+                    channel=ch,
+                    text="Notion sync completed with errors",
+                    blocks=blocks,
+                )
     except Exception:
         logger.exception("Notion sync job failed")
         ch = channel_ids.get("brain-daily")
@@ -258,6 +295,33 @@ def job_emerge_biweekly(client: WebClient, channel_ids: dict):
         logger.exception("Emerge job failed")
 
 
+def job_weekly_project_summary(client: WebClient, channel_ids: dict):
+    """Weekly Monday 9am: AI-powered project summary."""
+    try:
+        logger.info("Running weekly project summary job")
+        result = _call_claude("projects")
+        ch = channel_ids.get("brain-projects")
+        if ch:
+            _post_text(client, ch, result, header="Weekly Project Summary")
+    except Exception:
+        logger.exception("Weekly project summary job failed")
+
+
+def job_monthly_resource_digest(client: WebClient, channel_ids: dict):
+    """Monthly 1st at 10am: AI-powered resource digest."""
+    today = datetime.now()
+    if today.day != 1:
+        return  # Only run on the 1st of the month
+    try:
+        logger.info("Running monthly resource digest job")
+        result = _call_claude("resources")
+        ch = channel_ids.get("brain-resources")
+        if ch:
+            _post_text(client, ch, result, header="Monthly Resource Digest")
+    except Exception:
+        logger.exception("Monthly resource digest job failed")
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -297,6 +361,12 @@ def register_schedules(app):
 
     # Bi-weekly Wednesday 2pm: Pattern synthesis (counter-based)
     schedule.every().wednesday.at("14:00").do(_run_job, job_emerge_biweekly, client, channel_ids)
+
+    # Weekly Monday 9am: Project summary
+    schedule.every().monday.at("09:00").do(_run_job, job_weekly_project_summary, client, channel_ids)
+
+    # Monthly 1st at 10am: Resource digest (daily check with day-of-month guard)
+    schedule.every().day.at("10:00").do(_run_job, job_monthly_resource_digest, client, channel_ids)
 
     logger.info(
         "Registered %d scheduled jobs, channel_ids resolved: %d",

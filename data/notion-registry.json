@@ -1,48 +1,192 @@
 {
   "_description": "Maps local ICOR hierarchy IDs to Notion page IDs. Updated by /brain:sync-notion.",
-  "_last_synced": "2026-03-02T00:00:00Z",
+  "_last_synced": "2026-03-02T22:43:22.655499Z",
   "dimensions": {
-    "Health & Vitality": { "local_id": 1, "notion_page_id": "317fda46-1a19-81ce-a264-d9f59ee1a449" },
-    "Wealth & Finance": { "local_id": 2, "notion_page_id": "317fda46-1a19-818b-859f-cac6bfe391e5" },
-    "Relationships": { "local_id": 3, "notion_page_id": "317fda46-1a19-8150-8494-e9020377b813" },
-    "Mind & Growth": { "local_id": 4, "notion_page_id": "317fda46-1a19-813e-8718-f480c0c9f785" },
-    "Purpose & Impact": { "local_id": 5, "notion_page_id": "317fda46-1a19-8168-80e4-fd955f355474" },
-    "Systems & Environment": { "local_id": 6, "notion_page_id": "317fda46-1a19-81e7-9f18-d11a04fd3c9d" }
+    "Health & Vitality": {
+      "local_id": 1,
+      "notion_page_id": "317fda46-1a19-81ce-a264-d9f59ee1a449"
+    },
+    "Wealth & Finance": {
+      "local_id": 2,
+      "notion_page_id": "317fda46-1a19-818b-859f-cac6bfe391e5"
+    },
+    "Relationships": {
+      "local_id": 3,
+      "notion_page_id": "317fda46-1a19-8150-8494-e9020377b813"
+    },
+    "Mind & Growth": {
+      "local_id": 4,
+      "notion_page_id": "317fda46-1a19-813e-8718-f480c0c9f785"
+    },
+    "Purpose & Impact": {
+      "local_id": 5,
+      "notion_page_id": "317fda46-1a19-8168-80e4-fd955f355474"
+    },
+    "Systems & Environment": {
+      "local_id": 6,
+      "notion_page_id": "317fda46-1a19-81e7-9f18-d11a04fd3c9d"
+    }
   },
   "key_elements": {
-    "Fitness": { "local_id": 101, "notion_page_id": "317fda46-1a19-815c-869e-f644d82ae40b", "dimension": "Health & Vitality" },
-    "Nutrition": { "local_id": 102, "notion_page_id": "317fda46-1a19-8144-b0ba-d82bb5a41754", "dimension": "Health & Vitality" },
-    "Sleep": { "local_id": 103, "notion_page_id": "317fda46-1a19-81ac-b2df-c9d89bc16c40", "dimension": "Health & Vitality" },
-    "Mental Health": { "local_id": 104, "notion_page_id": "317fda46-1a19-8168-a5be-d64db0a514ae", "dimension": "Health & Vitality" },
-    "Income": { "local_id": 201, "notion_page_id": "317fda46-1a19-8161-9af3-f20b1de10b16", "dimension": "Wealth & Finance" },
-    "Investments": { "local_id": 202, "notion_page_id": "317fda46-1a19-813e-a550-d51d53b4c6fe", "dimension": "Wealth & Finance" },
-    "Career Growth": { "local_id": 203, "notion_page_id": "317fda46-1a19-8123-8f89-f4f396c9c0c6", "dimension": "Wealth & Finance" },
-    "Side Projects": { "local_id": 204, "notion_page_id": "317fda46-1a19-8103-a763-c3aa086e92b3", "dimension": "Wealth & Finance" },
-    "Family": { "local_id": 301, "notion_page_id": "317fda46-1a19-8174-84d9-c53aa336300c", "dimension": "Relationships" },
-    "Friendships": { "local_id": 302, "notion_page_id": "317fda46-1a19-81d1-b375-d3fcecbbecaa", "dimension": "Relationships" },
-    "Professional Network": { "local_id": 303, "notion_page_id": "317fda46-1a19-818c-9a55-ec19c0084500", "dimension": "Relationships" },
-    "Romance": { "local_id": 304, "notion_page_id": "317fda46-1a19-817e-b603-f9ebd9934e04", "dimension": "Relationships" },
-    "Reading": { "local_id": 401, "notion_page_id": "317fda46-1a19-81e6-aeaa-c45fae98bfae", "dimension": "Mind & Growth" },
-    "Skill Acquisition": { "local_id": 402, "notion_page_id": "317fda46-1a19-8103-a1a3-d8e88dd246d6", "dimension": "Mind & Growth" },
-    "Education": { "local_id": 403, "notion_page_id": "317fda46-1a19-81f7-8ec5-fa049829185c", "dimension": "Mind & Growth" },
-    "Creativity": { "local_id": 404, "notion_page_id": "317fda46-1a19-81d0-9731-c532c26060f6", "dimension": "Mind & Growth" },
-    "Personal Brand": { "local_id": 501, "notion_page_id": "317fda46-1a19-81c0-b512-e09b639e1cb8", "dimension": "Purpose & Impact" },
-    "Content Creation": { "local_id": 502, "notion_page_id": "317fda46-1a19-816b-b1d6-db45ec369ce1", "dimension": "Purpose & Impact" },
-    "Mentoring": { "local_id": 503, "notion_page_id": "317fda46-1a19-8102-b01d-d4b924348fcb", "dimension": "Purpose & Impact" },
-    "Giving Back": { "local_id": 504, "notion_page_id": "317fda46-1a19-819c-a8f3-f5a3aeac16ef", "dimension": "Purpose & Impact" },
-    "Productivity Systems": { "local_id": 601, "notion_page_id": "317fda46-1a19-8131-861d-ceaf6031dc72", "dimension": "Systems & Environment" },
-    "Home Management": { "local_id": 602, "notion_page_id": "317fda46-1a19-81b4-b66d-f9b26fe20180", "dimension": "Systems & Environment" },
-    "Digital Tools": { "local_id": 603, "notion_page_id": "317fda46-1a19-814f-b534-e882e56edb78", "dimension": "Systems & Environment" }
+    "Fitness": {
+      "local_id": 101,
+      "notion_page_id": "317fda46-1a19-815c-869e-f644d82ae40b",
+      "dimension": "Health & Vitality"
+    },
+    "Nutrition": {
+      "local_id": 102,
+      "notion_page_id": "317fda46-1a19-8144-b0ba-d82bb5a41754",
+      "dimension": "Health & Vitality"
+    },
+    "Sleep": {
+      "local_id": 103,
+      "notion_page_id": "317fda46-1a19-81ac-b2df-c9d89bc16c40",
+      "dimension": "Health & Vitality"
+    },
+    "Mental Health": {
+      "local_id": 104,
+      "notion_page_id": "317fda46-1a19-8168-a5be-d64db0a514ae",
+      "dimension": "Health & Vitality"
+    },
+    "Income": {
+      "local_id": 201,
+      "notion_page_id": "317fda46-1a19-8161-9af3-f20b1de10b16",
+      "dimension": "Wealth & Finance"
+    },
+    "Investments": {
+      "local_id": 202,
+      "notion_page_id": "317fda46-1a19-813e-a550-d51d53b4c6fe",
+      "dimension": "Wealth & Finance"
+    },
+    "Career Growth": {
+      "local_id": 203,
+      "notion_page_id": "317fda46-1a19-8123-8f89-f4f396c9c0c6",
+      "dimension": "Wealth & Finance"
+    },
+    "Side Projects": {
+      "local_id": 204,
+      "notion_page_id": "317fda46-1a19-8103-a763-c3aa086e92b3",
+      "dimension": "Wealth & Finance"
+    },
+    "Family": {
+      "local_id": 301,
+      "notion_page_id": "317fda46-1a19-8174-84d9-c53aa336300c",
+      "dimension": "Relationships"
+    },
+    "Friendships": {
+      "local_id": 302,
+      "notion_page_id": "317fda46-1a19-81d1-b375-d3fcecbbecaa",
+      "dimension": "Relationships"
+    },
+    "Professional Network": {
+      "local_id": 303,
+      "notion_page_id": "317fda46-1a19-818c-9a55-ec19c0084500",
+      "dimension": "Relationships"
+    },
+    "Romance": {
+      "local_id": 304,
+      "notion_page_id": "317fda46-1a19-817e-b603-f9ebd9934e04",
+      "dimension": "Relationships"
+    },
+    "Reading": {
+      "local_id": 401,
+      "notion_page_id": "317fda46-1a19-81e6-aeaa-c45fae98bfae",
+      "dimension": "Mind & Growth"
+    },
+    "Skill Acquisition": {
+      "local_id": 402,
+      "notion_page_id": "317fda46-1a19-8103-a1a3-d8e88dd246d6",
+      "dimension": "Mind & Growth"
+    },
+    "Education": {
+      "local_id": 403,
+      "notion_page_id": "317fda46-1a19-81f7-8ec5-fa049829185c",
+      "dimension": "Mind & Growth"
+    },
+    "Creativity": {
+      "local_id": 404,
+      "notion_page_id": "317fda46-1a19-81d0-9731-c532c26060f6",
+      "dimension": "Mind & Growth"
+    },
+    "Personal Brand": {
+      "local_id": 501,
+      "notion_page_id": "317fda46-1a19-81c0-b512-e09b639e1cb8",
+      "dimension": "Purpose & Impact"
+    },
+    "Content Creation": {
+      "local_id": 502,
+      "notion_page_id": "317fda46-1a19-816b-b1d6-db45ec369ce1",
+      "dimension": "Purpose & Impact"
+    },
+    "Mentoring": {
+      "local_id": 503,
+      "notion_page_id": "317fda46-1a19-8102-b01d-d4b924348fcb",
+      "dimension": "Purpose & Impact"
+    },
+    "Giving Back": {
+      "local_id": 504,
+      "notion_page_id": "317fda46-1a19-819c-a8f3-f5a3aeac16ef",
+      "dimension": "Purpose & Impact"
+    },
+    "Productivity Systems": {
+      "local_id": 601,
+      "notion_page_id": "317fda46-1a19-8131-861d-ceaf6031dc72",
+      "dimension": "Systems & Environment"
+    },
+    "Home Management": {
+      "local_id": 602,
+      "notion_page_id": "317fda46-1a19-81b4-b66d-f9b26fe20180",
+      "dimension": "Systems & Environment"
+    },
+    "Digital Tools": {
+      "local_id": 603,
+      "notion_page_id": "317fda46-1a19-814f-b534-e882e56edb78",
+      "dimension": "Systems & Environment"
+    }
   },
   "goals": {
-    "Investment Portfolio": { "notion_page_id": "231fda46-1a19-803c-b6bc-cc4c73166804", "tag": "Investments" }
+    "Investment Portfolio": {
+      "notion_page_id": "231fda46-1a19-803c-b6bc-cc4c73166804",
+      "tag": "Investments"
+    }
   },
   "projects": {
-    "Investment Portfolio": { "notion_page_id": "231fda46-1a19-801c-b45b-de9b7f45c66c", "tag": "Investments" },
-    "LinkedIn Portfolio": { "notion_page_id": "231fda46-1a19-8086-a71a-ed192059b6fd", "tag": "Personal Brand" },
-    "Create a Portfolio Agent": { "notion_page_id": "2fbfda46-1a19-8087-ae0d-ea891e90574a", "tag": "Side Projects" },
-    "AI automated trader": { "notion_page_id": "260fda46-1a19-8061-af15-e96d52b5609b", "tag": "Investments" },
-    "My brand (Hoodies T-shirts)": { "notion_page_id": "231fda46-1a19-81eb-90b5-caf485197d06", "tag": "Personal Brand" }
+    "Investment Portfolio": {
+      "notion_page_id": "231fda46-1a19-801c-b45b-de9b7f45c66c",
+      "tag": "Investments"
+    },
+    "LinkedIn Portfolio": {
+      "notion_page_id": "231fda46-1a19-8086-a71a-ed192059b6fd",
+      "tag": "Personal Brand"
+    },
+    "Create a Portfolio Agent": {
+      "notion_page_id": "2fbfda46-1a19-8087-ae0d-ea891e90574a",
+      "tag": "Side Projects"
+    },
+    "AI automated trader": {
+      "notion_page_id": "260fda46-1a19-8061-af15-e96d52b5609b",
+      "tag": "Investments"
+    },
+    "My brand (Hoodies T-shirts)": {
+      "notion_page_id": "231fda46-1a19-81eb-90b5-caf485197d06",
+      "tag": "Personal Brand"
+    },
+    "Investment Porfolio": {
+      "notion_page_id": "231fda46-1a19-801c-b45b-de9b7f45c66c",
+      "tag": "Investments"
+    },
+    "Denim Jacket with replaceable canvas in the back": {
+      "notion_page_id": "231fda46-1a19-812f-9527-fa8079b6794d"
+    },
+    "Design Agent": {
+      "notion_page_id": "231fda46-1a19-818f-92c7-c668e7e93ae5"
+    },
+    "Ideas in Fashion Industry ": {
+      "notion_page_id": "25afda46-1a19-80f4-81e3-d5040a998599"
+    },
+    "AI assisted apparel Assistant ": {
+      "notion_page_id": "260fda46-1a19-803f-b80f-f4d8ed04faa4"
+    }
   },
   "dashboard_page_id": null
 }

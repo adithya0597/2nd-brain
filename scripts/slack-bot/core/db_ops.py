@@ -4,7 +4,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from .. import config
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -99,5 +99,165 @@ async def get_neglected_elements(days: int = 7, db_path: Path = None) -> list[di
         "AND (h.last_mentioned IS NULL OR h.last_mentioned < date('now', ?)) "
         "ORDER BY h.last_mentioned ASC NULLS FIRST",
         (f"-{days} days",),
+        db_path=db_path,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sync-related queries
+# ---------------------------------------------------------------------------
+
+
+async def get_sync_state(entity_type: str, db_path: Path = None) -> dict | None:
+    """Get the sync state for an entity type."""
+    rows = await query(
+        "SELECT entity_type, last_synced_at, items_synced, last_sync_direction, updated_at "
+        "FROM sync_state WHERE entity_type = ?",
+        (entity_type,),
+        db_path=db_path,
+    )
+    return rows[0] if rows else None
+
+
+async def update_sync_state(
+    entity_type: str,
+    last_synced_at: str,
+    items_synced: int,
+    direction: str = "push",
+    db_path: Path = None,
+) -> int:
+    """Update sync state after a sync operation."""
+    return await execute(
+        "UPDATE sync_state SET last_synced_at = ?, items_synced = ?, "
+        "last_sync_direction = ?, updated_at = datetime('now') "
+        "WHERE entity_type = ?",
+        (last_synced_at, items_synced, direction, entity_type),
+        db_path=db_path,
+    )
+
+
+async def get_unpushed_actions(db_path: Path = None) -> list[dict]:
+    """Get action items that haven't been pushed to Notion yet."""
+    return await query(
+        "SELECT id, description, source_file, source_date, icor_element, icor_project, status "
+        "FROM action_items WHERE status = 'pending' AND external_id IS NULL "
+        "ORDER BY created_at ASC",
+        db_path=db_path,
+    )
+
+
+async def get_pushed_actions(db_path: Path = None) -> list[dict]:
+    """Get action items that have been pushed to Notion (have external_id)."""
+    return await query(
+        "SELECT id, description, status, external_id, external_system "
+        "FROM action_items WHERE external_id IS NOT NULL AND external_system = 'notion_tasks' "
+        "ORDER BY created_at DESC",
+        db_path=db_path,
+    )
+
+
+async def update_action_external(
+    action_id: int, external_id: str, db_path: Path = None
+) -> int:
+    """Set the Notion page ID on an action item after pushing it."""
+    return await execute(
+        "UPDATE action_items SET external_id = ?, external_system = 'notion_tasks' "
+        "WHERE id = ?",
+        (external_id, action_id),
+        db_path=db_path,
+    )
+
+
+async def update_action_status_from_notion(
+    action_id: int, status: str, db_path: Path = None
+) -> int:
+    """Update a local action item's status based on Notion task status."""
+    return await execute(
+        "UPDATE action_items SET status = ? WHERE id = ?",
+        (status, action_id),
+        db_path=db_path,
+    )
+
+
+async def get_unsynced_journal_entries(since: str = None, db_path: Path = None) -> list[dict]:
+    """Get journal entries not yet synced to Notion.
+
+    Args:
+        since: ISO date string. If None, gets all entries without a notion sync log.
+    """
+    if since:
+        return await query(
+            "SELECT date, content, mood, energy, icor_elements, summary, sentiment_score "
+            "FROM journal_entries WHERE date >= ? "
+            "AND date NOT IN (SELECT source_file FROM vault_sync_log WHERE target = 'notion_notes' AND status = 'success') "
+            "ORDER BY date ASC",
+            (since,),
+            db_path=db_path,
+        )
+    return await query(
+        "SELECT date, content, mood, energy, icor_elements, summary, sentiment_score "
+        "FROM journal_entries "
+        "WHERE date NOT IN (SELECT source_file FROM vault_sync_log WHERE target = 'notion_notes' AND status = 'success') "
+        "ORDER BY date ASC",
+        db_path=db_path,
+    )
+
+
+async def get_unsynced_concepts(db_path: Path = None) -> list[dict]:
+    """Get concepts (growing/evergreen) not yet pushed to Notion."""
+    return await query(
+        "SELECT id, title AS name, file_path, status, mention_count, last_mentioned, icor_elements "
+        "FROM concept_metadata WHERE notion_id IS NULL "
+        "AND status IN ('growing', 'evergreen') "
+        "ORDER BY mention_count DESC",
+        db_path=db_path,
+    )
+
+
+async def update_concept_notion_id(
+    concept_id: int, notion_id: str, db_path: Path = None
+) -> int:
+    """Set the Notion page ID on a concept after pushing it."""
+    return await execute(
+        "UPDATE concept_metadata SET notion_id = ? WHERE id = ?",
+        (notion_id, concept_id),
+        db_path=db_path,
+    )
+
+
+async def update_icor_notion_page_id(
+    icor_id: int, notion_page_id: str, db_path: Path = None
+) -> int:
+    """Set the Notion page ID on an ICOR hierarchy element."""
+    return await execute(
+        "UPDATE icor_hierarchy SET notion_page_id = ? WHERE id = ?",
+        (notion_page_id, icor_id),
+        db_path=db_path,
+    )
+
+
+async def log_sync_operation(
+    operation: str,
+    source_file: str,
+    target: str,
+    status: str,
+    details: str = "",
+    db_path: Path = None,
+) -> int:
+    """Insert a record into vault_sync_log."""
+    return await execute(
+        "INSERT INTO vault_sync_log (operation, source_file, target, status, details, created_at) "
+        "VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        (operation, source_file, target, status, details),
+        db_path=db_path,
+    )
+
+
+async def get_icor_without_notion_id(db_path: Path = None) -> list[dict]:
+    """Get ICOR hierarchy entries that don't have a Notion page ID."""
+    return await query(
+        "SELECT id, level, name, parent_id "
+        "FROM icor_hierarchy WHERE notion_page_id IS NULL "
+        "ORDER BY id ASC",
         db_path=db_path,
     )

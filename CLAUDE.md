@@ -100,6 +100,8 @@ tags: [additional tags]
 | `/brain:refresh-dashboard` | Recalculate attention scores, update Notion cockpit |
 | `/brain:ideas` | Deep vault scan for actionable ideas across 5 categories |
 | `/brain:schedule` | Energy-aware weekly planning with ICOR balance |
+| `/brain:projects` | Active project dashboard with cross-dimensional tracking |
+| `/brain:resources` | Knowledge base catalog with resource health metrics |
 
 ## SQLite Database
 
@@ -113,8 +115,9 @@ A Python Slack bot (`scripts/slack-bot/`) provides an asynchronous remote interf
 1. Create a Slack app at api.slack.com with Socket Mode enabled
 2. Copy `.env.example` to `.env` and fill in tokens
 3. Run `scripts/setup-slack.sh` to create channels
-4. Start: `cd scripts/slack-bot && pip install -r requirements.txt && python app.py`
-5. Auto-start: `cp scripts/slack-bot/launchd/com.brain.slack-bot.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.brain.slack-bot.plist`
+4. Run `python scripts/migrate-db.py` to prepare sync tables
+5. Start: `cd scripts/slack-bot && pip install -r requirements.txt && python app.py`
+6. Auto-start: `cp scripts/slack-bot/launchd/com.brain.slack-bot.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.brain.slack-bot.plist`
 
 ### Slack Channel Architecture
 
@@ -133,6 +136,8 @@ A Python Slack bot (`scripts/slack-bot/`) provides an asynchronous remote interf
 | `#brain-growth` | Mind & Growth captures |
 | `#brain-purpose` | Purpose & Impact captures |
 | `#brain-systems` | Systems & Environment captures |
+| `#brain-projects` | Active projects, weekly summaries (Mon 9am), cross-posted captures |
+| `#brain-resources` | Resource catalog, monthly digests (1st 10am), cross-posted captures |
 
 ### Slack Slash Commands
 
@@ -147,6 +152,8 @@ A Python Slack bot (`scripts/slack-bot/`) provides an asynchronous remote interf
 | `/brain-ghost` | `/brain:ghost` | #brain-insights |
 | `/brain-status` | Quick SQLite query | #brain-dashboard |
 | `/brain-sync` | `/brain:sync-notion` | DM |
+| `/brain-projects` | `/brain:projects` | #brain-projects |
+| `/brain-resources` | `/brain:resources` | #brain-resources |
 
 ### Scheduled Automations
 
@@ -158,3 +165,20 @@ A Python Slack bot (`scripts/slack-bot/`) provides an asynchronous remote interf
 | Notion Sync | (silent) | Daily 10pm |
 | Drift Report | #brain-drift | Weekly Sunday 6pm |
 | Pattern Synthesis | #brain-insights | Bi-weekly Wed 2pm |
+| Project Summary | #brain-projects | Weekly Monday 9am |
+| Resource Digest | #brain-resources | Monthly 1st 10am |
+
+### Notion Sync Engine
+
+The Notion sync is powered by a Python-native pipeline (`scripts/slack-bot/core/notion_sync.py`) using the `notion-client` SDK. This replaces the previous Claude API approach which lacked MCP tool access.
+
+**Requirements:** `NOTION_TOKEN` environment variable (Notion internal integration token). Run `python scripts/migrate-db.py` once to create the `sync_state` table.
+
+**Architecture:**
+- `core/notion_client.py` — Async API wrapper with rate limiting (3 req/sec) and retry
+- `core/notion_mappers.py` — Pure transform functions between local and Notion formats
+- `core/notion_sync.py` — Sync orchestrator: `NotionSync.run_full_sync()` → `SyncResult`
+
+**Entity flows:** ICOR Tags (push), Action Items (push), Task Status (pull), Projects (pull), Goals (pull), Journal Entries (push, summary-only), Concepts (push), People (pull).
+
+**Hybrid AI:** Optional `ai_client` parameter enables Claude-assisted classification, conflict resolution, and project-goal inference. Falls back to heuristics when unset.

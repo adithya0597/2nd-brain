@@ -43,6 +43,8 @@ CHANNELS=(
     "brain-growth|Mind & Growth|Mind & Growth — learning, reading, skill development."
     "brain-purpose|Purpose & Impact|Purpose & Impact — career, mission, legacy."
     "brain-systems|Systems & Environment|Systems & Environment — tools, workflows, organization."
+    "brain-projects|Active projects & cross-dimensional tracking|Active projects, milestones, and cross-dimensional project views."
+    "brain-resources|Reference materials & knowledge bases|Reference materials, tools, templates, and knowledge base catalog."
 )
 
 # Welcome messages per channel
@@ -60,6 +62,8 @@ WELCOME_MSGS["brain-relations"]="Welcome to *#brain-relations*. Captures related
 WELCOME_MSGS["brain-growth"]="Welcome to *#brain-growth*. Captures related to *Mind & Growth* (learning, reading, skill development, education) are routed here from #brain-inbox."
 WELCOME_MSGS["brain-purpose"]="Welcome to *#brain-purpose*. Captures related to *Purpose & Impact* (career, mission, leadership, legacy) are routed here from #brain-inbox."
 WELCOME_MSGS["brain-systems"]="Welcome to *#brain-systems*. Captures related to *Systems & Environment* (tools, workflows, automation, organization) are routed here from #brain-inbox."
+WELCOME_MSGS["brain-projects"]="Welcome to *#brain-projects*. Weekly project summaries (Monday 9am), cross-dimensional project views, and project-related captures cross-posted from #brain-inbox appear here. Use \`/brain-projects\` for an on-demand project dashboard."
+WELCOME_MSGS["brain-resources"]="Welcome to *#brain-resources*. Monthly resource digests (1st of month, 10am), knowledge base catalogs, and resource-related captures cross-posted from #brain-inbox appear here. Use \`/brain-resources\` for an on-demand resource catalog."
 
 # -----------------------------------------------------------------------
 # Helper: call Slack API
@@ -160,4 +164,5 @@ echo "  1. Invite the bot to each channel: /invite @YourBotName"
 echo "  2. Or use the Slack API to join channels programmatically."
 echo "  3. Configure slash commands in your Slack app settings:"
 echo "     /brain-today, /brain-close, /brain-drift, /brain-emerge,"
-echo "     /brain-ideas, /brain-schedule, /brain-ghost, /brain-status, /brain-sync"
+echo "     /brain-ideas, /brain-schedule, /brain-ghost, /brain-status, /brain-sync,"
+echo "     /brain-projects, /brain-resources"

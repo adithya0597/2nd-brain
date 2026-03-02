@@ -13,7 +13,10 @@ OWNER_SLACK_ID = os.environ.get("OWNER_SLACK_ID", "")  # Only process messages f
 
 # Anthropic
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6-20250131")
+
+# Notion
+NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
 
 # Paths (resolve relative to project root)
 PROJECT_ROOT = Path(__file__).parent.parent.parent  # scripts/slack-bot/ -> project root
@@ -21,6 +24,7 @@ VAULT_PATH = PROJECT_ROOT / "vault"
 DB_PATH = PROJECT_ROOT / "data" / "brain.db"
 COMMANDS_PATH = PROJECT_ROOT / ".claude" / "commands" / "brain"
 CLAUDE_MD_PATH = PROJECT_ROOT / "CLAUDE.md"
+NOTION_REGISTRY_PATH = PROJECT_ROOT / "data" / "notion-registry.json"
 
 # Notion Collection IDs
 NOTION_COLLECTIONS = {
@@ -47,6 +51,8 @@ CHANNELS = {
     "brain-growth": "Mind & Growth",
     "brain-purpose": "Purpose & Impact",
     "brain-systems": "Systems & Environment",
+    "brain-projects": "Active projects and cross-dimensional tracking",
+    "brain-resources": "Reference materials, tools, and knowledge bases",
 }
 
 # ICOR dimension -> channel mapping (for routing captures)
@@ -68,3 +74,7 @@ DIMENSION_KEYWORDS = {
     "Purpose & Impact": ["career", "mission", "purpose", "impact", "contribute", "volunteer", "leadership", "legacy", "meaning", "values"],
     "Systems & Environment": ["system", "automate", "tool", "setup", "organize", "clean", "home", "workspace", "routine", "habit", "process", "workflow"],
 }
+
+# Keywords for cross-posting captures to PARA channels
+PROJECT_KEYWORDS = ["project", "milestone", "deadline", "sprint", "deliverable", "launch", "ship", "release", "roadmap", "timeline", "blocker", "blocked", "progress", "phase", "kickoff"]
+RESOURCE_KEYWORDS = ["article", "book", "resource", "reference", "template", "tool", "framework", "library", "tutorial", "course", "documentation", "guide", "cheatsheet", "recipe", "podcast", "video", "lecture"]

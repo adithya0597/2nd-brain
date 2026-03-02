@@ -15,6 +15,11 @@ from slack_bolt import App
 from config import (
     ANTHROPIC_API_KEY,
     ANTHROPIC_MODEL,
+    DB_PATH,
+    NOTION_COLLECTIONS,
+    NOTION_REGISTRY_PATH,
+    NOTION_TOKEN,
+    VAULT_PATH,
 )
 from core.context_loader import (
     build_claude_messages,
@@ -32,7 +37,10 @@ from core.db_ops import (
 from core.formatter import (
     format_dashboard,
     format_error,
+    format_sync_report,
 )
+from core.notion_client import NotionClientWrapper
+from core.notion_sync import NotionSync
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +53,8 @@ _COMMAND_MAP = {
     "/brain-ideas": ("ideas", "brain-ideas"),
     "/brain-schedule": ("schedule", "brain-daily"),
     "/brain-ghost": ("ghost", "brain-insights"),
-    "/brain-sync": ("sync-notion", None),  # DM to user
+    "/brain-projects": ("projects", "brain-projects"),
+    "/brain-resources": ("resources", "brain-resources"),
 }
 
 # Channel name -> resolved ID cache
@@ -134,7 +143,7 @@ def _run_ai_command(client, user_id, brain_command, output_channel, user_input):
             )
 
         # Add save-to-vault button for reports
-        if brain_command in ("drift", "emerge", "ideas", "ghost"):
+        if brain_command in ("drift", "emerge", "ideas", "ghost", "projects", "resources"):
             blocks.append(
                 {
                     "type": "actions",
@@ -172,6 +181,61 @@ def _run_ai_command(client, user_id, brain_command, output_channel, user_input):
             )
         except Exception:
             logger.exception("Failed to send error DM")
+
+
+def _run_sync_command(client, user_id, user_input):
+    """Background worker: run Python-native Notion sync."""
+    try:
+        if not NOTION_TOKEN:
+            dm = client.conversations_open(users=[user_id])
+            blocks = format_error("NOTION_TOKEN not configured. Set it in .env to enable Notion sync.")
+            client.chat_postMessage(channel=dm["channel"]["id"], text="Notion sync error", blocks=blocks)
+            return
+
+        loop = asyncio.new_event_loop()
+
+        async def _do_sync():
+            notion = NotionClientWrapper(token=NOTION_TOKEN)
+            try:
+                # Determine if selective sync was requested
+                entity_types = [t.strip() for t in user_input.split(",") if t.strip()] if user_input else []
+
+                syncer = NotionSync(
+                    client=notion,
+                    registry_path=NOTION_REGISTRY_PATH,
+                    db_path=DB_PATH,
+                    vault_path=VAULT_PATH,
+                    collection_ids=NOTION_COLLECTIONS,
+                    ai_client=anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None,
+                    ai_model=ANTHROPIC_MODEL,
+                )
+
+                if entity_types:
+                    return await syncer.run_selective_sync(entity_types)
+                return await syncer.run_full_sync()
+            finally:
+                await notion.close()
+
+        result = loop.run_until_complete(_do_sync())
+        loop.close()
+
+        # Post sync report as DM
+        dm = client.conversations_open(users=[user_id])
+        blocks = format_sync_report(result)
+        client.chat_postMessage(
+            channel=dm["channel"]["id"],
+            text="Notion Sync Report",
+            blocks=blocks,
+        )
+
+    except Exception:
+        logger.exception("Error running sync command")
+        try:
+            dm = client.conversations_open(users=[user_id])
+            blocks = format_error("Notion sync failed. Check bot logs.")
+            client.chat_postMessage(channel=dm["channel"]["id"], text="Sync error", blocks=blocks)
+        except Exception:
+            logger.exception("Failed to send sync error DM")
 
 
 def _run_status_command(client, user_id):
@@ -282,6 +346,20 @@ def register(app: App):
         thread = threading.Thread(
             target=_run_status_command,
             args=(client, user_id),
+            daemon=True,
+        )
+        thread.start()
+
+    # Notion sync command (Python-native, no AI)
+    @app.command("/brain-sync")
+    def handle_sync(ack, command, client):
+        ack("Running Notion sync...")
+        _ensure_channel_ids(client)
+        user_id = command.get("user_id", "")
+        user_input = command.get("text", "")
+        thread = threading.Thread(
+            target=_run_sync_command,
+            args=(client, user_id, user_input),
             daemon=True,
         )
         thread.start()

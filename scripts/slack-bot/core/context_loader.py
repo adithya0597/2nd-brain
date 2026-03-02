@@ -2,8 +2,8 @@
 import json
 from pathlib import Path
 
-from .. import config
-from . import db_ops, vault_ops
+import config
+from core import db_ops, vault_ops
 
 # Map command names to the SQL queries they need
 _COMMAND_QUERIES = {
@@ -55,6 +55,16 @@ _COMMAND_QUERIES = {
         "recent_journal": "SELECT date, content, icor_elements, summary, sentiment_score FROM journal_entries WHERE date >= date('now', '-30 days') ORDER BY date DESC",
         "concepts": "SELECT title, status, mention_count, last_mentioned, icor_elements, summary FROM concept_metadata WHERE status != 'archived' ORDER BY last_mentioned DESC",
     },
+    "projects": {
+        "project_actions": "SELECT icor_project, COUNT(*) AS action_count, SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed FROM action_items WHERE icor_project IS NOT NULL AND icor_project != '' GROUP BY icor_project ORDER BY pending DESC",
+        "dimension_project_map": "SELECT p.name AS dimension, h.name AS key_element, ai.icor_project AS project, COUNT(ai.id) AS action_count FROM action_items ai JOIN icor_hierarchy h ON ai.icor_element = h.name JOIN icor_hierarchy p ON h.parent_id = p.id WHERE ai.icor_project IS NOT NULL AND ai.icor_project != '' AND p.level = 'dimension' GROUP BY p.name, h.name, ai.icor_project ORDER BY p.name, action_count DESC",
+        "stale_project_actions": "SELECT description, icor_project, icor_element, source_date, CAST(julianday('now') - julianday(source_date) AS INTEGER) AS age_days FROM action_items WHERE status = 'pending' AND icor_project IS NOT NULL AND source_date <= date('now', '-14 days') ORDER BY age_days DESC",
+    },
+    "resources": {
+        "evergreen_concepts": "SELECT title, status, mention_count, last_mentioned, first_mentioned, icor_elements, summary, CAST(julianday('now') - julianday(last_mentioned) AS INTEGER) AS days_since_mention FROM concept_metadata WHERE status IN ('evergreen', 'growing') ORDER BY mention_count DESC",
+        "recent_concepts": "SELECT title, status, mention_count, first_mentioned, icor_elements, summary FROM concept_metadata WHERE first_mentioned >= date('now', '-30 days') ORDER BY first_mentioned DESC",
+        "stale_concepts": "SELECT title, status, mention_count, last_mentioned, icor_elements, summary, CAST(julianday('now') - julianday(last_mentioned) AS INTEGER) AS days_stale FROM concept_metadata WHERE status != 'archived' AND last_mentioned <= date('now', '-60 days') ORDER BY days_stale DESC",
+    },
 }
 
 # Map commands to the vault files they need
@@ -84,6 +94,11 @@ _COMMAND_VAULT_FILES = {
     ],
     "connect": [],
     "emerge": [],
+    "projects": [
+        "Identity/Active-Projects.md",
+        "Identity/ICOR.md",
+    ],
+    "resources": [],
     "process-inbox": [],
     "process-meeting": [],
     "refresh-dashboard": [],
