@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.brain.slack-bot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>/Users/adithya/Documents/2nd-brain/scripts/slack-bot/app.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/adithya/Documents/2nd-brain/scripts/slack-bot</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/adithya/Documents/2nd-brain/scripts/slack-bot/logs/slack-bot.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/adithya/Documents/2nd-brain/scripts/slack-bot/logs/slack-bot.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>

@@ -1,0 +1,27 @@
+# Environment
+.env
+
+# Database
+data/*.db
+data/*.db-journal
+data/*.db-wal
+
+# Obsidian workspace state
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# Claude plans
+.claude/plans/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Slack bot logs
+scripts/slack-bot/logs/
+
+# OS files
+.DS_Store
