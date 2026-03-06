@@ -186,6 +186,21 @@ CREATE TABLE IF NOT EXISTS scheduler_state (
     next_run_at TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
+-- api_token_logs (migrate-db.py step 12)
+CREATE TABLE IF NOT EXISTS api_token_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    caller TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cache_read_tokens INTEGER DEFAULT 0,
+    cache_creation_tokens INTEGER DEFAULT 0,
+    cost_estimate_usd REAL DEFAULT 0.0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_token_logs_caller ON api_token_logs(caller);
+CREATE INDEX IF NOT EXISTS idx_token_logs_created ON api_token_logs(created_at);
 """
 
 _SEED_SYNC_STATE = """

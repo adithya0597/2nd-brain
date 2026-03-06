@@ -206,6 +206,24 @@ def migrate(db_path: Path = DB_PATH):
     """)
     print("scheduler_state table: created/verified")
 
+    # 12. Create api_token_logs table (API cost tracking)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_token_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            caller TEXT NOT NULL,
+            model TEXT NOT NULL,
+            input_tokens INTEGER NOT NULL,
+            output_tokens INTEGER NOT NULL,
+            cache_read_tokens INTEGER DEFAULT 0,
+            cache_creation_tokens INTEGER DEFAULT 0,
+            cost_estimate_usd REAL DEFAULT 0.0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_logs_caller ON api_token_logs(caller)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_logs_created ON api_token_logs(created_at)")
+    print("api_token_logs table: created/verified")
+
     conn.commit()
     conn.close()
     print(f"Migration complete on {db_path}")
@@ -218,6 +236,7 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - journal_entries: date uniqueness verified")
     print(f"  - action_items.push_attempted_at: idempotency column verified")
     print(f"  - scheduler_state table: created/verified")
+    print(f"  - api_token_logs table: created/verified")
 
 
 if __name__ == "__main__":

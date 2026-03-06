@@ -331,6 +331,12 @@ class MessageClassifier:
             )
             raw = response.content[0].text.strip()
 
+            try:
+                from core.token_logger import log_token_usage
+                log_token_usage(response, caller="classifier_tier3", model="claude-haiku-4-5-20251001")
+            except Exception:
+                pass
+
             if raw.lower() == "none":
                 return []
 

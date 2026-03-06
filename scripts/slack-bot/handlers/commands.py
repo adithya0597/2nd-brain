@@ -164,6 +164,12 @@ def _run_ai_command(client, user_id, brain_command, output_channel, user_input):
 
         result_text = response.content[0].text
 
+        try:
+            from core.token_logger import log_token_usage
+            log_token_usage(response, caller=f"command_{brain_command}", model=ANTHROPIC_MODEL)
+        except Exception:
+            pass
+
         # Write output back to vault (close the loop)
         _write_command_output_to_vault(brain_command, result_text, user_input)
 
