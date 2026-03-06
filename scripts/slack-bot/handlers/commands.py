@@ -122,6 +122,7 @@ _COMMAND_MAP = {
     "/brain-challenge": ("challenge", "brain-insights"),
     "/brain-graduate": ("graduate", "brain-insights"),
     "/brain-find": ("find", None),
+    "/brain-review": ("weekly-review", "brain-daily"),
 }
 
 # Channel name -> resolved ID cache (populated by app.py at startup)

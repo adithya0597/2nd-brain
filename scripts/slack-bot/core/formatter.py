@@ -386,6 +386,7 @@ def format_help() -> list[dict]:
         ("/brain-graduate", "Promote journal themes to concepts", "#brain-insights"),
         ("/brain-projects", "Active project dashboard", "#brain-projects"),
         ("/brain-resources", "Knowledge base catalog", "#brain-resources"),
+        ("/brain-review", "GTD weekly review", "#brain-daily"),
         ("/brain-find", "Semantic vault search", "DM"),
         ("/brain-status", "Quick SQLite status dashboard", "#brain-dashboard"),
         ("/brain-sync", "Bidirectional Notion sync", "DM"),
@@ -408,6 +409,24 @@ def format_help() -> list[dict]:
         "- Captures in #brain-inbox are auto-classified and routed"
     ))
     blocks.append(_context(f"Second Brain v1.0 | {datetime.now().strftime('%Y-%m-%d')}"))
+    return blocks
+
+
+def format_health_check(checks: dict) -> list:
+    """Format startup health check results as Slack blocks."""
+    blocks = [
+        _header("Bot Startup Health Check"),
+        _divider(),
+    ]
+    for name, status in checks.items():
+        if "FAIL" in status:
+            emoji = ":x:"
+        elif "WARN" in status:
+            emoji = ":warning:"
+        else:
+            emoji = ":white_check_mark:"
+        blocks.append(_section(f"{emoji} *{name}*: {status}"))
+    blocks.append(_context(f"Started at {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
     return blocks
 
 

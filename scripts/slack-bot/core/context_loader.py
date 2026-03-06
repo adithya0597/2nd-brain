@@ -79,6 +79,12 @@ _COMMAND_QUERIES = {
         "recent_concepts": "SELECT title, status, mention_count, first_mentioned, icor_elements, summary FROM concept_metadata WHERE first_mentioned >= date('now', '-30 days') ORDER BY first_mentioned DESC",
         "stale_concepts": "SELECT title, status, mention_count, last_mentioned, icor_elements, summary, CAST(julianday('now') - julianday(last_mentioned) AS INTEGER) AS days_stale FROM concept_metadata WHERE status != 'archived' AND last_mentioned <= date('now', '-60 days') ORDER BY days_stale DESC",
     },
+    "weekly-review": {
+        "journal_7d": "SELECT date, content, summary, mood, energy, icor_elements, sentiment_score FROM journal_entries WHERE date >= date('now', '-7 days') ORDER BY date DESC",
+        "pending_actions": "SELECT id, description, source_date, status, icor_element, icor_project, CAST(julianday('now') - julianday(source_date) AS INTEGER) AS age_days FROM action_items WHERE status != 'done' ORDER BY created_at DESC",
+        "attention": "SELECT dimension, key_element, current_attention FROM attention_indicators ORDER BY dimension",
+        "icor_hierarchy": "SELECT h.id, h.level, h.name, p.name AS parent_name, h.attention_score, h.last_mentioned FROM icor_hierarchy h LEFT JOIN icor_hierarchy p ON h.parent_id = p.id ORDER BY h.id",
+    },
 }
 
 # Parameterized queries for /brain-find — {user_input} is substituted at runtime
@@ -131,6 +137,10 @@ _COMMAND_VAULT_FILES = {
         "Identity/ICOR.md",
         "Identity/Active-Projects.md",
     ],
+    "weekly-review": [
+        "Identity/ICOR.md",
+        "Identity/Active-Projects.md",
+    ],
 }
 
 # Commands that should get graph context (seed_method, depth)
@@ -142,12 +152,13 @@ _GRAPH_CONTEXT_COMMANDS = {
     "ideas": {"method": "recent_daily", "depth": 1},
     "ghost": {"method": "identity", "depth": 2},
     "challenge": {"method": "identity", "depth": 1},
+    "weekly-review": {"method": "recent_daily", "depth": 1},
 }
 
 # Commands that benefit from Notion context
 _NOTION_CONTEXT_COMMANDS = {
     "today", "schedule", "ideas", "projects", "close-day",
-    "context-load", "drift", "resources",
+    "context-load", "drift", "resources", "weekly-review",
 }
 
 

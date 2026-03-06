@@ -176,6 +176,40 @@ def handle_shutdown(signum, frame):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def _run_health_check(client, channel_ids):
+    """Verify critical subsystems on startup."""
+    checks = {}
+    # 1. Database accessible
+    try:
+        from core.async_utils import run_async
+        from core.db_ops import query
+        rows = run_async(query("SELECT COUNT(*) as c FROM icor_hierarchy"))
+        checks["database"] = f"OK ({rows[0]['c']} ICOR nodes)"
+    except Exception as e:
+        checks["database"] = f"FAIL: {e}"
+    # 2. Vault path exists
+    from config import VAULT_PATH
+    checks["vault"] = "OK" if Path(VAULT_PATH).is_dir() else "FAIL: not found"
+    # 3. Anthropic API key present
+    from config import ANTHROPIC_API_KEY
+    checks["anthropic_api"] = "OK" if ANTHROPIC_API_KEY else "WARN: not set (AI commands disabled)"
+    # 4. Channel IDs resolved
+    checks["channels"] = f"OK ({len(channel_ids)} resolved)" if channel_ids else "WARN: none resolved"
+    # 5. Log results
+    for name, status in checks.items():
+        level = logging.WARNING if "FAIL" in status or "WARN" in status else logging.INFO
+        logger.log(level, "Health check [%s]: %s", name, status)
+    # 6. Optional: post to #brain-dashboard
+    dash_id = channel_ids.get("brain-dashboard")
+    if dash_id:
+        from core.formatter import format_health_check
+        blocks = format_health_check(checks)
+        try:
+            client.chat_postMessage(channel=dash_id, text="Bot startup health check", blocks=blocks)
+        except Exception:
+            logger.debug("Could not post health check to dashboard")
+
+
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
@@ -192,6 +226,13 @@ def main():
         logger.info("Startup index: %d vault files, %d journal entries", vault_count, journal_count)
     except Exception:
         logger.warning("Startup indexing failed — will work without cached index")
+
+    # Run health check after indexers
+    try:
+        channel_ids = resolve_channel_ids(app.client)
+        _run_health_check(app.client, channel_ids)
+    except Exception:
+        logger.warning("Health check failed — continuing startup")
 
     logger.info("Starting Second Brain bot in Socket Mode...")
     handler = SocketModeHandler(app, SLACK_APP_TOKEN)
