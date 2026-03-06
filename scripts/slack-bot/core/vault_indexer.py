@@ -211,6 +211,7 @@ def get_linked_files(
         rows = [dict(r) for r in cursor.fetchall()]
 
         next_frontier: set[str] = set()
+        all_incoming_fps: set[str] = set()
         for row in rows:
             title = row["title"]
             if title in visited:
@@ -222,14 +223,20 @@ def get_linked_files(
             # Expand outgoing and incoming links
             outgoing = json.loads(row.get("outgoing_links_json", "[]"))
             incoming = json.loads(row.get("incoming_links_json", "[]"))
-            # For incoming, we have file paths — resolve to titles
-            for fp in incoming:
-                cursor.execute("SELECT title FROM vault_index WHERE file_path = ?", (fp,))
-                r = cursor.fetchone()
-                if r:
-                    next_frontier.add(r["title"])
+            all_incoming_fps.update(incoming)
             for link_title in outgoing:
                 next_frontier.add(link_title)
+
+        # Batch-resolve incoming file paths to titles (single query)
+        if all_incoming_fps:
+            fps_list = list(all_incoming_fps)
+            placeholders = ",".join("?" for _ in fps_list)
+            cursor.execute(
+                f"SELECT file_path, title FROM vault_index WHERE file_path IN ({placeholders})",
+                fps_list,
+            )
+            for fp_row in cursor.fetchall():
+                next_frontier.add(fp_row["title"])
 
         frontier = next_frontier - visited
 

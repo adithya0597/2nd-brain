@@ -215,6 +215,7 @@ class NotionSync:
         self._result = SyncResult()
         self._now = datetime.utcnow().isoformat()
         self._dry_run = dry_run
+        self._tag_lookup: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Public entry points
@@ -225,6 +226,7 @@ class NotionSync:
         self._result = SyncResult()
         self._result.dry_run = self._dry_run
         self._registry.load()
+        self._tag_lookup = self._build_tag_lookup()
 
         steps = [
             ("tags", self._sync_icor_tags),
@@ -261,6 +263,7 @@ class NotionSync:
         self._result = SyncResult()
         self._result.dry_run = self._dry_run
         self._registry.load()
+        self._tag_lookup = self._build_tag_lookup()
 
         type_to_step = {
             "tags": self._sync_icor_tags,
@@ -1058,34 +1061,30 @@ class NotionSync:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _build_tag_lookup(self) -> dict[str, str]:
+        """Build flat lookup: Notion page ID -> tag name."""
+        lookup: dict[str, str] = {}
+        for name, info in self._registry.data.get("dimensions", {}).items():
+            if pid := info.get("notion_page_id"):
+                lookup[pid] = name
+        for name, info in self._registry.data.get("key_elements", {}).items():
+            if pid := info.get("notion_page_id"):
+                lookup[pid] = name
+        return lookup
+
     def _resolve_tag_name(self, tag_ids: list[str]) -> str | None:
-        """Reverse-lookup a tag name from Notion page IDs using the registry."""
+        """Reverse-lookup a tag name from Notion page IDs using the tag lookup."""
         if not tag_ids:
             return None
-        target_id = tag_ids[0]  # Tags DB relations are limit-1
-        # Search dimensions
-        for name, info in self._registry.data.get("dimensions", {}).items():
-            if info.get("notion_page_id") == target_id:
-                return name
-        # Search key_elements
-        for name, info in self._registry.data.get("key_elements", {}).items():
-            if info.get("notion_page_id") == target_id:
-                return name
-        return None
+        return self._tag_lookup.get(tag_ids[0])
 
     def _resolve_tag_names(self, tag_ids: list[str]) -> list[str]:
         """Reverse-lookup multiple tag names from Notion page IDs."""
         names = []
         for tid in tag_ids:
-            for name, info in self._registry.data.get("dimensions", {}).items():
-                if info.get("notion_page_id") == tid:
-                    names.append(name)
-                    break
-            else:
-                for name, info in self._registry.data.get("key_elements", {}).items():
-                    if info.get("notion_page_id") == tid:
-                        names.append(name)
-                        break
+            name = self._tag_lookup.get(tid)
+            if name:
+                names.append(name)
         return names
 
     def _resolve_goal_name(self, goal_ids: list[str]) -> str | None:

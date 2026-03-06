@@ -224,6 +224,11 @@ def migrate(db_path: Path = DB_PATH):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_logs_created ON api_token_logs(created_at)")
     print("api_token_logs table: created/verified")
 
+    # 13. Add missing indexes for api_token_logs queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_logs_model ON api_token_logs(model)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_logs_date_caller ON api_token_logs(created_at, caller)")
+    print("api_token_logs indexes: model + date_caller created/verified")
+
     conn.commit()
     conn.close()
     print(f"Migration complete on {db_path}")
