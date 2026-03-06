@@ -237,6 +237,30 @@ def migrate(db_path: Path = DB_PATH):
     """)
     print("vault_fts FTS5 table: created/verified")
 
+    # 15. Create pending_captures table (confidence bouncer)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pending_captures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_text TEXT NOT NULL,
+            message_ts TEXT UNIQUE NOT NULL,
+            channel_id TEXT NOT NULL,
+            slack_user_id TEXT NOT NULL,
+            all_scores_json TEXT NOT NULL,
+            primary_dimension TEXT,
+            primary_confidence REAL NOT NULL,
+            method TEXT,
+            bouncer_dm_ts TEXT,
+            bouncer_dm_channel TEXT,
+            status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'resolved', 'timeout')),
+            user_selection TEXT,
+            resolved_at TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_captures(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_captures(created_at)")
+    print("pending_captures table: created/verified")
+
     conn.commit()
     conn.close()
     print(f"Migration complete on {db_path}")
@@ -250,6 +274,7 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - action_items.push_attempted_at: idempotency column verified")
     print(f"  - scheduler_state table: created/verified")
     print(f"  - api_token_logs table: created/verified")
+    print(f"  - pending_captures table: created/verified")
 
 
 if __name__ == "__main__":

@@ -269,7 +269,7 @@ class TestHandleWrong:
 
 class TestHandleDimensionSelect:
 
-    @patch("handlers.feedback._channel_ids", {"brain-health": "C_HEALTH"})
+    @patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"})
     @patch("handlers.feedback.run_async")
     def test_updates_classification_record(self, mock_run_async):
         mock_run_async.return_value = None
@@ -288,7 +288,7 @@ class TestHandleDimensionSelect:
         # 1 for classifications update + 1 for keyword_feedback + 1 for query = 3
         assert mock_run_async.call_count >= 2
 
-    @patch("handlers.feedback._channel_ids", {"brain-growth": "C_GROWTH"})
+    @patch("handlers.commands._channel_ids", {"brain-growth": "C_GROWTH"})
     @patch("handlers.feedback.run_async")
     def test_increments_fail_count_for_original_dimensions(self, mock_run_async):
         mock_run_async.return_value = None
@@ -306,7 +306,7 @@ class TestHandleDimensionSelect:
         # 1 for classifications + 2 for keyword_feedback (one per original dim) + 1 query = 4
         assert mock_run_async.call_count >= 3
 
-    @patch("handlers.feedback._channel_ids", {"brain-health": "C_HEALTH"})
+    @patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"})
     @patch("handlers.feedback.run_async")
     def test_edits_original_slack_message(self, mock_run_async):
         mock_run_async.return_value = None
@@ -350,7 +350,7 @@ class TestHandleDimensionSelect:
         with patch.object(fb_mod, "query", mock_query), \
              patch.object(fb_mod, "execute", mock_execute), \
              patch.object(fb_mod, "run_async", side_effect=lambda c: c), \
-             patch.object(fb_mod, "_channel_ids", {"brain-health": "C_HEALTH"}):
+             patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"}):
 
             ack = MagicMock()
             client = MagicMock()
@@ -371,7 +371,7 @@ class TestHandleDimensionSelect:
             section_text = blocks[0]["text"]["text"]
             assert "corrected" in section_text.lower()
 
-    @patch("handlers.feedback._channel_ids", {})
+    @patch("handlers.commands._channel_ids", {})
     @patch("handlers.feedback.run_async")
     def test_missing_channel_id_skips_reroute(self, mock_run_async):
         mock_run_async.return_value = None
@@ -396,7 +396,7 @@ class TestHandleDimensionSelect:
         with patch.object(fb_mod, "query", mock_query), \
              patch.object(fb_mod, "execute", mock_execute), \
              patch.object(fb_mod, "run_async", side_effect=lambda c: c), \
-             patch.object(fb_mod, "_channel_ids", {"brain-systems": "C_SYS"}):
+             patch("handlers.commands._channel_ids", {"brain-systems": "C_SYS"}):
 
             ack = MagicMock()
             client = MagicMock()
@@ -419,7 +419,7 @@ class TestHandleDimensionSelect:
         with patch.object(fb_mod, "query", mock_query), \
              patch.object(fb_mod, "execute", mock_execute), \
              patch.object(fb_mod, "run_async", side_effect=lambda c: c), \
-             patch.object(fb_mod, "_channel_ids", {"brain-health": "C_HEALTH"}):
+             patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"}):
 
             ack = MagicMock()
             client = MagicMock()
@@ -434,7 +434,7 @@ class TestHandleDimensionSelect:
             # Fallback is "brain-systems" but it's not in _channel_ids
             client.chat_postMessage.assert_not_called()
 
-    @patch("handlers.feedback._channel_ids", {"brain-health": "C_HEALTH"})
+    @patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"})
     @patch("handlers.feedback.run_async")
     def test_missing_message_channel_skips_message_update(self, mock_run_async):
         mock_run_async.return_value = None
@@ -454,7 +454,7 @@ class TestHandleDimensionSelect:
         ack.assert_called_once()
         client.chat_update.assert_not_called()
 
-    @patch("handlers.feedback._channel_ids", {"brain-health": "C_HEALTH"})
+    @patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"})
     @patch("handlers.feedback.run_async", side_effect=Exception("DB crash"))
     def test_exception_does_not_propagate(self, mock_run_async):
         ack = MagicMock()
@@ -469,7 +469,7 @@ class TestHandleDimensionSelect:
         handle_dimension_select(ack, body, client)
         ack.assert_called_once()
 
-    @patch("handlers.feedback._channel_ids", {"brain-health": "C_HEALTH"})
+    @patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"})
     @patch("handlers.feedback.run_async")
     def test_correction_text_includes_was_dimensions(self, mock_run_async):
         mock_run_async.return_value = None
@@ -487,7 +487,7 @@ class TestHandleDimensionSelect:
         call_kwargs = client.chat_update.call_args[1]
         assert call_kwargs["text"] == "Corrected to Health & Vitality"
 
-    @patch("handlers.feedback._channel_ids", {"brain-health": "C_HEALTH"})
+    @patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"})
     @patch("handlers.feedback.run_async")
     def test_empty_original_dimensions_shows_none(self, mock_run_async):
         mock_run_async.return_value = None
@@ -515,7 +515,7 @@ class TestHandleDimensionSelect:
         with patch.object(fb_mod, "query", mock_query), \
              patch.object(fb_mod, "execute", mock_execute), \
              patch.object(fb_mod, "run_async", side_effect=lambda c: c), \
-             patch.object(fb_mod, "_channel_ids", {"brain-health": "C_HEALTH"}):
+             patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"}):
 
             ack = MagicMock()
             client = MagicMock()

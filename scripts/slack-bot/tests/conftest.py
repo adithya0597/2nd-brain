@@ -4,7 +4,7 @@ import sqlite3
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,6 +15,64 @@ import pytest
 SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
+
+# ---------------------------------------------------------------------------
+# Ensure config mock has required real attributes.
+# Test files use sys.modules.setdefault("config", MagicMock()) independently.
+# The first test file alphabetically wins, and others get auto-attributes.
+# Fix: set critical attributes on whatever config mock exists.
+# ---------------------------------------------------------------------------
+_REQUIRED_DIMENSION_CHANNELS = {
+    "Health & Vitality": "brain-health",
+    "Wealth & Finance": "brain-wealth",
+    "Relationships": "brain-relations",
+    "Mind & Growth": "brain-growth",
+    "Purpose & Impact": "brain-purpose",
+    "Systems & Environment": "brain-systems",
+}
+
+_REQUIRED_DIMENSION_KEYWORDS = {
+    "Health & Vitality": ["health", "fitness"],
+    "Wealth & Finance": ["money", "finance"],
+    "Relationships": ["friend", "family"],
+    "Mind & Growth": ["learn", "read"],
+    "Purpose & Impact": ["career", "mission"],
+    "Systems & Environment": ["system", "automate"],
+}
+
+
+def _ensure_config_defaults():
+    """Ensure the config mock in sys.modules has required real attributes."""
+    cfg = sys.modules.get("config")
+    if cfg is None:
+        return
+    # Only patch MagicMock auto-attributes, not real values
+    for attr, default in [
+        ("DIMENSION_CHANNELS", _REQUIRED_DIMENSION_CHANNELS),
+        ("DIMENSION_KEYWORDS", _REQUIRED_DIMENSION_KEYWORDS),
+        ("PROJECT_KEYWORDS", ["project", "milestone"]),
+        ("RESOURCE_KEYWORDS", ["article", "book"]),
+        ("OWNER_SLACK_ID", ""),
+        ("CONFIDENCE_THRESHOLD", 0.60),
+        ("BOUNCER_TIMEOUT_MINUTES", 15),
+    ]:
+        val = getattr(cfg, attr, None)
+        if val is None or isinstance(val, MagicMock):
+            setattr(cfg, attr, default)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _fix_config_mock():
+    """Session-scoped fixture to fix config mock attributes after all imports."""
+    _ensure_config_defaults()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _fix_config_per_test():
+    """Per-test fixture to re-apply config defaults (in case a test replaces config)."""
+    _ensure_config_defaults()
+    yield
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +266,27 @@ CREATE INDEX IF NOT EXISTS idx_token_logs_date_caller ON api_token_logs(created_
 CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
     title, content, tags, file_path UNINDEXED
 );
+
+-- pending_captures (migrate-db.py step 15)
+CREATE TABLE IF NOT EXISTS pending_captures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_text TEXT NOT NULL,
+    message_ts TEXT UNIQUE NOT NULL,
+    channel_id TEXT NOT NULL,
+    slack_user_id TEXT NOT NULL,
+    all_scores_json TEXT NOT NULL,
+    primary_dimension TEXT,
+    primary_confidence REAL NOT NULL,
+    method TEXT,
+    bouncer_dm_ts TEXT,
+    bouncer_dm_channel TEXT,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'resolved', 'timeout')),
+    user_selection TEXT,
+    resolved_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_captures(status);
+CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_captures(created_at);
 """
 
 _SEED_SYNC_STATE = """

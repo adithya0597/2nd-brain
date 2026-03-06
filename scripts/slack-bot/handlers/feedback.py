@@ -8,10 +8,10 @@ import logging
 
 from slack_bolt import App
 
-from config import DIMENSION_CHANNELS
+import config
 from core.async_utils import run_async
 from core.db_ops import execute, query
-from handlers.commands import _channel_ids
+import handlers.commands as _commands_mod
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ def register(app: App):
                         "original_dimensions": original_dims,
                     }),
                 }
-                for dim in DIMENSION_CHANNELS.keys()
+                for dim in config.DIMENSION_CHANNELS.keys()
             ]
 
             channel = body.get("channel", {}).get("id", "")
@@ -162,8 +162,8 @@ def register(app: App):
                 )
 
             # Re-route the capture to the correct dimension channel
-            ch_name = DIMENSION_CHANNELS.get(correct_dim, "brain-systems")
-            ch_id = _channel_ids.get(ch_name)
+            ch_name = config.DIMENSION_CHANNELS.get(correct_dim, "brain-systems")
+            ch_id = _commands_mod._channel_ids.get(ch_name)
             if ch_id:
                 rows = run_async(query(
                     "SELECT message_text FROM classifications WHERE message_ts = ?",
@@ -185,3 +185,49 @@ def register(app: App):
             logger.info("Classification corrected: ts=%s, %s -> %s", ts, original_dims, correct_dim)
         except Exception:
             logger.exception("Failed to handle feedback_select_dimension")
+
+    @app.action("bouncer_select_dimension")
+    def handle_bouncer_select(ack, body, client):
+        """User selected a dimension from the confidence bouncer DM."""
+        ack()
+        try:
+            selected = body["actions"][0]["selected_option"]["value"]
+            data = json.loads(selected)
+            message_ts = data.get("ts", "")
+            selected_dim = data.get("dimension", "")
+            original_text = data.get("text", "")
+            original_channel = data.get("channel", "")
+
+            if not message_ts or not selected_dim:
+                return
+
+            # Update pending_captures
+            run_async(execute(
+                "UPDATE pending_captures SET user_selection = ?, status = 'resolved', "
+                "resolved_at = datetime('now') WHERE message_ts = ?",
+                (selected_dim, message_ts),
+            ))
+
+            # Update DM message
+            dm_channel = body.get("channel", {}).get("id", "")
+            dm_ts = body.get("message", {}).get("ts", "")
+            if dm_channel and dm_ts:
+                try:
+                    client.chat_update(
+                        channel=dm_channel, ts=dm_ts,
+                        blocks=[{
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": f":white_check_mark: *Filed to {selected_dim}*"},
+                        }],
+                        text=f"Filed to {selected_dim}",
+                    )
+                except Exception:
+                    pass
+
+            # Route to the selected dimension channel
+            from handlers.capture import _process_bouncer_resolution
+            _process_bouncer_resolution(client, original_text, message_ts, selected_dim, original_channel)
+
+            logger.info("Bouncer resolved: ts=%s -> %s", message_ts, selected_dim)
+        except Exception:
+            logger.exception("Error handling bouncer selection")

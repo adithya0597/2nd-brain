@@ -31,6 +31,7 @@ from core.context_loader import (
     load_system_context,
 )
 from core.db_ops import (
+    execute,
     get_attention_scores,
     get_neglected_elements,
     get_pending_actions,
@@ -478,6 +479,64 @@ def job_keyword_expansion(client: WebClient, channel_ids: dict):
 # ---------------------------------------------------------------------------
 
 
+def job_resolve_pending_captures(client: WebClient, channel_ids: dict):
+    """Every 5 min: auto-file pending captures that timed out."""
+    try:
+        from config import BOUNCER_TIMEOUT_MINUTES
+
+        rows = run_async(query(
+            "SELECT id, message_text, message_ts, primary_dimension, channel_id, "
+            "bouncer_dm_ts, bouncer_dm_channel "
+            "FROM pending_captures WHERE status = 'pending' "
+            "AND created_at < datetime('now', ?)",
+            (f"-{BOUNCER_TIMEOUT_MINUTES} minutes",),
+        ))
+
+        if not rows:
+            return
+
+        logger.info("Auto-filing %d timed-out pending captures", len(rows))
+        for row in rows:
+            try:
+                run_async(execute(
+                    "UPDATE pending_captures SET status = 'timeout', "
+                    "user_selection = primary_dimension, resolved_at = datetime('now') "
+                    "WHERE id = ?",
+                    (row["id"],),
+                ))
+
+                # Route via normal path
+                from handlers.capture import _process_bouncer_resolution
+
+                _process_bouncer_resolution(
+                    client, row["message_text"], row["message_ts"],
+                    row["primary_dimension"] or "Systems & Environment",
+                    row["channel_id"],
+                )
+
+                # Update DM
+                if row.get("bouncer_dm_ts") and row.get("bouncer_dm_channel"):
+                    try:
+                        client.chat_update(
+                            channel=row["bouncer_dm_channel"],
+                            ts=row["bouncer_dm_ts"],
+                            blocks=[{
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": f":clock1: *Auto-filed to {row['primary_dimension']}* (no response)",
+                                },
+                            }],
+                            text="Auto-filed",
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                logger.exception("Failed to resolve pending capture id=%d", row["id"])
+    except Exception:
+        logger.exception("Error in job_resolve_pending_captures")
+
+
 def _run_job(job_func, client, channel_ids):
     """Wrapper to catch exceptions in scheduled jobs."""
     try:
@@ -524,6 +583,9 @@ def register_schedules(app):
 
     # Daily 5am: Vault + journal re-index
     schedule.every().day.at("05:00").do(_run_job, job_vault_reindex, client, channel_ids)
+
+    # Every 5 min: Resolve timed-out pending captures
+    schedule.every(5).minutes.do(_run_job, job_resolve_pending_captures, client, channel_ids)
 
     logger.info(
         "Registered %d scheduled jobs, channel_ids resolved: %d",
