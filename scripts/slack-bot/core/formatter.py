@@ -342,18 +342,74 @@ def format_ideas_report(ideas: list) -> list[dict]:
 # Capture Confirmation
 # ---------------------------------------------------------------------------
 
-def format_capture_confirmation(text: str, dimension: str, channel: str) -> list[dict]:
-    """Confirmation message after routing a capture."""
-    return [
-        _section(f":white_check_mark: *Captured and routed*"),
-        _section(f"> {text[:200]}{'...' if len(text) > 200 else ''}"),
-        _context(f"Dimension: {dimension} | Routed to: #{channel}"),
-    ]
+def format_capture_confirmation(text: str, dimensions: list[str], channels: list[str]) -> list[dict]:
+    """Confirmation message after routing a capture.
+
+    Args:
+        text: The captured message text.
+        dimensions: List of matched dimension names (may be empty for uncategorized).
+        channels: List of target channel names (may be empty for uncategorized).
+    """
+    if dimensions and channels:
+        dim_text = " + ".join(dimensions)
+        ch_text = ", ".join(f"#{c}" for c in channels)
+        return [
+            _section(":white_check_mark: *Captured and routed*"),
+            _section(f"> {text[:200]}{'...' if len(text) > 200 else ''}"),
+            _context(f"Dimensions: {dim_text} | Routed to: {ch_text}"),
+        ]
+    else:
+        return [
+            _section(":inbox_tray: *Captured to inbox*"),
+            _section(f"> {text[:200]}{'...' if len(text) > 200 else ''}"),
+            _context("No dimension matched — saved to inbox for manual review"),
+        ]
 
 
 # ---------------------------------------------------------------------------
 # Error
 # ---------------------------------------------------------------------------
+
+def format_help() -> list[dict]:
+    """Build Block Kit blocks listing all slash commands."""
+    commands = [
+        ("/brain-today", "Morning review + daily note", "#brain-daily"),
+        ("/brain-close", "Evening review + journal index", "#brain-daily"),
+        ("/brain-schedule", "Energy-aware weekly planning", "#brain-daily"),
+        ("/brain-drift", "Goal vs. journal alignment analysis", "#brain-drift"),
+        ("/brain-ideas", "Actionable idea generation from vault", "#brain-ideas"),
+        ("/brain-emerge", "Surface hidden patterns from notes", "#brain-insights"),
+        ("/brain-ghost", "Digital twin answers a question", "#brain-insights"),
+        ("/brain-trace", "Track concept evolution over time", "#brain-insights"),
+        ("/brain-connect", "Find connections between two domains", "#brain-insights"),
+        ("/brain-challenge", "Red-team a belief with counter-evidence", "#brain-insights"),
+        ("/brain-graduate", "Promote journal themes to concepts", "#brain-insights"),
+        ("/brain-projects", "Active project dashboard", "#brain-projects"),
+        ("/brain-resources", "Knowledge base catalog", "#brain-resources"),
+        ("/brain-find", "Semantic vault search", "DM"),
+        ("/brain-status", "Quick SQLite status dashboard", "#brain-dashboard"),
+        ("/brain-sync", "Bidirectional Notion sync", "DM"),
+        ("/brain-context", "Load session context", "DM"),
+        ("/brain-help", "This help message", "DM"),
+    ]
+
+    blocks = [_header("Second Brain Commands")]
+
+    lines = []
+    for cmd, desc, channel in commands:
+        lines.append(f"`{cmd}` — {desc} → _{channel}_")
+
+    blocks.append(_section("\n".join(lines)))
+    blocks.append(_divider())
+    blocks.append(_section(
+        "*Tips:*\n"
+        "- Most commands accept optional text input (e.g. `/brain-trace mindfulness`)\n"
+        "- `/brain-sync tasks,projects` syncs only specific entity types\n"
+        "- Captures in #brain-inbox are auto-classified and routed"
+    ))
+    blocks.append(_context(f"Second Brain v1.0 | {datetime.now().strftime('%Y-%m-%d')}"))
+    return blocks
+
 
 def format_error(message: str) -> list[dict]:
     """Error message block."""

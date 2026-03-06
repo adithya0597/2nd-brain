@@ -1,9 +1,12 @@
 """Context loading for slash command execution via Anthropic API."""
 import json
+import logging
 from pathlib import Path
 
 import config
 from core import db_ops, vault_ops
+
+logger = logging.getLogger(__name__)
 
 # Map command names to the SQL queries they need
 _COMMAND_QUERIES = {
@@ -30,10 +33,12 @@ _COMMAND_QUERIES = {
     "graduate": {
         "graduation_candidates": "SELECT DISTINCT je.icor_elements FROM journal_entries je WHERE je.date >= date('now', '-14 days') AND je.icor_elements != '[]'",
         "concepts": "SELECT title, status, mention_count, last_mentioned, icor_elements, summary FROM concept_metadata WHERE status IN ('seedling', 'growing') ORDER BY last_mentioned DESC",
+        "recent_journal": "SELECT date, content, summary, icor_elements FROM journal_entries WHERE date >= date('now', '-14 days') ORDER BY date DESC",
     },
     "trace": {
         "icor_hierarchy": "SELECT h.id, h.level, h.name, p.name AS parent_name, h.attention_score, h.last_mentioned FROM icor_hierarchy h LEFT JOIN icor_hierarchy p ON h.parent_id = p.id ORDER BY h.id",
         "concepts": "SELECT title, status, mention_count, last_mentioned, first_mentioned, icor_elements, summary FROM concept_metadata WHERE status != 'archived' ORDER BY last_mentioned DESC",
+        "concept_timeline": "SELECT title, first_mentioned, last_mentioned, mention_count, status, icor_elements FROM concept_metadata WHERE status != 'archived' ORDER BY first_mentioned ASC",
     },
     "ideas": {
         "seedling_concepts": "SELECT title, status, mention_count, last_mentioned, first_mentioned, icor_elements, summary FROM concept_metadata WHERE status IN ('seedling', 'growing') ORDER BY last_mentioned DESC",
@@ -54,6 +59,15 @@ _COMMAND_QUERIES = {
     "emerge": {
         "recent_journal": "SELECT date, content, icor_elements, summary, sentiment_score FROM journal_entries WHERE date >= date('now', '-30 days') ORDER BY date DESC",
         "concepts": "SELECT title, status, mention_count, last_mentioned, icor_elements, summary FROM concept_metadata WHERE status != 'archived' ORDER BY last_mentioned DESC",
+        "orphan_concepts": "SELECT title, file_path, incoming_links_json FROM vault_index WHERE type IN ('concept', '') AND incoming_links_json = '[]' AND outgoing_links_json != '[]'",
+    },
+    "connect": {
+        "vault_graph": "SELECT title, outgoing_links_json, incoming_links_json, type FROM vault_index WHERE outgoing_links_json != '[]' OR incoming_links_json != '[]'",
+        "concepts": "SELECT title, status, icor_elements, summary FROM concept_metadata WHERE status != 'archived'",
+    },
+    "challenge": {
+        "values_concepts": "SELECT title, status, mention_count, icor_elements, summary FROM concept_metadata WHERE status != 'archived' AND (icor_elements LIKE '%Purpose%' OR icor_elements LIKE '%Growth%')",
+        "journal_beliefs": "SELECT date, content, icor_elements FROM journal_entries WHERE date >= date('now', '-90 days') ORDER BY date DESC",
     },
     "projects": {
         "project_actions": "SELECT icor_project, COUNT(*) AS action_count, SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed FROM action_items WHERE icor_project IS NOT NULL AND icor_project != '' GROUP BY icor_project ORDER BY pending DESC",
@@ -65,6 +79,15 @@ _COMMAND_QUERIES = {
         "recent_concepts": "SELECT title, status, mention_count, first_mentioned, icor_elements, summary FROM concept_metadata WHERE first_mentioned >= date('now', '-30 days') ORDER BY first_mentioned DESC",
         "stale_concepts": "SELECT title, status, mention_count, last_mentioned, icor_elements, summary, CAST(julianday('now') - julianday(last_mentioned) AS INTEGER) AS days_stale FROM concept_metadata WHERE status != 'archived' AND last_mentioned <= date('now', '-60 days') ORDER BY days_stale DESC",
     },
+}
+
+# Parameterized queries for /brain-find — {user_input} is substituted at runtime
+_FIND_QUERIES = {
+    "journal_matches": "SELECT date, summary, CASE WHEN content LIKE ? THEN 'content' ELSE 'summary' END AS match_type FROM journal_entries WHERE content LIKE ? OR summary LIKE ? ORDER BY date DESC LIMIT 10",
+    "concept_matches": "SELECT title, status, mention_count, summary FROM concept_metadata WHERE title LIKE ? OR summary LIKE ? ORDER BY mention_count DESC LIMIT 10",
+    "action_matches": "SELECT description, source_date, status, icor_element FROM action_items WHERE description LIKE ? ORDER BY source_date DESC LIMIT 10",
+    "vault_matches": "SELECT file_path, title, type, last_modified FROM vault_index WHERE title LIKE ? OR file_path LIKE ? ORDER BY last_modified DESC LIMIT 10",
+    "graph_adjacent": "SELECT DISTINCT vi2.file_path, vi2.title, vi2.type FROM vault_index vi1, json_each(vi1.outgoing_links_json) AS link JOIN vault_index vi2 ON vi2.title = link.value WHERE vi1.title LIKE ? OR vi1.file_path LIKE ? LIMIT 10",
 }
 
 # Map commands to the vault files they need
@@ -91,6 +114,7 @@ _COMMAND_VAULT_FILES = {
     ],
     "challenge": [
         "Identity/Values.md",
+        "Identity/ICOR.md",
     ],
     "connect": [],
     "emerge": [],
@@ -109,6 +133,23 @@ _COMMAND_VAULT_FILES = {
     ],
 }
 
+# Commands that should get graph context (seed_method, depth)
+_GRAPH_CONTEXT_COMMANDS = {
+    "trace": {"method": "topic", "depth": 2},
+    "connect": {"method": "intersection", "depth": 1},
+    "emerge": {"method": "recent_daily", "depth": 1},
+    "graduate": {"method": "recent_daily", "depth": 1},
+    "ideas": {"method": "recent_daily", "depth": 1},
+    "ghost": {"method": "identity", "depth": 2},
+    "challenge": {"method": "identity", "depth": 1},
+}
+
+# Commands that benefit from Notion context
+_NOTION_CONTEXT_COMMANDS = {
+    "today", "schedule", "ideas", "projects", "close-day",
+    "context-load", "drift", "resources",
+}
+
 
 def load_command_prompt(command_name: str) -> str:
     """Read the .md prompt file for a slash command."""
@@ -121,23 +162,154 @@ def load_system_context() -> str:
     return vault_ops.read_file(config.CLAUDE_MD_PATH)
 
 
-async def gather_command_context(command_name: str, db_path: Path = None) -> dict:
-    """Run relevant SQL queries and read vault files for a command.
+def _load_notion_context() -> dict:
+    """Load cached Notion data from the registry JSON file.
+
+    Registry format: {entity_type: {name: {notion_page_id, tag, ...}}}
+    Returns a dict with projects, goals keys (each a list of dicts).
+    """
+    registry_path = config.NOTION_REGISTRY_PATH
+    if not registry_path.exists():
+        return {}
+
+    try:
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.warning("Could not read Notion registry at %s", registry_path)
+        return {}
+
+    result = {}
+
+    # Extract projects (registry format: {name: {notion_page_id, tag}})
+    projects = data.get("projects", {})
+    if isinstance(projects, dict) and projects:
+        project_list = [
+            {"name": name, **info}
+            for name, info in projects.items()
+            if isinstance(info, dict)
+        ]
+        if project_list:
+            result["projects"] = project_list
+
+    # Extract goals
+    goals = data.get("goals", {})
+    if isinstance(goals, dict) and goals:
+        goal_list = [
+            {"name": name, **info}
+            for name, info in goals.items()
+            if isinstance(info, dict)
+        ]
+        if goal_list:
+            result["goals"] = goal_list
+
+    # Extract dimensions
+    dimensions = data.get("dimensions", {})
+    if isinstance(dimensions, dict) and dimensions:
+        dim_list = [
+            {"name": name, **info}
+            for name, info in dimensions.items()
+            if isinstance(info, dict)
+        ]
+        if dim_list:
+            result["dimensions"] = dim_list
+
+    return result
+
+
+def _gather_graph_context(command_name: str, user_input: str) -> dict[str, str]:
+    """Use the vault index to gather graph-connected files for a command.
+
+    Returns a dict of {relative_path: file_content} for linked files.
+    """
+    graph_config = _GRAPH_CONTEXT_COMMANDS.get(command_name)
+    if not graph_config:
+        return {}
+
+    try:
+        from core.vault_indexer import find_files_mentioning, find_intersection_nodes, get_linked_files
+    except ImportError:
+        logger.warning("vault_indexer not available, skipping graph context")
+        return {}
+
+    method = graph_config["method"]
+    depth = graph_config["depth"]
+    linked_rows = []
+
+    if method == "topic" and user_input:
+        # For /trace: find files mentioning the topic, then expand graph
+        seed_files = find_files_mentioning(user_input)
+        seed_titles = [r["title"] for r in seed_files[:10]]
+        if seed_titles:
+            linked_rows = get_linked_files(seed_titles, depth=depth)
+
+    elif method == "intersection" and user_input:
+        # For /connect: parse "domain A" "domain B" from user input
+        parts = user_input.strip().split('"')
+        topics = [p.strip() for p in parts if p.strip()]
+        if len(topics) >= 2:
+            linked_rows = find_intersection_nodes(topics[0], topics[1])
+        elif topics:
+            seed_files = find_files_mentioning(topics[0])
+            linked_rows = get_linked_files(
+                [r["title"] for r in seed_files[:10]], depth=depth,
+            )
+
+    elif method == "recent_daily":
+        # For /emerge, /graduate, /ideas: start from recent daily notes
+        from core.vault_indexer import find_files_mentioning
+        recent = find_files_mentioning("Daily Notes")
+        seed_titles = [r["title"] for r in recent[:7]]
+        if seed_titles:
+            linked_rows = get_linked_files(seed_titles, depth=depth)
+
+    elif method == "identity":
+        # For /ghost, /challenge: start from identity files
+        linked_rows = get_linked_files(["ICOR", "Values"], depth=depth)
+
+    # Read actual file contents for linked rows
+    result = {}
+    for row in linked_rows[:15]:  # Cap at 15 files to avoid token overload
+        rel_path = row.get("file_path", "")
+        if not rel_path:
+            continue
+        full_path = config.VAULT_PATH / rel_path
+        content = vault_ops.read_file(full_path)
+        if content:
+            result[rel_path] = content
+
+    return result
+
+
+async def gather_command_context(command_name: str, user_input: str = "", db_path: Path = None) -> dict:
+    """Run relevant SQL queries, read vault files, and gather graph context.
 
     Returns a dict with:
         - "db": dict of query_name -> list[dict] results
         - "vault": dict of relative_path -> file contents
+        - "notion": dict of entity_type -> list[dict] (if applicable)
+        - "graph": dict of relative_path -> file contents (linked files)
     """
     db_path = db_path or config.DB_PATH
-    context = {"db": {}, "vault": {}}
+    context = {"db": {}, "vault": {}, "notion": {}, "graph": {}}
 
     # Run SQL queries
-    queries = _COMMAND_QUERIES.get(command_name, {})
-    for name, sql in queries.items():
-        try:
-            context["db"][name] = await db_ops.query(sql, db_path=db_path)
-        except Exception as e:
-            context["db"][name] = {"error": str(e)}
+    if command_name == "find" and user_input:
+        # Parameterized search queries for /brain-find
+        like_pattern = f"%{user_input}%"
+        for name, sql in _FIND_QUERIES.items():
+            try:
+                param_count = sql.count("?")
+                params = tuple([like_pattern] * param_count)
+                context["db"][name] = await db_ops.query(sql, params, db_path=db_path)
+            except Exception as e:
+                context["db"][name] = {"error": str(e)}
+    else:
+        queries = _COMMAND_QUERIES.get(command_name, {})
+        for name, sql in queries.items():
+            try:
+                context["db"][name] = await db_ops.query(sql, db_path=db_path)
+            except Exception as e:
+                context["db"][name] = {"error": str(e)}
 
     # Read vault files
     vault_files = _COMMAND_VAULT_FILES.get(command_name, [])
@@ -146,6 +318,17 @@ async def gather_command_context(command_name: str, db_path: Path = None) -> dic
         content = vault_ops.read_file(full_path)
         if content:
             context["vault"][rel_path] = content
+
+    # Gather graph-connected vault files
+    graph_files = _gather_graph_context(command_name, user_input)
+    if graph_files:
+        context["graph"] = graph_files
+
+    # Inject Notion context for applicable commands
+    if command_name in _NOTION_CONTEXT_COMMANDS:
+        notion_data = _load_notion_context()
+        if notion_data:
+            context["notion"] = notion_data
 
     return context
 
@@ -168,6 +351,13 @@ def build_claude_messages(command: str, user_input: str, context: dict) -> list:
         for path, content in context["vault"].items():
             context_parts.append(f"### File: {path}\n{content}")
 
+    if context.get("graph"):
+        context_parts.append("### Linked Vault Files (via graph traversal)")
+        for path, content in context["graph"].items():
+            # Truncate long files to prevent token overload
+            truncated = content[:2000] + "..." if len(content) > 2000 else content
+            context_parts.append(f"#### {path}\n{truncated}")
+
     if context.get("db"):
         for name, rows in context["db"].items():
             if isinstance(rows, dict) and "error" in rows:
@@ -176,6 +366,11 @@ def build_claude_messages(command: str, user_input: str, context: dict) -> list:
                 context_parts.append(f"### Query: {name}\n{json.dumps(rows, indent=2, default=str)}")
             else:
                 context_parts.append(f"### Query: {name}\nNo results.")
+
+    if context.get("notion"):
+        context_parts.append("### Notion Data (cached)")
+        for entity_type, items in context["notion"].items():
+            context_parts.append(f"#### {entity_type}\n{json.dumps(items, indent=2, default=str)}")
 
     context_block = "\n\n".join(context_parts) if context_parts else "No additional context available."
 

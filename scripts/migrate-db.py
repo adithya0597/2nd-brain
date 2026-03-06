@@ -13,6 +13,8 @@ def migrate(db_path: Path = DB_PATH):
         print(f"Database not found at {db_path}. Creating new database.")
 
     conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys = ON")
     cursor = conn.cursor()
 
     # 1. Create sync_state table
@@ -90,12 +92,125 @@ def migrate(db_path: Path = DB_PATH):
     else:
         print("action_items CHECK constraint already includes 'delegated'")
 
+    # 5. Create classifications table (classification logging)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS classifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_text TEXT NOT NULL,
+            message_ts TEXT,
+            primary_dimension TEXT,
+            confidence REAL,
+            method TEXT,
+            all_scores_json TEXT,
+            user_correction TEXT,
+            corrected_at TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_classifications_dim ON classifications(primary_dimension)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_classifications_method ON classifications(method)")
+    print("classifications table: created/verified")
+
+    # 6. Create keyword_feedback table (dynamic keyword learning)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS keyword_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dimension TEXT NOT NULL,
+            keyword TEXT NOT NULL,
+            source TEXT DEFAULT 'seed',
+            success_count INTEGER DEFAULT 0,
+            fail_count INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(dimension, keyword)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_keyword_fb_dim ON keyword_feedback(dimension)")
+    print("keyword_feedback table: created/verified")
+
+    # 7. Create vault_index table (vault file graph index)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS vault_index (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT UNIQUE NOT NULL,
+            title TEXT NOT NULL,
+            type TEXT DEFAULT '',
+            frontmatter_json TEXT DEFAULT '{}',
+            outgoing_links_json TEXT DEFAULT '[]',
+            incoming_links_json TEXT DEFAULT '[]',
+            tags_json TEXT DEFAULT '[]',
+            word_count INTEGER DEFAULT 0,
+            last_modified TEXT,
+            indexed_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_index(title)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_index(type)")
+    print("vault_index table: created/verified")
+
+    # 8. Ensure journal_entries has unique constraint on date
+    cursor.execute("PRAGMA table_info(journal_entries)")
+    je_columns = [row[1] for row in cursor.fetchall()]
+    if not je_columns:
+        # Table doesn't exist at all — create it
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS journal_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT UNIQUE NOT NULL,
+                content TEXT,
+                mood TEXT,
+                energy TEXT,
+                icor_elements TEXT DEFAULT '[]',
+                summary TEXT,
+                sentiment_score REAL DEFAULT 0.0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_journal_date ON journal_entries(date)")
+        print("journal_entries table: created with unique date constraint")
+    else:
+        # Check if date column has unique constraint
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='journal_entries'")
+        create_sql = cursor.fetchone()
+        if create_sql and "UNIQUE" not in create_sql[0].upper().split("DATE")[0]:
+            # Add unique index if not already there
+            try:
+                cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_date_unique ON journal_entries(date)")
+                print("journal_entries: added unique index on date")
+            except sqlite3.OperationalError:
+                print("journal_entries: unique index already exists or conflict")
+        else:
+            print("journal_entries: date uniqueness verified")
+
+    # 9. Add push_attempted_at column to action_items (Notion push idempotency)
+    try:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN push_attempted_at TEXT")
+        print("Added push_attempted_at column to action_items")
+    except sqlite3.OperationalError:
+        print("action_items.push_attempted_at column already exists")
+
+    # 10. Create scheduler_state table (persist job timestamps across restarts)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scheduler_state (
+            job_name TEXT PRIMARY KEY,
+            last_run_at TEXT,
+            next_run_at TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    print("scheduler_state table: created/verified")
+
     conn.commit()
     conn.close()
     print(f"Migration complete on {db_path}")
     print(f"  - sync_state table: created/verified")
     print(f"  - Seeded {len(entity_types)} entity types")
     print(f"  - action_items: delegated_to column + CHECK constraint verified")
+    print(f"  - classifications table: created/verified")
+    print(f"  - keyword_feedback table: created/verified")
+    print(f"  - vault_index table: created/verified")
+    print(f"  - journal_entries: date uniqueness verified")
+    print(f"  - action_items.push_attempted_at: idempotency column verified")
+    print(f"  - scheduler_state table: created/verified")
 
 
 if __name__ == "__main__":
