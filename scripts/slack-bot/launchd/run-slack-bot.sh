@@ -11,9 +11,11 @@ if [ -f .env ]; then
     set +a
 fi
 
-# Use venv Python if available, otherwise fall back to system python3
+# Use venv Python — fail loudly if missing
 if [ -x venv/bin/python ]; then
     exec venv/bin/python app.py
 else
-    exec python3 app.py
+    echo "ERROR: venv/bin/python not found at $(pwd)/venv/" >&2
+    echo "Run: python3 -m venv venv && venv/bin/pip install -r requirements.txt" >&2
+    exit 1
 fi
