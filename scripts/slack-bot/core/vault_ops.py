@@ -403,3 +403,77 @@ Browse linked notes in the graph view to see connections.
 """
         path.write_text(frontmatter, encoding="utf-8")
         logger.info("Created dimension page: %s", path)
+
+
+def create_web_clip(
+    url: str,
+    title: str,
+    summary: str,
+    icor_elements: list[str] | None = None,
+    key_concepts: list[str] | None = None,
+    content_preview: str = "",
+) -> Path:
+    """Create a web clip file in vault/Resources/.
+
+    Returns path to the created file.
+    """
+    import re as _re
+
+    with _vault_lock:
+        resources_dir = config.VAULT_PATH / "Resources"
+        resources_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_title = _sanitize_filename(title)[:60]
+        date = datetime.now().strftime("%Y-%m-%d")
+        filename = f"{date}-{safe_title}.md"
+        path = resources_dir / filename
+        _guard_vault_path(path)
+
+        # Handle collision
+        counter = 1
+        while path.exists():
+            filename = f"{date}-{safe_title}-{counter}.md"
+            path = resources_dir / filename
+            counter += 1
+
+        elements = icor_elements or []
+        concepts = key_concepts or []
+        icor_line = f"icor_elements: [{', '.join(elements)}]" if elements else "icor_elements: []"
+        tags_line = f"tags: [{', '.join(concepts)}]" if concepts else "tags: []"
+
+        frontmatter = f"""---
+type: web_clip
+url: "{url}"
+title: "{title}"
+date: {date}
+{icor_line}
+{tags_line}
+---
+
+"""
+        body = f"# {title}\n\n"
+        body += f"**Source:** {url}\n\n"
+
+        if summary:
+            body += f"## Summary\n\n{summary}\n\n"
+
+        if concepts:
+            body += "## Key Concepts\n\n"
+            for c in concepts:
+                body += f"- {c}\n"
+            body += "\n"
+
+        if content_preview:
+            body += f"## Content Preview\n\n{content_preview[:2000]}\n"
+
+        path.write_text(frontmatter + body, encoding="utf-8")
+        logger.info("Created web clip: %s", path)
+
+        # Reference in daily note
+        append_to_daily_note(
+            date,
+            f"- Saved [[Resources/{filename}|{title}]] from {url}",
+            section="## Log",
+        )
+
+        return path

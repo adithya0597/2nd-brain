@@ -161,6 +161,55 @@ _NOTION_CONTEXT_COMMANDS = {
     "context-load", "drift", "resources", "weekly-review",
 }
 
+# Commands that benefit from pre-computed analytics
+_ANALYTICS_COMMANDS = {
+    "drift": ["drift_scores"],
+    "ideas": ["stale_actions", "co_occurrences", "attention_gaps"],
+    "today": ["top3_morning", "stuck_item", "attention_gaps"],
+    "schedule": ["attention_gaps", "stale_actions"],
+    "emerge": ["co_occurrences"],
+}
+
+
+async def _gather_analytics(command_name: str, db_path: Path = None) -> dict:
+    """Pre-compute analytics for commands that benefit from them."""
+    metrics = _ANALYTICS_COMMANDS.get(command_name)
+    if not metrics:
+        return {}
+
+    try:
+        from core import analytics
+    except ImportError:
+        logger.warning("analytics module not available")
+        return {}
+
+    result = {}
+    for metric in metrics:
+        try:
+            if metric == "drift_scores":
+                data = await analytics.compute_drift_scores(db_path=db_path)
+                result["drift_scores"] = data[:15]
+            elif metric == "stale_actions":
+                data = await analytics.detect_stale_actions(db_path=db_path)
+                result["stale_actions"] = data[:10]
+            elif metric == "co_occurrences":
+                data = await analytics.find_co_occurrence_clusters(db_path=db_path)
+                result["co_occurrences"] = data[:10]
+            elif metric == "attention_gaps":
+                data = await analytics.compute_attention_gaps(db_path=db_path)
+                result["attention_gaps"] = data[:10]
+            elif metric == "top3_morning":
+                data = await analytics.compute_top3_morning(db_path=db_path)
+                result["top3_morning"] = data
+            elif metric == "stuck_item":
+                data = await analytics.compute_stuck_item(db_path=db_path)
+                if data:
+                    result["stuck_item"] = data
+        except Exception:
+            logger.exception("Failed to compute analytics: %s", metric)
+
+    return result
+
 
 def load_command_prompt(command_name: str) -> str:
     """Read the .md prompt file for a slash command."""
@@ -352,6 +401,11 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
         if notion_data:
             context["notion"] = notion_data
 
+    # Inject pre-computed analytics for applicable commands
+    analytics = await _gather_analytics(command_name, db_path=db_path)
+    if analytics:
+        context["analytics"] = analytics
+
     return context
 
 
@@ -393,6 +447,11 @@ def build_claude_messages(command: str, user_input: str, context: dict) -> list:
         context_parts.append("### Notion Data (cached)")
         for entity_type, items in context["notion"].items():
             context_parts.append(f"#### {entity_type}\n{json.dumps(items, indent=2, default=str)}")
+
+    if context.get("analytics"):
+        context_parts.append("### Pre-Computed Analytics")
+        for metric_name, data in context["analytics"].items():
+            context_parts.append(f"#### {metric_name}\n{json.dumps(data, indent=2, default=str)}")
 
     context_block = "\n\n".join(context_parts) if context_parts else "No additional context available."
 
