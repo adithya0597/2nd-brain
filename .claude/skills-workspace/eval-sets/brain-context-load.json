@@ -1,0 +1,82 @@
+[
+  {
+    "query": "load my brain — I need full context before I start asking questions",
+    "should_trigger": true
+  },
+  {
+    "query": "catch me up on everything. what am I working on, what's pending, what needs attention?",
+    "should_trigger": true
+  },
+  {
+    "query": "load context for this session so you know who I am and what my priorities are",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm starting a new session, can you pull in my identity files, recent journals, and pending actions?",
+    "should_trigger": true
+  },
+  {
+    "query": "session context please — ICOR hierarchy, active concepts, attention flags, the works",
+    "should_trigger": true
+  },
+  {
+    "query": "what am I working on right now? load up my second brain context so you can help me properly",
+    "should_trigger": true
+  },
+  {
+    "query": "pre-load everything — identity, projects, journal summaries, pending tasks. I want you up to speed",
+    "should_trigger": true
+  },
+  {
+    "query": "hey before we do anything, load my brain context so you have the full picture",
+    "should_trigger": true
+  },
+  {
+    "query": "give me a context dump — what does my second brain currently look like?",
+    "should_trigger": true
+  },
+  {
+    "query": "load session. I want you to read my ICOR, values, active projects, and recent state from sqlite",
+    "should_trigger": true
+  },
+  {
+    "query": "tell me about the fitness project specifically — what's the status and next steps?",
+    "should_trigger": false
+  },
+  {
+    "query": "can you load the file at vault/Identity/ICOR.md and show me the contents?",
+    "should_trigger": false
+  },
+  {
+    "query": "import this CSV into the brain.db sqlite database as a new table",
+    "should_trigger": false
+  },
+  {
+    "query": "set up my development environment for the slack bot — install deps and configure .env",
+    "should_trigger": false
+  },
+  {
+    "query": "load the notion-registry.json and tell me which projects have stale sync timestamps",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the schema of the journal_entries table? show me the columns",
+    "should_trigger": false
+  },
+  {
+    "query": "read vault/Identity/Values.md and suggest improvements to my values statement",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to understand how the classifier works — walk me through core/classifier.py",
+    "should_trigger": false
+  },
+  {
+    "query": "can you run a query against brain.db to show me all action items from last month?",
+    "should_trigger": false
+  },
+  {
+    "query": "start the morning review — create today's note and generate a briefing",
+    "should_trigger": false
+  }
+]

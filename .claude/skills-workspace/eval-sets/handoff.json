@@ -1,0 +1,82 @@
+[
+  {
+    "query": "write a handoff document — I'm stopping for the night and want the next session to pick up seamlessly",
+    "should_trigger": true
+  },
+  {
+    "query": "create a handoff. capture what we've done, what worked, what didn't, and what's next",
+    "should_trigger": true
+  },
+  {
+    "query": "save progress for next session — I need a HANDOFF.md so a fresh agent can continue this work",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm about to close out. write up the handoff doc with current state and next steps",
+    "should_trigger": true
+  },
+  {
+    "query": "handoff please — document where we are so I can resume tomorrow without losing context",
+    "should_trigger": true
+  },
+  {
+    "query": "before I go, save a handoff note with what's been accomplished and what still needs doing",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to context switch. write HANDOFF.md with the current progress and open questions",
+    "should_trigger": true
+  },
+  {
+    "query": "wrap this up with a handoff doc — include file paths, what's done, blockers, and next actions",
+    "should_trigger": true
+  },
+  {
+    "query": "create handoff document for this session. I want another agent to be able to continue from here",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm running out of context — quickly write a handoff so I can clone and continue",
+    "should_trigger": true
+  },
+  {
+    "query": "hand off the inbox processing task to the scheduled automation instead of doing it manually",
+    "should_trigger": false
+  },
+  {
+    "query": "delegate this action item to Sarah — she's better suited for the client outreach",
+    "should_trigger": false
+  },
+  {
+    "query": "write a summary report of the refactoring work we did today for the team",
+    "should_trigger": false
+  },
+  {
+    "query": "transition the slack bot from socket mode to HTTP endpoint for production",
+    "should_trigger": false
+  },
+  {
+    "query": "hand this project off to the new team lead — what documentation do they need?",
+    "should_trigger": false
+  },
+  {
+    "query": "save the current state of brain.db to a backup file before we run the migration",
+    "should_trigger": false
+  },
+  {
+    "query": "close out today's work — do the evening review and extract action items from my journal",
+    "should_trigger": false
+  },
+  {
+    "query": "write release notes for the v2 update of the slack bot we just shipped",
+    "should_trigger": false
+  },
+  {
+    "query": "transfer ownership of the notion workspace to the shared team account",
+    "should_trigger": false
+  },
+  {
+    "query": "document the architecture decisions we made today in an ADR file",
+    "should_trigger": false
+  }
+]

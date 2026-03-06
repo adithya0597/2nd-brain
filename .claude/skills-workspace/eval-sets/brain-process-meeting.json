@@ -1,0 +1,82 @@
+[
+  {
+    "query": "I just had a meeting with the design team — here's the transcript, can you process it?",
+    "should_trigger": true
+  },
+  {
+    "query": "process this meeting: we discussed Q2 roadmap with Sarah and James, extract the action items",
+    "should_trigger": true
+  },
+  {
+    "query": "parse my meeting notes from the standup today and pull out tasks, decisions, and follow-ups",
+    "should_trigger": true
+  },
+  {
+    "query": "I had a 1:1 with my manager about career growth — process the notes and update CRM",
+    "should_trigger": true
+  },
+  {
+    "query": "extract actions from the client meeting transcript and assign them to the right projects",
+    "should_trigger": true
+  },
+  {
+    "query": "process meeting notes — it was a brainstorm session about the new product launch",
+    "should_trigger": true
+  },
+  {
+    "query": "hey I just got out of a meeting about the marketing strategy, heres my raw notes can you process them",
+    "should_trigger": true
+  },
+  {
+    "query": "run the meeting processor on the notes I took during the investor call with Mike",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to process a meeting transcript — it was a project kickoff with 5 people, lots of action items",
+    "should_trigger": true
+  },
+  {
+    "query": "just finished a team retrospective, process the notes and extract themes and action items",
+    "should_trigger": true
+  },
+  {
+    "query": "schedule a meeting with Sarah for next Tuesday at 2pm about the Q2 planning",
+    "should_trigger": false
+  },
+  {
+    "query": "write an agenda for tomorrow's sprint planning meeting with the engineering team",
+    "should_trigger": false
+  },
+  {
+    "query": "summarize this article about remote team management — it's a long read and I want key points",
+    "should_trigger": false
+  },
+  {
+    "query": "what meetings do I have on my calendar this week? check google calendar",
+    "should_trigger": false
+  },
+  {
+    "query": "help me prepare talking points for my performance review meeting next Friday",
+    "should_trigger": false
+  },
+  {
+    "query": "what are best practices for taking meeting notes? I want to improve my process",
+    "should_trigger": false
+  },
+  {
+    "query": "can you record and transcribe my next meeting automatically?",
+    "should_trigger": false
+  },
+  {
+    "query": "look up all the action items I have from meetings this month — search the vault for meeting notes",
+    "should_trigger": false
+  },
+  {
+    "query": "create a meeting note template with sections for attendees, agenda, decisions, and actions",
+    "should_trigger": false
+  },
+  {
+    "query": "send a follow-up email to everyone who was in the client meeting with a summary of decisions",
+    "should_trigger": false
+  }
+]

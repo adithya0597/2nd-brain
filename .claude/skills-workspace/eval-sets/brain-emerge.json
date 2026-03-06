@@ -1,0 +1,82 @@
+[
+  {
+    "query": "what patterns are hiding in my notes that I haven't consciously recognized yet?",
+    "should_trigger": true
+  },
+  {
+    "query": "surface any unnamed themes or recurring motifs across my journal entries",
+    "should_trigger": true
+  },
+  {
+    "query": "I feel like there's something connecting a bunch of my recent thoughts but I can't put my finger on it — can you find it?",
+    "should_trigger": true
+  },
+  {
+    "query": "do a deep pattern synthesis across my vault — what am I not seeing?",
+    "should_trigger": true
+  },
+  {
+    "query": "find hidden connections and emergent themes in my writing from the past month",
+    "should_trigger": true
+  },
+  {
+    "query": "what subconscious themes keep showing up in my notes that I probably haven't named?",
+    "should_trigger": true
+  },
+  {
+    "query": "analyze my scattered notes for latent patterns — things that recur but I never explicitly tied together",
+    "should_trigger": true
+  },
+  {
+    "query": "run the emergence analysis, I want to see what's brewing beneath the surface of my thinking",
+    "should_trigger": true
+  },
+  {
+    "query": "are there any blind spots in my journaling? themes that keep appearing but I never address directly?",
+    "should_trigger": true
+  },
+  {
+    "query": "synthesize cross-cutting patterns from my recent vault content — surprise me with what you find",
+    "should_trigger": true
+  },
+  {
+    "query": "search my vault for notes mentioning 'systems thinking'",
+    "should_trigger": false
+  },
+  {
+    "query": "what design patterns should I use for the observer pattern in my slack bot code?",
+    "should_trigger": false
+  },
+  {
+    "query": "find all notes tagged with the 'growth' dimension",
+    "should_trigger": false
+  },
+  {
+    "query": "can you write a regex pattern to match dates in my journal filenames?",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the theme of my journal entry from March 1st?",
+    "should_trigger": false
+  },
+  {
+    "query": "look for the recurring meeting note about the product sync — I think it's in vault/Meetings/",
+    "should_trigger": false
+  },
+  {
+    "query": "how has my thinking about meditation evolved over time?",
+    "should_trigger": false
+  },
+  {
+    "query": "find all notes that link to the Stoicism concept",
+    "should_trigger": false
+  },
+  {
+    "query": "what topics have I written about most frequently in my daily notes?",
+    "should_trigger": false
+  },
+  {
+    "query": "show me the pattern of my mood scores over the last 30 days as a trend",
+    "should_trigger": false
+  }
+]

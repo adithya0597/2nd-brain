@@ -1,0 +1,82 @@
+[
+  {
+    "query": "refresh my dashboard — recalculate attention scores and update the cockpit view",
+    "should_trigger": true
+  },
+  {
+    "query": "update the ICOR heatmap and attention indicators, it's been a while since last refresh",
+    "should_trigger": true
+  },
+  {
+    "query": "run dashboard refresh, I want current attention scores before my planning session",
+    "should_trigger": true
+  },
+  {
+    "query": "recalculate my dashboard metrics — attention scores, dimension balance, the whole cockpit",
+    "should_trigger": true
+  },
+  {
+    "query": "can you refresh the brain dashboard? I need updated numbers for the heatmap",
+    "should_trigger": true
+  },
+  {
+    "query": "update the cockpit please, I want to see fresh attention scores across all dimensions",
+    "should_trigger": true
+  },
+  {
+    "query": "time to refresh the dashboard — recompute everything and push to the dashboard channel",
+    "should_trigger": true
+  },
+  {
+    "query": "hey recalculate my attention scores and regenerate the dimension heatmap",
+    "should_trigger": true
+  },
+  {
+    "query": "dashboard is stale, refresh it with latest data from vault and notion",
+    "should_trigger": true
+  },
+  {
+    "query": "kick off a dashboard update — I want current ICOR balance and project status numbers",
+    "should_trigger": true
+  },
+  {
+    "query": "build me a new dashboard in React that shows my project metrics with charts",
+    "should_trigger": false
+  },
+  {
+    "query": "what do my current attention scores look like? just show me the numbers",
+    "should_trigger": false
+  },
+  {
+    "query": "create a grafana dashboard for monitoring the slack bot's performance",
+    "should_trigger": false
+  },
+  {
+    "query": "help me design a better layout for the Notion cockpit page",
+    "should_trigger": false
+  },
+  {
+    "query": "show me my project statuses and which dimensions need work",
+    "should_trigger": false
+  },
+  {
+    "query": "can you add a new metric to the dashboard that tracks journal consistency?",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the formula for computing attention scores? I want to understand the algorithm",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a web dashboard that I can access from my phone with live stats",
+    "should_trigger": false
+  },
+  {
+    "query": "the dashboard channel in slack isn't getting updates — can you debug the scheduled job?",
+    "should_trigger": false
+  },
+  {
+    "query": "compare my dashboard metrics from this week vs last week — show me the trend",
+    "should_trigger": false
+  }
+]

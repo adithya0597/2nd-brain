@@ -1,0 +1,82 @@
+[
+  {
+    "query": "sync my second brain with Notion — push local changes and pull updates",
+    "should_trigger": true
+  },
+  {
+    "query": "run the notion sync, I've made a bunch of changes locally that need to go upstream",
+    "should_trigger": true
+  },
+  {
+    "query": "bidirectional sync with Notion please — pull new tasks and push my journal entries",
+    "should_trigger": true
+  },
+  {
+    "query": "push everything to notion, I've been working offline and need to sync up",
+    "should_trigger": true
+  },
+  {
+    "query": "notion sync time — make sure my local brain and Notion workspace are in agreement",
+    "should_trigger": true
+  },
+  {
+    "query": "can you sync the databases? I added projects in Notion that need to come down locally",
+    "should_trigger": true
+  },
+  {
+    "query": "pull latest from Notion and push my new action items and concepts back up",
+    "should_trigger": true
+  },
+  {
+    "query": "sync brain to notion, haven't synced in a few days and things are probably out of date",
+    "should_trigger": true
+  },
+  {
+    "query": "run a full sync — tags, projects, goals, tasks, everything between local and Notion",
+    "should_trigger": true
+  },
+  {
+    "query": "hey I need to synchronize with notion, some tasks got updated on both sides",
+    "should_trigger": true
+  },
+  {
+    "query": "create a new page in my Notion workspace called 'Q2 Planning' with a table of goals",
+    "should_trigger": false
+  },
+  {
+    "query": "query the Notion API and show me all tasks with status 'Doing' — just a quick lookup",
+    "should_trigger": false
+  },
+  {
+    "query": "how do I set up a Notion integration token? I need help with the initial config",
+    "should_trigger": false
+  },
+  {
+    "query": "update the NOTION_TOKEN in my .env file, the old one expired",
+    "should_trigger": false
+  },
+  {
+    "query": "can you check if the notion_sync.py script has any bugs? the last run threw errors",
+    "should_trigger": false
+  },
+  {
+    "query": "show me what's in my Notion Projects database — I want to browse the raw data",
+    "should_trigger": false
+  },
+  {
+    "query": "migrate my data from Notion to a new Obsidian-only setup, I'm leaving Notion",
+    "should_trigger": false
+  },
+  {
+    "query": "add a new column to the Notion Tasks database for 'Context' — I want to track where tasks come from",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the sync state table look like? show me the last few sync records from brain.db",
+    "should_trigger": false
+  },
+  {
+    "query": "refresh my dashboard with the latest attention scores and ICOR heatmap",
+    "should_trigger": false
+  }
+]

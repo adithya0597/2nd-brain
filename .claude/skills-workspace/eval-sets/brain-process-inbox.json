@@ -1,0 +1,82 @@
+[
+  {
+    "query": "process my inbox — sort and route everything I've captured this week",
+    "should_trigger": true
+  },
+  {
+    "query": "triage the brain inbox, there's a bunch of captures sitting there unprocessed",
+    "should_trigger": true
+  },
+  {
+    "query": "route my inbox items to the right ICOR dimension channels",
+    "should_trigger": true
+  },
+  {
+    "query": "clean up the inbox — classify everything and move it to where it belongs",
+    "should_trigger": true
+  },
+  {
+    "query": "hey can you process the inbox captures? I've been dumping stuff in there all week",
+    "should_trigger": true
+  },
+  {
+    "query": "sort my inbox, I've got like 15 quick captures that need to be categorized and filed",
+    "should_trigger": true
+  },
+  {
+    "query": "run inbox processing — take everything in #brain-inbox and classify it into dimensions",
+    "should_trigger": true
+  },
+  {
+    "query": "process and categorize my inbox items, some are actions, some are ideas, some are just notes",
+    "should_trigger": true
+  },
+  {
+    "query": "inbox is overflowing, can you go through it and route captures to the proper channels?",
+    "should_trigger": true
+  },
+  {
+    "query": "time to empty the inbox — classify, route, and create action items from my captures",
+    "should_trigger": true
+  },
+  {
+    "query": "check my gmail inbox and tell me if there's anything urgent I need to respond to",
+    "should_trigger": false
+  },
+  {
+    "query": "process the file at vault/Inbox/random-thought.md — summarize it and add frontmatter",
+    "should_trigger": false
+  },
+  {
+    "query": "sort all the markdown files in vault/ by date modified, I want to find recent changes",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the best inbox zero methodology? I keep falling behind on processing",
+    "should_trigger": false
+  },
+  {
+    "query": "move the files from vault/Inbox/ to vault/Concepts/ — they've been sitting there too long",
+    "should_trigger": false
+  },
+  {
+    "query": "I captured a quick thought about starting a podcast — can you expand it into a project plan?",
+    "should_trigger": false
+  },
+  {
+    "query": "show me what's in my inbox right now without processing it — I just want to see the list",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a new Slack channel for capturing voice memos from my phone",
+    "should_trigger": false
+  },
+  {
+    "query": "the classifier is putting health-related captures in the wrong channel, can you fix the keywords?",
+    "should_trigger": false
+  },
+  {
+    "query": "how many unprocessed captures do I have? just give me the count, don't process them yet",
+    "should_trigger": false
+  }
+]

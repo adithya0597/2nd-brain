@@ -1,0 +1,82 @@
+[
+  {
+    "query": "half clone this conversation — I'm running low on context and want to keep only recent work",
+    "should_trigger": true
+  },
+  {
+    "query": "trim this conversation down, keep the last half so I can keep working without hitting context limits",
+    "should_trigger": true
+  },
+  {
+    "query": "reduce context — do a half-clone so we drop the early exploration and keep the implementation work",
+    "should_trigger": true
+  },
+  {
+    "query": "clone recent half of this chat. the early stuff is irrelevant now and eating up tokens",
+    "should_trigger": true
+  },
+  {
+    "query": "this conversation is getting huge, can you half-clone it so I can continue with a smaller context?",
+    "should_trigger": true
+  },
+  {
+    "query": "context is getting bloated — do the half clone thing to preserve just the recent exchanges",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to slim down this session. half-clone and keep the important recent work",
+    "should_trigger": true
+  },
+  {
+    "query": "we're at like 80% context. do a half clone so I can keep going without starting over",
+    "should_trigger": true
+  },
+  {
+    "query": "truncate the early part of this convo and save the rest as a new resumable session",
+    "should_trigger": true
+  },
+  {
+    "query": "the context bar is almost full, do a half-clone to shed the old stuff and keep recent progress",
+    "should_trigger": true
+  },
+  {
+    "query": "split the formatter.py file in half — the top section should be a separate utils module",
+    "should_trigger": false
+  },
+  {
+    "query": "trim the daily note to just the morning and evening sections, remove the mid-day log",
+    "should_trigger": false
+  },
+  {
+    "query": "clone this full conversation to a new session so I can branch in a different direction",
+    "should_trigger": false
+  },
+  {
+    "query": "reduce the size of brain.db by archiving entries older than 90 days",
+    "should_trigger": false
+  },
+  {
+    "query": "can you compact the journal_entries table? there are duplicate rows from re-indexing",
+    "should_trigger": false
+  },
+  {
+    "query": "cut the CLAUDE.md in half — it's too long and most of it is outdated",
+    "should_trigger": false
+  },
+  {
+    "query": "partial copy of the ICOR.md file — just grab the dimensions and key elements, not the descriptions",
+    "should_trigger": false
+  },
+  {
+    "query": "write a handoff document so I can resume this work in a fresh session tomorrow",
+    "should_trigger": false
+  },
+  {
+    "query": "strip out the old test data from the sqlite database to make it smaller",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to keep working but with less overhead — can you summarize what we've done so far?",
+    "should_trigger": false
+  }
+]

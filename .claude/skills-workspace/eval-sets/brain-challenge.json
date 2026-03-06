@@ -1,0 +1,82 @@
+[
+  {
+    "query": "challenge my belief that morning routines are essential for productivity",
+    "should_trigger": true
+  },
+  {
+    "query": "I think I need to quit my job to pursue my passion — red team this assumption for me",
+    "should_trigger": true
+  },
+  {
+    "query": "play devil's advocate on my conviction that deep work requires solitude",
+    "should_trigger": true
+  },
+  {
+    "query": "pressure test my thinking about investing heavily in crypto right now",
+    "should_trigger": true
+  },
+  {
+    "query": "I believe multitasking is always bad — poke holes in this and find counter-evidence from my own notes",
+    "should_trigger": true
+  },
+  {
+    "query": "steelman the opposite of my view that social media is a net negative — what would I be wrong about?",
+    "should_trigger": true
+  },
+  {
+    "query": "I've been assuming that more structure = more output. challenge that with evidence from my vault",
+    "should_trigger": true
+  },
+  {
+    "query": "red team my assumption that I should focus on one project at a time instead of parallelizing",
+    "should_trigger": true
+  },
+  {
+    "query": "I keep telling myself that reading more books will make me smarter — is my own data supporting that?",
+    "should_trigger": true
+  },
+  {
+    "query": "challenge the narrative I've built around needing to wake up at 5am to be successful",
+    "should_trigger": true
+  },
+  {
+    "query": "can you review this PR and challenge any questionable architectural decisions?",
+    "should_trigger": false
+  },
+  {
+    "query": "I disagree with my manager's decision to switch to microservices — help me articulate why",
+    "should_trigger": false
+  },
+  {
+    "query": "challenge the choice of SQLite over PostgreSQL for the brain database",
+    "should_trigger": false
+  },
+  {
+    "query": "my coworker believes we should rewrite the app in Rust — argue against this for me",
+    "should_trigger": false
+  },
+  {
+    "query": "what are the counterarguments to using Socket Mode vs HTTP for the Slack bot?",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to push back on this library choice in our codebase — give me technical reasons",
+    "should_trigger": false
+  },
+  {
+    "query": "stress test the API endpoint to see if it can handle 1000 concurrent requests",
+    "should_trigger": false
+  },
+  {
+    "query": "find weaknesses in this business plan my friend sent me",
+    "should_trigger": false
+  },
+  {
+    "query": "help me prepare counterpoints for the debate I'm having with my team about TDD",
+    "should_trigger": false
+  },
+  {
+    "query": "what are the downsides of the 4-tier classifier architecture we're using?",
+    "should_trigger": false
+  }
+]

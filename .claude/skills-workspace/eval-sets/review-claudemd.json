@@ -1,0 +1,82 @@
+[
+  {
+    "query": "review my CLAUDE.md files — find violated instructions and missing patterns from recent conversations",
+    "should_trigger": true
+  },
+  {
+    "query": "improve my claude instructions. analyze conversation history and suggest additions or changes",
+    "should_trigger": true
+  },
+  {
+    "query": "audit my claude config — are there rules I keep breaking or outdated instructions that should be removed?",
+    "should_trigger": true
+  },
+  {
+    "query": "check my CLAUDE.md against recent sessions. what patterns should I add, what's being ignored?",
+    "should_trigger": true
+  },
+  {
+    "query": "review claude md — I want to tighten up the instructions based on what's actually happening in practice",
+    "should_trigger": true
+  },
+  {
+    "query": "can you look at my last 15 conversations and see if CLAUDE.md needs updating? anything missing or stale?",
+    "should_trigger": true
+  },
+  {
+    "query": "time to do a CLAUDE.md audit. spin up subagents to analyze recent convos and find improvement opportunities",
+    "should_trigger": true
+  },
+  {
+    "query": "my instructions file probably has some gaps — review it against what we've been doing lately",
+    "should_trigger": true
+  },
+  {
+    "query": "are my claude project instructions effective? analyze conversation patterns to find where they fall short",
+    "should_trigger": true
+  },
+  {
+    "query": "review instructions — look for things that should be in global vs local CLAUDE.md based on recent usage",
+    "should_trigger": true
+  },
+  {
+    "query": "review this pull request and leave comments on the code quality",
+    "should_trigger": false
+  },
+  {
+    "query": "can you read CLAUDE.md and tell me what commands are available?",
+    "should_trigger": false
+  },
+  {
+    "query": "edit the CLAUDE.md file to add a new section about the notification system",
+    "should_trigger": false
+  },
+  {
+    "query": "review the vault_ops.py code for potential bugs and suggest improvements",
+    "should_trigger": false
+  },
+  {
+    "query": "read the documentation in scripts/CLAUDE.md and summarize it for me",
+    "should_trigger": false
+  },
+  {
+    "query": "audit the SQL queries in context_loader.py for performance issues",
+    "should_trigger": false
+  },
+  {
+    "query": "check if my .claude/settings.local.json has the right permissions and tool allowlists",
+    "should_trigger": false
+  },
+  {
+    "query": "review the AUDIT-REPORT.md and prioritize which P0 issues to fix first",
+    "should_trigger": false
+  },
+  {
+    "query": "write a new CLAUDE.md for the scripts/slack-bot/handlers/ directory",
+    "should_trigger": false
+  },
+  {
+    "query": "can you review my obsidian vault structure and suggest a better organization?",
+    "should_trigger": false
+  }
+]

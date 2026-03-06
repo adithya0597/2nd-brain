@@ -1,0 +1,82 @@
+[
+  {
+    "query": "clone this conversation so I can try a different approach in a fresh branch",
+    "should_trigger": true
+  },
+  {
+    "query": "fork this chat — I want to explore an alternative solution without losing this context",
+    "should_trigger": true
+  },
+  {
+    "query": "duplicate this conversation. I want to keep this one intact and experiment in the copy",
+    "should_trigger": true
+  },
+  {
+    "query": "branch off from here — create a copy of this conversation I can resume separately",
+    "should_trigger": true
+  },
+  {
+    "query": "can you clone the conversation? I want two threads going — one for refactoring and one for the feature",
+    "should_trigger": true
+  },
+  {
+    "query": "save this conversation as a new one I can pick up later with claude -r",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to split here — make a clone of this chat so I can take it in a different direction",
+    "should_trigger": true
+  },
+  {
+    "query": "copy this whole conversation to a new session so I don't lose context if this one gets too long",
+    "should_trigger": true
+  },
+  {
+    "query": "clone conv — I need a parallel thread to try something risky without messing up this one",
+    "should_trigger": true
+  },
+  {
+    "query": "create a duplicate of this chat session so my colleague can resume from this exact point",
+    "should_trigger": true
+  },
+  {
+    "query": "clone the 2nd-brain repo to a new directory so I can test changes in isolation",
+    "should_trigger": false
+  },
+  {
+    "query": "copy vault/Daily Notes/2026-03-05.md to vault/Daily Notes/2026-03-06.md as a starting point",
+    "should_trigger": false
+  },
+  {
+    "query": "duplicate this notion page — I want a copy of the project entry for the new quarter",
+    "should_trigger": false
+  },
+  {
+    "query": "create a git branch called feature/new-classifier and switch to it",
+    "should_trigger": false
+  },
+  {
+    "query": "fork the scheduler logic into a separate module so we can test it independently",
+    "should_trigger": false
+  },
+  {
+    "query": "can you replicate the database schema from brain.db into a test database?",
+    "should_trigger": false
+  },
+  {
+    "query": "branch the config.py into a dev config and prod config for different environments",
+    "should_trigger": false
+  },
+  {
+    "query": "half clone this conversation — keep only the recent context and trim the old stuff",
+    "should_trigger": false
+  },
+  {
+    "query": "copy the formatting from core/formatter.py and adapt it for the new report type",
+    "should_trigger": false
+  },
+  {
+    "query": "mirror the slack bot setup on my other machine — what files do I need to copy?",
+    "should_trigger": false
+  }
+]

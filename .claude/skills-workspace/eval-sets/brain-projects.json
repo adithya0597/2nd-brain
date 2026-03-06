@@ -1,0 +1,82 @@
+[
+  {
+    "query": "show me my active projects dashboard — I want to see status across all dimensions",
+    "should_trigger": true
+  },
+  {
+    "query": "project overview please, how are all my projects doing? any that need attention?",
+    "should_trigger": true
+  },
+  {
+    "query": "give me the full project status report with cross-dimensional tracking",
+    "should_trigger": true
+  },
+  {
+    "query": "what projects am I currently working on and what's their status?",
+    "should_trigger": true
+  },
+  {
+    "query": "pull up the project dashboard, I want to see which ones are on track and which are slipping",
+    "should_trigger": true
+  },
+  {
+    "query": "run brain projects — need to review everything that's in Doing or Planned status",
+    "should_trigger": true
+  },
+  {
+    "query": "can you show me a summary of all active projects? include goals they're linked to",
+    "should_trigger": true
+  },
+  {
+    "query": "project check-in time. whats the state of things across health wealth growth etc",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to see how my projects are progressing — the full dashboard with deadlines and statuses",
+    "should_trigger": true
+  },
+  {
+    "query": "list all my active and planned projects with their ICOR dimensions and completion status",
+    "should_trigger": true
+  },
+  {
+    "query": "create a new project called 'Learn Spanish' and link it to the Mind & Growth dimension",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the status of the slack bot refactoring project specifically? any blockers?",
+    "should_trigger": false
+  },
+  {
+    "query": "can you update the 'Fitness Routine' project status from Planned to Doing in Notion?",
+    "should_trigger": false
+  },
+  {
+    "query": "how should I structure a software project? give me best practices for project management",
+    "should_trigger": false
+  },
+  {
+    "query": "list all the files in the scripts/slack-bot project directory",
+    "should_trigger": false
+  },
+  {
+    "query": "plan my week out — I want an energy-aware schedule for the next 5 days",
+    "should_trigger": false
+  },
+  {
+    "query": "what tasks are overdue across all my projects? I want the action items, not the project summaries",
+    "should_trigger": false
+  },
+  {
+    "query": "archive the 'Home Renovation' project, it's been done for a while now",
+    "should_trigger": false
+  },
+  {
+    "query": "compare my stated goals vs what I've actually been journaling about — am I drifting?",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a new Notion database for tracking my freelance projects separately",
+    "should_trigger": false
+  }
+]

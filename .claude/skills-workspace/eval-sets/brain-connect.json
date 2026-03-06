@@ -1,0 +1,82 @@
+[
+  {
+    "query": "find unexpected connections between my health routines and my financial habits",
+    "should_trigger": true
+  },
+  {
+    "query": "what links exist between my notes on stoicism and my notes on product management?",
+    "should_trigger": true
+  },
+  {
+    "query": "bridge my thinking about meditation and my thinking about software architecture — any overlaps?",
+    "should_trigger": true
+  },
+  {
+    "query": "serendipity mode: connect 'fitness' and 'creativity' across my vault — what do they share?",
+    "should_trigger": true
+  },
+  {
+    "query": "I never thought about how my reading habits might relate to my relationship patterns — find the links",
+    "should_trigger": true
+  },
+  {
+    "query": "find cross-pollination opportunities between my 'Wealth & Finance' and 'Mind & Growth' dimensions",
+    "should_trigger": true
+  },
+  {
+    "query": "what surprising intersections exist between my career goals and my health goals?",
+    "should_trigger": true
+  },
+  {
+    "query": "connect the dots between my notes on parenting and my notes on leadership — are there shared principles?",
+    "should_trigger": true
+  },
+  {
+    "query": "explore the hidden relationship between my cooking hobby and my systems thinking notes",
+    "should_trigger": true
+  },
+  {
+    "query": "find the bridge between 'minimalism' and 'wealth building' in my vault — they seem opposite but might connect",
+    "should_trigger": true
+  },
+  {
+    "query": "connect to the Notion API and pull my latest tasks",
+    "should_trigger": false
+  },
+  {
+    "query": "link these two files together with wikilinks: vault/Concepts/Deep-Work.md and vault/Concepts/Flow-State.md",
+    "should_trigger": false
+  },
+  {
+    "query": "find all notes related to my 'Systems Thinking' concept",
+    "should_trigger": false
+  },
+  {
+    "query": "connect my Slack bot to a new channel called #brain-testing",
+    "should_trigger": false
+  },
+  {
+    "query": "what notes reference both 'meditation' and 'productivity'? just list them",
+    "should_trigger": false
+  },
+  {
+    "query": "set up the database connection string for the new PostgreSQL instance",
+    "should_trigger": false
+  },
+  {
+    "query": "show me the backlinks for the 'Leadership' concept note in my vault",
+    "should_trigger": false
+  },
+  {
+    "query": "integrate the calendar API with the slack bot for scheduled events",
+    "should_trigger": false
+  },
+  {
+    "query": "merge my two separate note files about 'Deep Work' into one consolidated concept",
+    "should_trigger": false
+  },
+  {
+    "query": "search my vault for notes that mention both finance and relationships",
+    "should_trigger": false
+  }
+]

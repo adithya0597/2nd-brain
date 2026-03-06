@@ -1,0 +1,82 @@
+[
+  {
+    "query": "am I actually spending time on the things I said matter most to me? feels like I'm drifting",
+    "should_trigger": true
+  },
+  {
+    "query": "compare my stated goals vs where I've actually been putting my energy the last few weeks",
+    "should_trigger": true
+  },
+  {
+    "query": "I set all these intentions at the start of the year but I have a nagging feeling I'm not aligned — can you check?",
+    "should_trigger": true
+  },
+  {
+    "query": "how balanced is my life across the ICOR dimensions right now? am I neglecting anything",
+    "should_trigger": true
+  },
+  {
+    "query": "run an alignment analysis — I want to see if my daily notes match what my goals say I care about",
+    "should_trigger": true
+  },
+  {
+    "query": "do a life balance check, I think I've been too focused on work and ignoring health & relationships",
+    "should_trigger": true
+  },
+  {
+    "query": "what's the gap between my intentions and my actual behavior based on my journal entries",
+    "should_trigger": true
+  },
+  {
+    "query": "I keep saying fitness is important but am I actually doing anything about it? check my alignment",
+    "should_trigger": true
+  },
+  {
+    "query": "show me where I'm misaligned — goals vs reality, the honest version",
+    "should_trigger": true
+  },
+  {
+    "query": "are my daily actions reflecting my priorities or am I just busy without direction",
+    "should_trigger": true
+  },
+  {
+    "query": "what's the current status of my 'Launch side project' goal? is it on track for the deadline?",
+    "should_trigger": false
+  },
+  {
+    "query": "check if my package versions have drifted from what's pinned in requirements.txt",
+    "should_trigger": false
+  },
+  {
+    "query": "how much progress have I made on the fitness project this month specifically",
+    "should_trigger": false
+  },
+  {
+    "query": "my config files seem to have drifted from the template — can you diff them?",
+    "should_trigger": false
+  },
+  {
+    "query": "which of my active projects are behind schedule right now?",
+    "should_trigger": false
+  },
+  {
+    "query": "has the API schema drifted from the spec? compare the openapi.yaml to the actual endpoints",
+    "should_trigger": false
+  },
+  {
+    "query": "show me all my goals and their statuses in a table",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to update my goal for Q2 — change the target deadline to June 30",
+    "should_trigger": false
+  },
+  {
+    "query": "what did I journal about last week? give me a summary of my daily notes",
+    "should_trigger": false
+  },
+  {
+    "query": "how is my 'Read 24 books' goal progressing — how many have I logged so far?",
+    "should_trigger": false
+  }
+]

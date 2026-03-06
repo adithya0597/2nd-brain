@@ -1,0 +1,82 @@
+[
+  {
+    "query": "plan my week — I want an energy-aware schedule based on my journal patterns",
+    "should_trigger": true
+  },
+  {
+    "query": "what should I do this week? distribute tasks across days based on when I have the most energy",
+    "should_trigger": true
+  },
+  {
+    "query": "weekly schedule please. pull in notion deadlines, pending actions, and ICOR balance",
+    "should_trigger": true
+  },
+  {
+    "query": "schedule my week out. I want to see critical path items, high energy tasks on good days, admin on low days",
+    "should_trigger": true
+  },
+  {
+    "query": "generate a weekly plan for next week — factor in my energy patterns from journal data",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to organize my week. can you look at what's pending and allocate tasks to each day?",
+    "should_trigger": true
+  },
+  {
+    "query": "energy-aware weekly planning — which days should I do deep work vs admin based on my history?",
+    "should_trigger": true
+  },
+  {
+    "query": "let's do weekly planning. check my pending actions, notion tasks, and ICOR coverage gaps",
+    "should_trigger": true
+  },
+  {
+    "query": "help me plan monday through friday. I've got a lot of tasks piling up and need to prioritize by day",
+    "should_trigger": true
+  },
+  {
+    "query": "create a weekly plan — balance my ICOR dimensions and match tasks to my energy levels",
+    "should_trigger": true
+  },
+  {
+    "query": "schedule a meeting with Sarah for Thursday at 2pm about the product roadmap",
+    "should_trigger": false
+  },
+  {
+    "query": "what's on my calendar this week? any conflicts I should know about?",
+    "should_trigger": false
+  },
+  {
+    "query": "start my day — morning review with today's priorities and briefing",
+    "should_trigger": false
+  },
+  {
+    "query": "I'm planning a trip to Japan in April, help me figure out the itinerary",
+    "should_trigger": false
+  },
+  {
+    "query": "plan out the architecture for the new notification system — what components do we need?",
+    "should_trigger": false
+  },
+  {
+    "query": "show me my pending action items sorted by age. I want to see what's been sitting there",
+    "should_trigger": false
+  },
+  {
+    "query": "what did I actually do this week? compare my plan vs reality",
+    "should_trigger": false
+  },
+  {
+    "query": "block out focused time on my calendar for deep work on Tuesday and Wednesday",
+    "should_trigger": false
+  },
+  {
+    "query": "set a reminder to review my goals every Sunday evening at 6pm",
+    "should_trigger": false
+  },
+  {
+    "query": "how should I plan the rollout of the slack bot? give me a project timeline",
+    "should_trigger": false
+  }
+]

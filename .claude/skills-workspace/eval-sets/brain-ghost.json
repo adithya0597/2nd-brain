@@ -1,0 +1,82 @@
+[
+  {
+    "query": "what would I say if someone asked me why I'm building a second brain?",
+    "should_trigger": true
+  },
+  {
+    "query": "answer this question as me based on everything you know about my thinking: is it worth getting an MBA?",
+    "should_trigger": true
+  },
+  {
+    "query": "how would I respond if a friend asked me for advice on starting a journaling habit?",
+    "should_trigger": true
+  },
+  {
+    "query": "channel my voice and values — what would I tell my younger self about career choices?",
+    "should_trigger": true
+  },
+  {
+    "query": "digital twin mode: if I were asked 'what matters most to you right now?', what would I say?",
+    "should_trigger": true
+  },
+  {
+    "query": "pretend you're me and draft a response to 'why do you journal every day?' based on my actual notes",
+    "should_trigger": true
+  },
+  {
+    "query": "what's my likely take on work-life balance based on my journal entries and values?",
+    "should_trigger": true
+  },
+  {
+    "query": "someone asked me what books changed my life — how would I answer based on my vault?",
+    "should_trigger": true
+  },
+  {
+    "query": "respond to this as I would: 'Do you think AI will replace most knowledge workers?'",
+    "should_trigger": true
+  },
+  {
+    "query": "use my writing style and beliefs to answer: should I prioritize depth or breadth in my career?",
+    "should_trigger": true
+  },
+  {
+    "query": "ghostwrite a LinkedIn post about productivity for my colleague Sarah",
+    "should_trigger": false
+  },
+  {
+    "query": "write a professional bio for me in third person for my website",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the factual answer to 'when was the Notion API released?'",
+    "should_trigger": false
+  },
+  {
+    "query": "roleplay as a medieval knight and give me advice on time management",
+    "should_trigger": false
+  },
+  {
+    "query": "impersonate Elon Musk and tell me what he'd think about my project",
+    "should_trigger": false
+  },
+  {
+    "query": "draft an email to my manager about the project delay — use a professional tone",
+    "should_trigger": false
+  },
+  {
+    "query": "what would a stoic philosopher say about my current situation?",
+    "should_trigger": false
+  },
+  {
+    "query": "help me write a journal entry for today about what happened at work",
+    "should_trigger": false
+  },
+  {
+    "query": "summarize my values and beliefs from my identity files",
+    "should_trigger": false
+  },
+  {
+    "query": "write a message as if you were my team lead responding to this customer complaint",
+    "should_trigger": false
+  }
+]

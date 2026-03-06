@@ -1,0 +1,82 @@
+[
+  {
+    "query": "close out today — parse my journal, extract actions, update the attention scores",
+    "should_trigger": true
+  },
+  {
+    "query": "evening review time. let's wrap up, index everything, and see what I accomplished",
+    "should_trigger": true
+  },
+  {
+    "query": "how did today go? do the end-of-day review and pull out any action items I wrote",
+    "should_trigger": true
+  },
+  {
+    "query": "wrap up the day for me, check today's daily note and extract todos",
+    "should_trigger": true
+  },
+  {
+    "query": "let's do the daily review. parse my note, update ICOR, and offer to push actions to notion",
+    "should_trigger": true
+  },
+  {
+    "query": "close my day please. I wrote a bunch in my journal and want it all indexed",
+    "should_trigger": true
+  },
+  {
+    "query": "end of day — run the evening summary, check for graduation candidates too",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm done for the day, can you process today's note and tell me what themes came up",
+    "should_trigger": true
+  },
+  {
+    "query": "time to shut down. do the evening review, extract actions, update attention indicators",
+    "should_trigger": true
+  },
+  {
+    "query": "it's 9pm, run the nightly review on today's journal entry",
+    "should_trigger": true
+  },
+  {
+    "query": "can you check how my morning went? I want a mid-day pulse check on progress",
+    "should_trigger": false
+  },
+  {
+    "query": "plan tomorrow for me based on what I didn't finish today",
+    "should_trigger": false
+  },
+  {
+    "query": "close the Active-Projects.md file, I'm done editing it",
+    "should_trigger": false
+  },
+  {
+    "query": "close out the Q1 project — mark it done in notion and archive it",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to wrap up the slack bot refactor, what files still need changes?",
+    "should_trigger": false
+  },
+  {
+    "query": "summarize today's meeting notes from vault/Meetings/2026-03-06-standup.md",
+    "should_trigger": false
+  },
+  {
+    "query": "start my day and create today's daily note with the morning briefing",
+    "should_trigger": false
+  },
+  {
+    "query": "can you review what I journaled about last Tuesday and find action items from it?",
+    "should_trigger": false
+  },
+  {
+    "query": "close this PR and merge it into main, the tests are passing now",
+    "should_trigger": false
+  },
+  {
+    "query": "archive all completed action items from the past week in SQLite",
+    "should_trigger": false
+  }
+]

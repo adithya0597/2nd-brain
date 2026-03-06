@@ -1,0 +1,82 @@
+[
+  {
+    "query": "search my vault for anything I've written about intermittent fasting and its effects on focus",
+    "should_trigger": true
+  },
+  {
+    "query": "where did I write about that productivity framework with the 4 quadrants? check my notes",
+    "should_trigger": true
+  },
+  {
+    "query": "find notes about the conversation I had with Mike about startup fundraising",
+    "should_trigger": true
+  },
+  {
+    "query": "look up what I wrote about stoicism in my journal — I know I had some good reflections",
+    "should_trigger": true
+  },
+  {
+    "query": "search my brain for anything related to sleep optimization, I wrote about it a few weeks ago",
+    "should_trigger": true
+  },
+  {
+    "query": "find in my vault where I discussed the decision to switch from React to Svelte",
+    "should_trigger": true
+  },
+  {
+    "query": "I wrote something about compound interest and long-term investing — can you find it in my notes?",
+    "should_trigger": true
+  },
+  {
+    "query": "search my second brain for mentions of 'deep work' — I want to see all related entries",
+    "should_trigger": true
+  },
+  {
+    "query": "where in my vault did I capture notes about the book Atomic Habits? I can't remember the file",
+    "should_trigger": true
+  },
+  {
+    "query": "find everything I've written about morning routines across daily notes and concepts",
+    "should_trigger": true
+  },
+  {
+    "query": "grep for 'TODO' across all python files in the slack-bot directory",
+    "should_trigger": false
+  },
+  {
+    "query": "search the web for articles about building a second brain methodology",
+    "should_trigger": false
+  },
+  {
+    "query": "find the file called vault_ops.py — I need to check something in it",
+    "should_trigger": false
+  },
+  {
+    "query": "look up the Notion API documentation for creating database entries",
+    "should_trigger": false
+  },
+  {
+    "query": "search my codebase for where the classifier threshold is defined",
+    "should_trigger": false
+  },
+  {
+    "query": "find all .md files modified in the last week using glob",
+    "should_trigger": false
+  },
+  {
+    "query": "can you look up what ICOR stands for? I forgot the exact acronym breakdown",
+    "should_trigger": false
+  },
+  {
+    "query": "search git history for when the notion sync feature was first added",
+    "should_trigger": false
+  },
+  {
+    "query": "find which Notion database has the 'Tags' collection — I need the ID",
+    "should_trigger": false
+  },
+  {
+    "query": "search stack overflow for how to fix the SQLite WAL mode locking issue",
+    "should_trigger": false
+  }
+]

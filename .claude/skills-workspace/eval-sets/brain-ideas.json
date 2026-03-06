@@ -1,0 +1,82 @@
+[
+  {
+    "query": "do a deep scan of my vault and generate actionable ideas — I feel stuck and need fresh directions",
+    "should_trigger": true
+  },
+  {
+    "query": "what should I be working on based on everything in my notes? give me ideas across all ICOR dimensions",
+    "should_trigger": true
+  },
+  {
+    "query": "run the ideas command, I want to see what opportunities my journal entries and concepts suggest",
+    "should_trigger": true
+  },
+  {
+    "query": "hey can you mine my vault for actionable ideas? especially around health and wealth dimensions",
+    "should_trigger": true
+  },
+  {
+    "query": "I need fresh ideas — scan my daily notes, concepts, and projects for things I should pursue",
+    "should_trigger": true
+  },
+  {
+    "query": "generate ideas from my knowledge base, what patterns or opportunities am I missing?",
+    "should_trigger": true
+  },
+  {
+    "query": "idea generation time. look through everything I've written and tell me what I should act on",
+    "should_trigger": true
+  },
+  {
+    "query": "what actionable ideas can you surface from my second brain? I want the full 5-category breakdown",
+    "should_trigger": true
+  },
+  {
+    "query": "pull ideas from my notes and journal — anything I've been circling around but haven't committed to",
+    "should_trigger": true
+  },
+  {
+    "query": "run brain ideas, I want to see what my vault is telling me I should focus on next",
+    "should_trigger": true
+  },
+  {
+    "query": "brainstorm 10 startup ideas related to AI and productivity tools for knowledge workers",
+    "should_trigger": false
+  },
+  {
+    "query": "I need feature ideas for the slack bot — what should we build next?",
+    "should_trigger": false
+  },
+  {
+    "query": "can you help me come up with creative writing prompts? I want to start journaling more",
+    "should_trigger": false
+  },
+  {
+    "query": "what are some good side project ideas for a software engineer looking to learn rust?",
+    "should_trigger": false
+  },
+  {
+    "query": "help me brainstorm gift ideas for my partner's birthday next week",
+    "should_trigger": false
+  },
+  {
+    "query": "I have an idea for a new ICOR dimension — can you help me flesh it out and add it to the hierarchy?",
+    "should_trigger": false
+  },
+  {
+    "query": "what ideas have other people had about building second brains? point me to articles or frameworks",
+    "should_trigger": false
+  },
+  {
+    "query": "look at my projects list and tell me which one has the best ROI — I need to prioritize",
+    "should_trigger": false
+  },
+  {
+    "query": "generate a content calendar with post ideas for my twitter account",
+    "should_trigger": false
+  },
+  {
+    "query": "what patterns do you see in my journal entries over the last month? any themes emerging?",
+    "should_trigger": false
+  }
+]

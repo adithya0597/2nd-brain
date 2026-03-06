@@ -1,0 +1,82 @@
+[
+  {
+    "query": "show me my knowledge base catalog — what resources do I have tagged and how healthy are they?",
+    "should_trigger": true
+  },
+  {
+    "query": "run the resource digest, I want to see all my resource tags with usage metrics",
+    "should_trigger": true
+  },
+  {
+    "query": "what's in my knowledge base? give me the full resource catalog with health scores",
+    "should_trigger": true
+  },
+  {
+    "query": "list all my resources — books, tools, reference materials, everything cataloged in the brain",
+    "should_trigger": true
+  },
+  {
+    "query": "resource health check — which knowledge areas are stale and which are well-maintained?",
+    "should_trigger": true
+  },
+  {
+    "query": "brain resources please, I want to audit what reference material I've been building up",
+    "should_trigger": true
+  },
+  {
+    "query": "give me an overview of my resource tags and how they connect to my projects and goals",
+    "should_trigger": true
+  },
+  {
+    "query": "knowledge catalog time — what resources have I accumulated and which need updating?",
+    "should_trigger": true
+  },
+  {
+    "query": "can you show the full resource inventory? I want to know whats in my second brain's reference layer",
+    "should_trigger": true
+  },
+  {
+    "query": "pull up resource metrics, I need to see which areas of my knowledge base are thriving vs neglected",
+    "should_trigger": true
+  },
+  {
+    "query": "find me a good book about stoic philosophy — something practical, not academic",
+    "should_trigger": false
+  },
+  {
+    "query": "how much CPU and memory is the slack bot using? check system resources",
+    "should_trigger": false
+  },
+  {
+    "query": "download the latest version of the notion-client python package",
+    "should_trigger": false
+  },
+  {
+    "query": "what resources should I allocate to the fitness project? time, money, tools?",
+    "should_trigger": false
+  },
+  {
+    "query": "search my notes for anything about productivity frameworks — I know I wrote something",
+    "should_trigger": false
+  },
+  {
+    "query": "can you create a new resource tag in Notion for 'Machine Learning' under Mind & Growth?",
+    "should_trigger": false
+  },
+  {
+    "query": "what AWS resources are we provisioning for this project?",
+    "should_trigger": false
+  },
+  {
+    "query": "recommend some podcasts about personal finance that I should add to my brain",
+    "should_trigger": false
+  },
+  {
+    "query": "show me what I captured in my inbox this week — I need to process the new items",
+    "should_trigger": false
+  },
+  {
+    "query": "link the 'Deep Work' book note to the Mind & Growth dimension and the focus project",
+    "should_trigger": false
+  }
+]

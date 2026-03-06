@@ -1,0 +1,82 @@
+[
+  {
+    "query": "promote recurring journal themes into proper concept notes in my vault",
+    "should_trigger": true
+  },
+  {
+    "query": "what themes from my daily notes deserve to be graduated into standalone concept files?",
+    "should_trigger": true
+  },
+  {
+    "query": "I keep writing about the same ideas in my journal — extract them into proper evergreen notes",
+    "should_trigger": true
+  },
+  {
+    "query": "run the graduation process — find themes that have appeared enough times to become concepts",
+    "should_trigger": true
+  },
+  {
+    "query": "scan my recent journals and identify which recurring topics should be formalized as concept notes",
+    "should_trigger": true
+  },
+  {
+    "query": "themes to concepts — which ideas have I journaled about often enough that they deserve their own page?",
+    "should_trigger": true
+  },
+  {
+    "query": "find seedling ideas in my daily notes that are ready to graduate to proper concept files",
+    "should_trigger": true
+  },
+  {
+    "query": "there are themes scattered across dozens of journal entries — consolidate them into concept notes",
+    "should_trigger": true
+  },
+  {
+    "query": "which recurring topics in my journaling have reached critical mass and should become standalone notes?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to crystallize my repeated journal ramblings into formal concept documents in the vault",
+    "should_trigger": true
+  },
+  {
+    "query": "I just graduated from my online course on data science — add it to my vault",
+    "should_trigger": false
+  },
+  {
+    "query": "promote this feature branch to production — it's ready for deploy",
+    "should_trigger": false
+  },
+  {
+    "query": "upgrade the notion-client dependency to the latest version",
+    "should_trigger": false
+  },
+  {
+    "query": "move this project from 'Planned' status to 'Doing' in Notion",
+    "should_trigger": false
+  },
+  {
+    "query": "create a new concept note for 'Systems Thinking' in my vault",
+    "should_trigger": false
+  },
+  {
+    "query": "what are the most common topics in my journal entries? just list them",
+    "should_trigger": false
+  },
+  {
+    "query": "migrate the database schema to add the new sync_state table",
+    "should_trigger": false
+  },
+  {
+    "query": "take this meeting note and convert it into action items",
+    "should_trigger": false
+  },
+  {
+    "query": "change the status of my 'Minimalism' concept from seedling to evergreen",
+    "should_trigger": false
+  },
+  {
+    "query": "I completed the AWS certification — update my skills section in the vault",
+    "should_trigger": false
+  }
+]

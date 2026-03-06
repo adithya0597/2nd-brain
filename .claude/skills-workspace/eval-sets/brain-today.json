@@ -1,0 +1,82 @@
+[
+  {
+    "query": "start my day — what do I have going on?",
+    "should_trigger": true
+  },
+  {
+    "query": "morning briefing please, load up everything and tell me what I should focus on",
+    "should_trigger": true
+  },
+  {
+    "query": "can you run my morning review? I want to see pending actions and neglected ICOR areas",
+    "should_trigger": true
+  },
+  {
+    "query": "what's on today? give me the full picture — projects, actions, attention alerts",
+    "should_trigger": true
+  },
+  {
+    "query": "begin my day, create today's daily note and pull in yesterday's carryovers",
+    "should_trigger": true
+  },
+  {
+    "query": "I just woke up, hit me with the daily briefing so I know what to tackle first",
+    "should_trigger": true
+  },
+  {
+    "query": "hey kick off the morning routine — check notion projects, pending tasks, the whole thing",
+    "should_trigger": true
+  },
+  {
+    "query": "daily briefing time! what should my priorities be based on what's been happening lately",
+    "should_trigger": true
+  },
+  {
+    "query": "it's a new day, can you set me up? create the note, show me what needs attention",
+    "should_trigger": true
+  },
+  {
+    "query": "let's do the morning review, I want to see what I missed and what's critical today",
+    "should_trigger": true
+  },
+  {
+    "query": "what happened on March 2nd? can you pull up that daily note for me",
+    "should_trigger": false
+  },
+  {
+    "query": "what do I have scheduled for tomorrow? any deadlines coming up?",
+    "should_trigger": false
+  },
+  {
+    "query": "plan my week out — I want an energy-aware schedule for Mon through Fri",
+    "should_trigger": false
+  },
+  {
+    "query": "check my google calendar and tell me what meetings I have today",
+    "should_trigger": false
+  },
+  {
+    "query": "what time is it right now? I'm trying to figure out if I'm late",
+    "should_trigger": false
+  },
+  {
+    "query": "close out the day for me, extract actions and do the evening review",
+    "should_trigger": false
+  },
+  {
+    "query": "show me a summary of what I worked on last week across all dimensions",
+    "should_trigger": false
+  },
+  {
+    "query": "create a new daily note template with different sections than what we have now",
+    "should_trigger": false
+  },
+  {
+    "query": "load my brain context so I can ask you questions about my projects",
+    "should_trigger": false
+  },
+  {
+    "query": "can you look at my journal entries from the past month and find patterns?",
+    "should_trigger": false
+  }
+]

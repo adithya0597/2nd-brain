@@ -1,0 +1,82 @@
+[
+  {
+    "query": "how has my thinking about productivity systems evolved over the past year?",
+    "should_trigger": true
+  },
+  {
+    "query": "trace the evolution of my understanding of stoicism across my notes",
+    "should_trigger": true
+  },
+  {
+    "query": "show me a timeline of how my views on remote work have changed based on my journal",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to see how my relationship with money/finance has shifted over time in my writing",
+    "should_trigger": true
+  },
+  {
+    "query": "trace 'minimalism' — when did I first write about it and how has my take evolved?",
+    "should_trigger": true
+  },
+  {
+    "query": "track the development of my thinking on leadership across all my notes and journals",
+    "should_trigger": true
+  },
+  {
+    "query": "how have my thoughts about health and fitness transformed since I started journaling?",
+    "should_trigger": true
+  },
+  {
+    "query": "map out the intellectual journey of how I think about creativity — early notes vs recent ones",
+    "should_trigger": true
+  },
+  {
+    "query": "concept evolution for 'deep work' — show me how my understanding has matured",
+    "should_trigger": true
+  },
+  {
+    "query": "I've been thinking about AI ethics for a while now — trace how my position has shifted over my notes",
+    "should_trigger": true
+  },
+  {
+    "query": "can you trace this bug back to the commit that introduced it?",
+    "should_trigger": false
+  },
+  {
+    "query": "show me the stack trace from the last crash in the slack bot",
+    "should_trigger": false
+  },
+  {
+    "query": "trace the network request from the client to the API — where is it failing?",
+    "should_trigger": false
+  },
+  {
+    "query": "where did the idea for the ICOR framework originally come from? find the source",
+    "should_trigger": false
+  },
+  {
+    "query": "find all my notes about meditation and list them chronologically",
+    "should_trigger": false
+  },
+  {
+    "query": "trace the function call chain in context_loader.py — what calls what?",
+    "should_trigger": false
+  },
+  {
+    "query": "when did I first mention 'second brain' in my vault? just find the earliest reference",
+    "should_trigger": false
+  },
+  {
+    "query": "what are the common themes across my notes about leadership?",
+    "should_trigger": false
+  },
+  {
+    "query": "trace the data flow from Slack message to Notion sync in the codebase",
+    "should_trigger": false
+  },
+  {
+    "query": "show me a git log of changes to the classifier module over time",
+    "should_trigger": false
+  }
+]
