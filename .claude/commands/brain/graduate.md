@@ -62,7 +62,30 @@ For each source daily note that mentioned the graduated concept, append a backli
 ```
 Use the Edit tool to append this to the relevant daily notes.
 
-### 6. Report
+### 6. Structured Output (REQUIRED)
+
+After your analysis, include a JSON block that the bot will parse to create concept files automatically:
+
+```json
+{
+  "concepts": [
+    {
+      "title": "Concept-Name",
+      "summary": "One sentence synthesizing the core idea",
+      "icor_elements": ["Element1", "Element2"],
+      "status": "seedling",
+      "source_dates": ["2026-03-01", "2026-03-05"],
+      "first_mentioned": "2026-03-01",
+      "last_mentioned": "2026-03-05",
+      "mention_count": 3
+    }
+  ]
+}
+```
+
+Use title-case hyphenated names for the `title` field (e.g., "Morning-Routines", "Deep-Work-Blocks"). The `source_dates` should be YYYY-MM-DD dates of daily notes where the theme appeared. Set `status` to "seedling" for all newly graduated concepts.
+
+### 7. Report
 Summarize what was graduated:
 - Number of concepts created
 - Files created and their locations

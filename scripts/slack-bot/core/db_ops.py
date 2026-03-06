@@ -54,12 +54,13 @@ async def get_icor_hierarchy(db_path: Path = None) -> list[dict]:
 
 
 async def get_attention_scores(db_path: Path = None) -> list[dict]:
-    """Return current attention scores (latest period)."""
+    """Return current attention scores (latest period) with dimension names."""
     return await query(
-        "SELECT ai.icor_element_id, h.name, ai.mention_count, "
+        "SELECT ai.icor_element_id, h.name, p.name AS dimension, ai.mention_count, "
         "ai.journal_days, ai.attention_score, ai.flagged "
         "FROM attention_indicators ai "
         "JOIN icor_hierarchy h ON ai.icor_element_id = h.id "
+        "LEFT JOIN icor_hierarchy p ON h.parent_id = p.id "
         "WHERE ai.period_end = (SELECT MAX(period_end) FROM attention_indicators) "
         "ORDER BY ai.attention_score DESC",
         db_path=db_path,
@@ -289,6 +290,31 @@ async def get_cost_summary(days: int = 30, db_path: Path = None) -> dict:
         db_path=db_path,
     )
     return {"daily": daily, "by_caller": by_caller, "by_model": by_model}
+
+
+async def insert_concept_metadata(
+    title: str,
+    file_path: str,
+    icor_elements: list[str],
+    first_mentioned: str,
+    last_mentioned: str = "",
+    mention_count: int = 1,
+    summary: str = "",
+    status: str = "seedling",
+    db_path: Path = None,
+) -> int:
+    """Insert a new concept into concept_metadata. Returns the new row ID."""
+    import json as _json
+    elements_json = _json.dumps(icor_elements)
+    return await execute(
+        "INSERT OR IGNORE INTO concept_metadata "
+        "(title, file_path, status, icor_elements, first_mentioned, last_mentioned, "
+        "mention_count, summary, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        (title, file_path, status, elements_json, first_mentioned,
+         last_mentioned or first_mentioned, mention_count, summary),
+        db_path=db_path,
+    )
 
 
 async def get_icor_without_notion_id(db_path: Path = None) -> list[dict]:

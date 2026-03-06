@@ -100,8 +100,40 @@ def _write_command_output_to_vault(brain_command: str, result_text: str, user_in
             create_report_file(brain_command, result_text)
 
         elif brain_command == "graduate":
-            # Save the full report AND create individual concept stubs
+            # Save the full report
             create_report_file("graduate", result_text)
+            # Parse and execute concept creation
+            try:
+                from core.output_parser import parse_graduate_output
+                from core.db_ops import insert_concept_metadata
+                concepts = parse_graduate_output(result_text)
+                for concept in concepts:
+                    try:
+                        file_path = create_concept_file(
+                            name=concept.title,
+                            summary=concept.summary,
+                            source_notes=concept.source_dates,
+                            icor_elements=concept.icor_elements,
+                            status=concept.status,
+                        )
+                        rel_path = str(file_path.relative_to(VAULT_PATH))
+                        run_async(insert_concept_metadata(
+                            title=concept.title,
+                            file_path=rel_path,
+                            icor_elements=concept.icor_elements,
+                            first_mentioned=concept.first_mentioned,
+                            last_mentioned=concept.last_mentioned,
+                            mention_count=concept.mention_count,
+                            summary=concept.summary,
+                            status=concept.status,
+                        ))
+                        logger.info("Graduated concept: %s -> %s", concept.title, file_path)
+                    except Exception:
+                        logger.exception("Failed to create concept: %s", concept.title)
+                if concepts:
+                    logger.info("Graduated %d concepts from /brain:graduate", len(concepts))
+            except Exception:
+                logger.exception("Failed to parse graduate output for concept creation")
 
     except Exception:
         logger.exception("Error writing %s output to vault", brain_command)
@@ -125,6 +157,7 @@ _COMMAND_MAP = {
     "/brain-graduate": ("graduate", "brain-insights"),
     "/brain-find": ("find", None),
     "/brain-review": ("weekly-review", "brain-daily"),
+    "/brain-process-meeting": ("process-meeting", "brain-daily"),
 }
 
 # Channel name -> resolved ID cache (populated by app.py at startup)
