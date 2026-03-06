@@ -7,9 +7,8 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/env</string>
-        <string>python3</string>
-        <string>/Users/adithya/Documents/2nd-brain/scripts/slack-bot/app.py</string>
+        <string>/bin/bash</string>
+        <string>/Users/adithya/Documents/2nd-brain/scripts/slack-bot/launchd/run-slack-bot.sh</string>
     </array>
 
     <key>WorkingDirectory</key>

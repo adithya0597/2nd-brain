@@ -1,0 +1,58 @@
+{
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true"
+  },
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "mcp__claude_ai_Notion__notion-update-page",
+      "mcp__plugin_claude-mem_mcp-search__save_memory",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git show*)",
+      "Bash(git rev-parse*)",
+      "Bash(ls *)",
+      "Bash(wc *)",
+      "Bash(which *)",
+      "Bash(python -c *)",
+      "Bash(python3 -c *)",
+      "Bash(python -m pytest*)",
+      "Bash(pip list*)",
+      "Bash(pip show*)",
+      "Bash(jq *)",
+      "Bash(realpath *)",
+      "Bash(tail -1 ~/.claude/history.jsonl*)",
+      "Bash(find ~/.claude*)",
+      "Bash(chmod +x*)",
+      "Bash(sqlite3 /Users/adithya/Documents/2nd-brain/data/brain.db*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(echo \"=== $skill DONE ===\")",
+      "Bash(done)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "notion"
+  ],
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"/Users/adithya/Documents/2nd-brain/scripts/check-context.sh\""
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"/Users/adithya/Documents/2nd-brain/scripts/context-bar.sh\""
+  }
+}

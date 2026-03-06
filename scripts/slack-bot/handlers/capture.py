@@ -3,87 +3,39 @@
 Listens for messages in #brain-inbox, classifies the ICOR dimension,
 routes to the appropriate channel, and saves to daily note + vault inbox.
 """
-import asyncio
+import json
 import logging
-import re
-import threading
 from datetime import datetime
 
-import anthropic
 from slack_bolt import App
 
 from config import (
-    ANTHROPIC_API_KEY,
-    ANTHROPIC_MODEL,
+    CHANNELS,
     DIMENSION_CHANNELS,
-    DIMENSION_KEYWORDS,
     OWNER_SLACK_ID,
     PROJECT_KEYWORDS,
     RESOURCE_KEYWORDS,
 )
-from core.db_ops import insert_action_item
+from core.async_utils import executor, run_async
+from core.classifier import ClassificationResult, MessageClassifier
+from core.db_ops import execute, insert_action_item
 from core.formatter import format_capture_confirmation, format_error
-from core.vault_ops import append_to_daily_note, create_inbox_entry
+from core.vault_ops import (
+    append_to_daily_note,
+    create_inbox_entry,
+    ensure_dimension_pages,
+    format_capture_line,
+)
 
 logger = logging.getLogger(__name__)
 
-# Patterns that suggest an actionable item
-_ACTION_PATTERNS = re.compile(
-    r"\b(need to|should|must|todo|action|reminder|deadline|follow.up|schedule|book|call|email|buy|pay|submit|send)\b",
-    re.IGNORECASE,
-)
+# Module-level classifier instance
+_classifier = MessageClassifier()
 
 
-def _classify_dimension_keywords(text: str) -> str | None:
-    """Fast keyword-based dimension classification. Returns dimension name or None."""
-    text_lower = text.lower()
-    scores: dict[str, int] = {}
-    for dimension, keywords in DIMENSION_KEYWORDS.items():
-        count = sum(1 for kw in keywords if kw in text_lower)
-        if count > 0:
-            scores[dimension] = count
-
-    if not scores:
-        return None
-
-    best = max(scores, key=scores.get)
-    # Only return if there's a clear winner (or only one match)
-    if len(scores) == 1 or scores[best] >= 2:
-        return best
-    # Ambiguous -- fall through to AI classification
-    return None
-
-
-def _classify_dimension_ai(text: str) -> str:
-    """Use Claude to classify text into an ICOR dimension."""
-    dimensions = ", ".join(DIMENSION_CHANNELS.keys())
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=50,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Classify this text into exactly one of these life dimensions: {dimensions}\n\n"
-                    f"Text: {text}\n\n"
-                    "Reply with ONLY the dimension name, nothing else."
-                ),
-            }
-        ],
-    )
-    result = response.content[0].text.strip()
-    # Validate the response is a known dimension
-    for dim in DIMENSION_CHANNELS:
-        if dim.lower() in result.lower():
-            return dim
-    # Default fallback
-    return "Systems & Environment"
-
-
-def _is_actionable(text: str) -> bool:
-    """Heuristic check for whether text looks like an action item."""
-    return bool(_ACTION_PATTERNS.search(text))
+def get_classifier() -> MessageClassifier:
+    """Return the module-level classifier (for hot-swapping keywords)."""
+    return _classifier
 
 
 def _detect_project_mention(text: str) -> bool:
@@ -96,6 +48,54 @@ def _detect_resource_mention(text: str) -> bool:
     """Check if text mentions resource-related keywords."""
     text_lower = text.lower()
     return sum(1 for kw in RESOURCE_KEYWORDS if kw in text_lower) >= 2
+
+
+def _log_classification(text: str, ts: str, result: ClassificationResult):
+    """Log classification result to SQLite."""
+    try:
+        primary = result.matches[0].dimension if result.matches else None
+        confidence = result.matches[0].confidence if result.matches else 0.0
+        method = result.matches[0].method if result.matches else "none"
+        all_scores = json.dumps([
+            {"dimension": m.dimension, "confidence": m.confidence, "method": m.method}
+            for m in result.matches
+        ]) if result.matches else "[]"
+
+        run_async(execute(
+            "INSERT INTO classifications "
+            "(message_text, message_ts, primary_dimension, confidence, method, all_scores_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (text, ts, primary, confidence, method, all_scores),
+        ))
+    except Exception:
+        logger.exception("Failed to log classification")
+
+
+def _build_feedback_buttons(ts: str, dimensions: list[str]) -> list[dict]:
+    """Build Slack blocks with feedback buttons for classification correction."""
+    dim_label = " + ".join(dimensions) if dimensions else "Uncategorized"
+    return [
+        {
+            "type": "actions",
+            "block_id": f"feedback_{ts}",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Correct"},
+                    "action_id": "feedback_correct",
+                    "value": json.dumps({"ts": ts, "dimensions": dimensions}),
+                    "style": "primary",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Wrong"},
+                    "action_id": "feedback_wrong",
+                    "value": json.dumps({"ts": ts, "dimensions": dimensions}),
+                    "style": "danger",
+                },
+            ],
+        },
+    ]
 
 
 def _process_capture(client, event, channel_ids: dict):
@@ -112,73 +112,109 @@ def _process_capture(client, event, channel_ids: dict):
     if OWNER_SLACK_ID and user != OWNER_SLACK_ID:
         return
 
-    try:
-        # 1. Classify dimension
-        dimension = _classify_dimension_keywords(text)
-        if dimension is None:
-            if ANTHROPIC_API_KEY:
-                dimension = _classify_dimension_ai(text)
-            else:
-                dimension = "Systems & Environment"
+    # Classify via hybrid pipeline
+    result = _classifier.classify(text)
 
-        target_channel_name = DIMENSION_CHANNELS.get(dimension, "brain-systems")
-        target_channel_id = channel_ids.get(target_channel_name)
-
-        # 2. Save to vault: daily note + inbox entry
-        today = datetime.now().strftime("%Y-%m-%d")
-        append_to_daily_note(
-            today,
-            f"- **[Slack Capture]** {text} _(routed to {dimension})_",
-            section="## Log",
-        )
-        create_inbox_entry(text, source="slack")
-
-        # 3. Insert action item if it looks actionable
-        if _is_actionable(text):
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(
-                    insert_action_item(
-                        description=text,
-                        source="slack-inbox",
-                        icor_element=dimension,
-                    )
-                )
-            finally:
-                loop.close()
-
-        # 4. Post to dimension channel
-        if target_channel_id:
+    # Noise filter: greetings and small talk
+    if result.is_noise:
+        logger.info("Noise filtered: %r", text[:80])
+        try:
             client.chat_postMessage(
-                channel=target_channel_id,
-                text=f"*New capture from inbox:*\n> {text}",
-                blocks=[
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f"*New capture from inbox:*\n> {text}",
-                        },
-                    },
-                    {
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": f"Routed from #brain-inbox | {today}",
-                            }
-                        ],
-                    },
-                ],
+                channel=channel,
+                thread_ts=ts,
+                text="Hey! Drop a thought, idea, or task here and I'll route it to the right place.",
+            )
+        except Exception:
+            logger.exception("Failed to send noise reply")
+        return
+
+    try:
+        dimensions = [m.dimension for m in result.matches]
+        confidence = result.matches[0].confidence if result.matches else 0.0
+        method = result.matches[0].method if result.matches else "none"
+
+        logger.info(
+            "Classified %r: dims=%s confidence=%.2f method=%s (%.0fms)",
+            text[:60], dimensions, confidence, method, result.execution_time_ms,
+        )
+
+        # --- Vault writes (ALL paths — classified or not) ---
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Daily note with wikilinks
+        capture_line = format_capture_line(
+            text, dimensions=dimensions, is_action=result.is_actionable,
+        )
+        append_to_daily_note(today, capture_line, section="## Log")
+
+        # Inbox entry with dimension frontmatter
+        create_inbox_entry(
+            text,
+            source="slack",
+            dimensions=dimensions,
+            confidence=confidence,
+            method=method,
+        )
+
+        # Action item dual-write (SQLite + daily note already handled above)
+        if result.is_actionable:
+            primary_dim = dimensions[0] if dimensions else None
+            run_async(
+                insert_action_item(
+                    description=text,
+                    source="slack-inbox",
+                    icor_element=primary_dim,
+                )
             )
 
-        # 4b. Cross-post to PARA channels if keywords match
+        # Log classification to DB
+        _log_classification(text, ts, result)
+
+        # --- Slack routing (only if classified) ---
+        target_channel_names = []
+        if dimensions:
+            for i, dim in enumerate(dimensions):
+                ch_name = DIMENSION_CHANNELS.get(dim, "brain-systems")
+                target_channel_names.append(ch_name)
+                ch_id = channel_ids.get(ch_name)
+                if not ch_id:
+                    continue
+
+                label = "Primary" if i == 0 else "Also relevant"
+                client.chat_postMessage(
+                    channel=ch_id,
+                    text=f"*New capture from inbox:*\n> {text}",
+                    blocks=[
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"*New capture from inbox:*\n> {text}",
+                            },
+                        },
+                        {
+                            "type": "context",
+                            "elements": [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": (
+                                        f"{label} | Routed from #brain-inbox | {today} | "
+                                        f"{method} ({confidence:.0%})"
+                                    ),
+                                }
+                            ],
+                        },
+                    ],
+                )
+
+        # Cross-post to PARA channels if keywords match
+        primary_channel = target_channel_names[0] if target_channel_names else "brain-inbox"
         if _detect_project_mention(text):
             projects_ch = channel_ids.get("brain-projects")
             if projects_ch:
                 client.chat_postMessage(
                     channel=projects_ch,
-                    text=f"Project-related capture from inbox",
+                    text="Project-related capture from inbox",
                     blocks=[
                         {
                             "type": "section",
@@ -192,7 +228,7 @@ def _process_capture(client, event, channel_ids: dict):
                             "elements": [
                                 {
                                     "type": "mrkdwn",
-                                    "text": f"Cross-posted from #brain-inbox → #{target_channel_name} | {today}",
+                                    "text": f"Cross-posted from #brain-inbox → #{primary_channel} | {today}",
                                 }
                             ],
                         },
@@ -204,7 +240,7 @@ def _process_capture(client, event, channel_ids: dict):
             if resources_ch:
                 client.chat_postMessage(
                     channel=resources_ch,
-                    text=f"Resource-related capture from inbox",
+                    text="Resource-related capture from inbox",
                     blocks=[
                         {
                             "type": "section",
@@ -218,19 +254,27 @@ def _process_capture(client, event, channel_ids: dict):
                             "elements": [
                                 {
                                     "type": "mrkdwn",
-                                    "text": f"Cross-posted from #brain-inbox → #{target_channel_name} | {today}",
+                                    "text": f"Cross-posted from #brain-inbox → #{primary_channel} | {today}",
                                 }
                             ],
                         },
                     ],
                 )
 
-        # 5. Reply in thread in #brain-inbox
-        blocks = format_capture_confirmation(text, dimension, target_channel_name)
+        # Reply in thread in #brain-inbox
+        blocks = format_capture_confirmation(text, dimensions, target_channel_names)
+        # Append feedback buttons
+        blocks.extend(_build_feedback_buttons(ts, dimensions))
+
+        summary_text = (
+            f"Captured and routed to {', '.join('#' + c for c in target_channel_names)}"
+            if target_channel_names
+            else "Captured to inbox (uncategorized)"
+        )
         client.chat_postMessage(
             channel=channel,
             thread_ts=ts,
-            text=f"Captured and routed to #{target_channel_name}",
+            text=summary_text,
             blocks=blocks,
         )
 
@@ -251,24 +295,25 @@ def _process_capture(client, event, channel_ids: dict):
 def register(app: App):
     """Register the inbox capture handler."""
 
-    # Resolve channel IDs at registration time
+    # Ensure dimension wikilink targets exist in vault
+    try:
+        ensure_dimension_pages()
+    except Exception:
+        logger.exception("Failed to ensure dimension pages")
+
+    # Channel IDs populated by app.py at startup
     _channel_ids: dict[str, str] = {}
 
-    def _ensure_channel_ids():
-        if _channel_ids:
-            return
-        try:
-            result = app.client.conversations_list(types="public_channel,private_channel", limit=200)
-            for ch in result.get("channels", []):
-                _channel_ids[ch["name"]] = ch["id"]
-        except Exception:
-            logger.exception("Failed to resolve channel IDs")
+    def set_channel_ids(ids: dict[str, str]):
+        """Set channel ID cache (called from app.py at startup)."""
+        _channel_ids.update(ids)
+
+    # Expose setter on module for app.py to call
+    register.set_channel_ids = set_channel_ids
 
     @app.event("message")
     def handle_message(event, client, say):
         """Handle messages -- route brain-inbox captures in background."""
-        _ensure_channel_ids()
-
         channel = event.get("channel", "")
         inbox_id = _channel_ids.get("brain-inbox")
 
@@ -280,10 +325,5 @@ def register(app: App):
         if event.get("subtype") in ("bot_message", "message_changed", "message_deleted"):
             return
 
-        # Process in background thread to avoid 3-second timeout
-        thread = threading.Thread(
-            target=_process_capture,
-            args=(client, event, _channel_ids),
-            daemon=True,
-        )
-        thread.start()
+        # Process in background via shared thread pool
+        executor.submit(_process_capture, client, event, _channel_ids)

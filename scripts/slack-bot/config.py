@@ -1,9 +1,13 @@
 """Configuration for Second Brain Slack Bot."""
+import logging
 import os
+import sqlite3
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Slack tokens
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
@@ -13,7 +17,7 @@ OWNER_SLACK_ID = os.environ.get("OWNER_SLACK_ID", "")  # Only process messages f
 
 # Anthropic
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6-20250131")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 
 # Notion
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
@@ -67,14 +71,40 @@ DIMENSION_CHANNELS = {
 
 # Keywords for quick routing (no AI needed)
 DIMENSION_KEYWORDS = {
-    "Health & Vitality": ["health", "fitness", "workout", "diet", "sleep", "exercise", "nutrition", "meditation", "yoga", "running", "gym", "weight", "mental health"],
-    "Wealth & Finance": ["money", "finance", "invest", "portfolio", "budget", "savings", "income", "expense", "crypto", "stocks", "salary", "debt", "tax"],
-    "Relationships": ["friend", "family", "relationship", "dating", "partner", "social", "network", "community", "mentor", "colleague"],
-    "Mind & Growth": ["learn", "read", "book", "course", "study", "skill", "knowledge", "research", "education", "mindset", "philosophy", "psychology"],
-    "Purpose & Impact": ["career", "mission", "purpose", "impact", "contribute", "volunteer", "leadership", "legacy", "meaning", "values"],
-    "Systems & Environment": ["system", "automate", "tool", "setup", "organize", "clean", "home", "workspace", "routine", "habit", "process", "workflow"],
+    "Health & Vitality": ["health", "fitness", "workout", "diet", "sleep", "exercise", "nutrition", "meditation", "yoga", "running", "gym", "weight", "mental health", "work out", "working out", "well-being", "wellbeing", "calorie", "stretch"],
+    "Wealth & Finance": ["money", "finance", "invest", "portfolio", "budget", "savings", "income", "expense", "crypto", "stocks", "salary", "debt", "tax", "side hustle", "net worth", "credit card", "bank account", "real estate"],
+    "Relationships": ["friend", "family", "relationship", "dating", "partner", "social", "network", "community", "mentor", "colleague", "hang out", "hanging out", "catch up", "catching up", "get together"],
+    "Mind & Growth": ["learn", "read", "book", "course", "study", "skill", "knowledge", "research", "education", "mindset", "philosophy", "psychology", "self improvement", "self-improvement", "personal growth", "online course"],
+    "Purpose & Impact": ["career", "mission", "purpose", "impact", "contribute", "volunteer", "leadership", "legacy", "meaning", "values", "give back", "side project", "open source", "passion project"],
+    "Systems & Environment": ["system", "automate", "tool", "setup", "organize", "clean", "home", "workspace", "routine", "habit", "process", "workflow", "set up", "setting up", "clean up", "cleaning up", "time management"],
 }
 
 # Keywords for cross-posting captures to PARA channels
 PROJECT_KEYWORDS = ["project", "milestone", "deadline", "sprint", "deliverable", "launch", "ship", "release", "roadmap", "timeline", "blocker", "blocked", "progress", "phase", "kickoff"]
 RESOURCE_KEYWORDS = ["article", "book", "resource", "reference", "template", "tool", "framework", "library", "tutorial", "course", "documentation", "guide", "cheatsheet", "recipe", "podcast", "video", "lecture"]
+
+
+def load_dynamic_keywords() -> dict[str, list[str]]:
+    """Merge seed keywords with learned keywords from keyword_feedback table.
+
+    Returns a new dict with all keywords per dimension. Learned keywords are
+    included only if success_count > fail_count.
+    """
+    merged = {dim: list(kws) for dim, kws in DIMENSION_KEYWORDS.items()}
+
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.execute(
+            "SELECT dimension, keyword FROM keyword_feedback "
+            "WHERE success_count > fail_count"
+        )
+        for row in cursor.fetchall():
+            dim, kw = row
+            if dim in merged and kw not in merged[dim]:
+                merged[dim].append(kw)
+        conn.close()
+        logger.info("Dynamic keywords loaded: %s", {d: len(v) for d, v in merged.items()})
+    except Exception:
+        logger.warning("Failed to load dynamic keywords, using seeds only")
+
+    return merged

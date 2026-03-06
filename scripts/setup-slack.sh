@@ -47,23 +47,27 @@ CHANNELS=(
     "brain-resources|Reference materials & knowledge bases|Reference materials, tools, templates, and knowledge base catalog."
 )
 
-# Welcome messages per channel
-declare -A WELCOME_MSGS
-WELCOME_MSGS["brain-inbox"]="Welcome to *#brain-inbox*. Drop any thought, idea, or capture here. The bot will automatically classify it by ICOR dimension and route it to the right channel. Actionable items are also saved to your action list."
-WELCOME_MSGS["brain-daily"]="Welcome to *#brain-daily*. This channel receives your morning briefings (7am) and evening review prompts (9pm). Use \`/brain-today\` for an on-demand briefing or \`/brain-close\` for an evening review."
-WELCOME_MSGS["brain-actions"]="Welcome to *#brain-actions*. Action items extracted from journal entries and captures appear here with interactive buttons: Complete, Snooze, or Delegate."
-WELCOME_MSGS["brain-dashboard"]="Welcome to *#brain-dashboard*. Your ICOR heatmap, attention scores, and project status are posted here twice daily (6am, 6pm). Use \`/brain-status\` for an on-demand refresh."
-WELCOME_MSGS["brain-ideas"]="Welcome to *#brain-ideas*. AI-generated idea and opportunity reports land here. Use \`/brain-ideas\` to trigger one manually."
-WELCOME_MSGS["brain-drift"]="Welcome to *#brain-drift*. Weekly drift reports (Sunday 6pm) analyze the gap between your stated goals and actual journaling focus. Use \`/brain-drift\` anytime."
-WELCOME_MSGS["brain-insights"]="Welcome to *#brain-insights*. Pattern synthesis, ghost reflections, and trace timelines are posted here. Use \`/brain-emerge\` or \`/brain-ghost\` to generate insights on demand."
-WELCOME_MSGS["brain-health"]="Welcome to *#brain-health*. Captures related to *Health & Vitality* (fitness, nutrition, mental health, sleep) are routed here from #brain-inbox."
-WELCOME_MSGS["brain-wealth"]="Welcome to *#brain-wealth*. Captures related to *Wealth & Finance* (investments, budgets, income, expenses) are routed here from #brain-inbox."
-WELCOME_MSGS["brain-relations"]="Welcome to *#brain-relations*. Captures related to *Relationships* (family, friends, networking, social) are routed here from #brain-inbox."
-WELCOME_MSGS["brain-growth"]="Welcome to *#brain-growth*. Captures related to *Mind & Growth* (learning, reading, skill development, education) are routed here from #brain-inbox."
-WELCOME_MSGS["brain-purpose"]="Welcome to *#brain-purpose*. Captures related to *Purpose & Impact* (career, mission, leadership, legacy) are routed here from #brain-inbox."
-WELCOME_MSGS["brain-systems"]="Welcome to *#brain-systems*. Captures related to *Systems & Environment* (tools, workflows, automation, organization) are routed here from #brain-inbox."
-WELCOME_MSGS["brain-projects"]="Welcome to *#brain-projects*. Weekly project summaries (Monday 9am), cross-dimensional project views, and project-related captures cross-posted from #brain-inbox appear here. Use \`/brain-projects\` for an on-demand project dashboard."
-WELCOME_MSGS["brain-resources"]="Welcome to *#brain-resources*. Monthly resource digests (1st of month, 10am), knowledge base catalogs, and resource-related captures cross-posted from #brain-inbox appear here. Use \`/brain-resources\` for an on-demand resource catalog."
+# Welcome message lookup (bash 3.x compatible — no associative arrays)
+get_welcome_msg() {
+    case "$1" in
+        brain-inbox)    echo "Welcome to *#brain-inbox*. Drop any thought, idea, or capture here. The bot will automatically classify it by ICOR dimension and route it to the right channel.";;
+        brain-daily)    echo "Welcome to *#brain-daily*. Morning briefings (7am) and evening reviews (9pm). Use \`/brain-today\` or \`/brain-close\` on demand.";;
+        brain-actions)  echo "Welcome to *#brain-actions*. Action items with interactive buttons: Complete, Snooze, or Delegate.";;
+        brain-dashboard) echo "Welcome to *#brain-dashboard*. ICOR heatmap and project status posted twice daily (6am, 6pm). Use \`/brain-status\` anytime.";;
+        brain-ideas)    echo "Welcome to *#brain-ideas*. AI-generated idea reports. Use \`/brain-ideas\` to trigger one.";;
+        brain-drift)    echo "Welcome to *#brain-drift*. Weekly drift reports (Sunday 6pm). Use \`/brain-drift\` anytime.";;
+        brain-insights) echo "Welcome to *#brain-insights*. Pattern synthesis and reflections. Use \`/brain-emerge\` or \`/brain-ghost\`.";;
+        brain-health)   echo "Welcome to *#brain-health*. Health & Vitality captures routed from #brain-inbox.";;
+        brain-wealth)   echo "Welcome to *#brain-wealth*. Wealth & Finance captures routed from #brain-inbox.";;
+        brain-relations) echo "Welcome to *#brain-relations*. Relationships captures routed from #brain-inbox.";;
+        brain-growth)   echo "Welcome to *#brain-growth*. Mind & Growth captures routed from #brain-inbox.";;
+        brain-purpose)  echo "Welcome to *#brain-purpose*. Purpose & Impact captures routed from #brain-inbox.";;
+        brain-systems)  echo "Welcome to *#brain-systems*. Systems & Environment captures routed from #brain-inbox.";;
+        brain-projects) echo "Welcome to *#brain-projects*. Weekly summaries (Monday 9am) and project views. Use \`/brain-projects\`.";;
+        brain-resources) echo "Welcome to *#brain-resources*. Monthly digests (1st, 10am) and knowledge base. Use \`/brain-resources\`.";;
+        *)              echo "Welcome to #$1.";;
+    esac
+}
 
 # -----------------------------------------------------------------------
 # Helper: call Slack API
@@ -113,7 +117,7 @@ for entry in "${CHANNELS[@]}"; do
     result=$(slack_api "conversations.create" \
         -d "$(python3 -c "
 import json
-print(json.dumps({'name': '$name', 'is_private': False}))
+print(json.dumps({'name': '$name', 'is_private': True}))
 ")")
 
     ok=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok', False))" 2>/dev/null || echo "False")
@@ -146,7 +150,7 @@ print(json.dumps({'channel': '$channel_id', 'purpose': '$purpose'}))
 ")" > /dev/null
 
     # Post welcome message
-    welcome="${WELCOME_MSGS[$name]:-Welcome to #$name.}"
+    welcome="$(get_welcome_msg "$name")"
     slack_api "chat.postMessage" \
         -d "$(python3 -c "
 import json

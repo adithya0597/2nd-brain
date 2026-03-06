@@ -1,24 +1,15 @@
 """Block Kit interactive action handlers."""
-import asyncio
 import json
 import logging
 from datetime import datetime
 
 from slack_bolt import App
 
+from core.async_utils import run_async
 from core.db_ops import execute
-from core.vault_ops import append_to_daily_note, create_inbox_entry
+from core.vault_ops import append_to_daily_note, create_inbox_entry, create_report_file
 
 logger = logging.getLogger(__name__)
-
-
-def _run_async(coro):
-    """Run an async coroutine from sync context."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 def register(app: App):
@@ -33,7 +24,7 @@ def register(app: App):
             return
 
         try:
-            _run_async(
+            run_async(
                 execute(
                     "UPDATE action_items SET status = 'completed', completed_at = datetime('now') WHERE id = ?",
                     (int(action_id),),
@@ -78,7 +69,7 @@ def register(app: App):
             return
 
         try:
-            _run_async(
+            run_async(
                 execute(
                     "UPDATE action_items SET source_date = date(source_date, '+1 day') WHERE id = ?",
                     (int(action_id),),
@@ -187,7 +178,7 @@ def register(app: App):
         notes = values["delegate_notes"]["notes_input"].get("value", "")
 
         try:
-            _run_async(
+            run_async(
                 execute(
                     "UPDATE action_items SET status = 'delegated', delegated_to = ? WHERE id = ?",
                     (delegate_name, int(action_id)),
@@ -227,7 +218,7 @@ def register(app: App):
 
     @app.action("save_to_vault")
     def handle_save_to_vault(ack, action, client, body):
-        """Save a generated report or idea to the vault."""
+        """Save a generated report or idea to the vault as a proper report file."""
         ack()
         try:
             payload = json.loads(action.get("value", "{}"))
@@ -237,16 +228,8 @@ def register(app: App):
             if not content:
                 return
 
-            # Save as inbox entry with the command as source
-            create_inbox_entry(content, source=f"slack-{command}")
-
-            # Also append a reference to today's daily note
-            today = datetime.now().strftime("%Y-%m-%d")
-            append_to_daily_note(
-                today,
-                f"- Saved /{command} report to vault inbox",
-                section="## Log",
-            )
+            # Save as a proper report file with frontmatter and wikilinks
+            create_report_file(command, content)
 
             # Update the message to confirm save
             channel = body["channel"]["id"]

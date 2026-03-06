@@ -13,6 +13,8 @@ async def query(sql: str, params: tuple = (), db_path: Path = None) -> list[dict
     """Run a SELECT query and return results as a list of dicts."""
     db_path = db_path or config.DB_PATH
     async with aiosqlite.connect(str(db_path)) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA foreign_keys = ON")
         db.row_factory = aiosqlite.Row
         async with db.execute(sql, params) as cursor:
             rows = await cursor.fetchall()
@@ -23,6 +25,8 @@ async def execute(sql: str, params: tuple = (), db_path: Path = None) -> int:
     """Run an INSERT/UPDATE/DELETE and return lastrowid."""
     db_path = db_path or config.DB_PATH
     async with aiosqlite.connect(str(db_path)) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA foreign_keys = ON")
         cursor = await db.execute(sql, params)
         await db.commit()
         return cursor.lastrowid
@@ -137,10 +141,15 @@ async def update_sync_state(
 
 
 async def get_unpushed_actions(db_path: Path = None) -> list[dict]:
-    """Get action items that haven't been pushed to Notion yet."""
+    """Get action items that haven't been pushed to Notion yet.
+
+    Skips items with a recent push_attempted_at but no external_id,
+    to avoid duplicate pushes after a crash during Notion create_page.
+    """
     return await query(
         "SELECT id, description, source_file, source_date, icor_element, icor_project, status "
         "FROM action_items WHERE status = 'pending' AND external_id IS NULL "
+        "AND (push_attempted_at IS NULL OR push_attempted_at < datetime('now', '-1 hour')) "
         "ORDER BY created_at ASC",
         db_path=db_path,
     )
@@ -179,21 +188,8 @@ async def update_action_status_from_notion(
     )
 
 
-async def get_unsynced_journal_entries(since: str = None, db_path: Path = None) -> list[dict]:
-    """Get journal entries not yet synced to Notion.
-
-    Args:
-        since: ISO date string. If None, gets all entries without a notion sync log.
-    """
-    if since:
-        return await query(
-            "SELECT date, content, mood, energy, icor_elements, summary, sentiment_score "
-            "FROM journal_entries WHERE date >= ? "
-            "AND date NOT IN (SELECT source_file FROM vault_sync_log WHERE target = 'notion_notes' AND status = 'success') "
-            "ORDER BY date ASC",
-            (since,),
-            db_path=db_path,
-        )
+async def get_unsynced_journal_entries(db_path: Path = None) -> list[dict]:
+    """Get journal entries not yet synced to Notion."""
     return await query(
         "SELECT date, content, mood, energy, icor_elements, summary, sentiment_score "
         "FROM journal_entries "

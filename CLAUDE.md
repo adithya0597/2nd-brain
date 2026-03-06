@@ -105,7 +105,7 @@ tags: [additional tags]
 
 ## SQLite Database
 
-The local SQLite database at `data/brain.db` indexes vault content for fast querying. Use `sqlite3 data/brain.db` to query. Key tables: journal_entries, action_items, concept_metadata, icor_hierarchy, attention_indicators, vault_sync_log.
+The local SQLite database at `data/brain.db` indexes vault content for fast querying. Use `sqlite3 data/brain.db` to query. Key tables: journal_entries, action_items, concept_metadata, icor_hierarchy, attention_indicators, vault_sync_log, vault_index, classifications, keyword_feedback, sync_state.
 
 ## Slack Integration
 
@@ -154,6 +154,11 @@ A Python Slack bot (`scripts/slack-bot/`) provides an asynchronous remote interf
 | `/brain-sync` | `/brain:sync-notion` | DM |
 | `/brain-projects` | `/brain:projects` | #brain-projects |
 | `/brain-resources` | `/brain:resources` | #brain-resources |
+| `/brain-trace` | `/brain:trace` | #brain-insights |
+| `/brain-connect` | `/brain:connect` | #brain-insights |
+| `/brain-challenge` | `/brain:challenge` | #brain-insights |
+| `/brain-graduate` | `/brain:graduate` | #brain-insights |
+| `/brain-context` | `/brain:context-load` | DM |
 
 ### Scheduled Automations
 
@@ -167,6 +172,8 @@ A Python Slack bot (`scripts/slack-bot/`) provides an asynchronous remote interf
 | Pattern Synthesis | #brain-insights | Bi-weekly Wed 2pm |
 | Project Summary | #brain-projects | Weekly Monday 9am |
 | Resource Digest | #brain-resources | Monthly 1st 10am |
+| Vault + Journal Reindex | (silent) | Daily 5am |
+| Keyword Expansion | (silent) | Weekly Sunday 2am |
 
 ### Notion Sync Engine
 
@@ -182,3 +189,60 @@ The Notion sync is powered by a Python-native pipeline (`scripts/slack-bot/core/
 **Entity flows:** ICOR Tags (push), Action Items (push), Task Status (pull), Projects (pull), Goals (pull), Journal Entries (push, summary-only), Concepts (push), People (pull).
 
 **Hybrid AI:** Optional `ai_client` parameter enables Claude-assisted classification, conflict resolution, and project-goal inference. Falls back to heuristics when unset.
+
+### Slack Bot Architecture
+
+| Module | Description |
+|---|---|
+| `core/classifier.py` | 4-tier hybrid classification (noise filter → keyword match → embedding similarity → LLM fallback) |
+| `core/context_loader.py` | Command-specific SQLite queries + vault file loading + graph traversal + Notion context injection |
+| `core/vault_indexer.py` | Vault file scanner, wikilink graph builder, populates `vault_index` table in SQLite |
+| `core/journal_indexer.py` | Daily note parser with mood/energy/ICOR detection, populates `journal_entries` table |
+| `core/formatter.py` | Slack Block Kit message builders for dashboards, reports, sync results, errors |
+| `handlers/feedback.py` | Classification correction handlers + keyword learning loop (updates `keyword_feedback` table) |
+
+### Vault Write-Back Loop
+
+Commands auto-save outputs to the vault so results enrich the knowledge base, not just Slack. Managed by `_write_command_output_to_vault()` in `handlers/commands.py`:
+
+- **`today`** — Appends "Morning Plan" section to the daily note (`vault/Daily Notes/YYYY-MM-DD.md`)
+- **`close-day`** — Appends "Evening Review" section to the daily note, then re-indexes via `journal_indexer`
+- **`schedule`** — Creates a weekly plan file via `create_weekly_plan()`
+- **`graduate`** — Saves report + creates individual concept stub files
+- **Report commands** (`drift`, `emerge`, `ideas`, `ghost`, `challenge`, `trace`, `connect`) — Auto-saved via `create_report_file()` to `vault/Reports/`. These are defined in the `_AUTO_VAULT_WRITE_COMMANDS` set.
+- **`projects`, `resources`** — Not auto-saved; a "Save to Vault" button is added to the Slack message instead.
+
+### Graph Context Loading
+
+The context loader (`core/context_loader.py`) enriches commands with graph-connected vault files via `_GRAPH_CONTEXT_COMMANDS`:
+
+| Command | Graph Strategy | Depth | Behavior |
+|---|---|---|---|
+| `trace` | `topic` | 2 | Finds files mentioning the user's topic, expands outward |
+| `connect` | `intersection` | 1 | Parses two quoted domains, finds overlapping nodes |
+| `emerge` | `recent_daily` | 1 | Seeds from recent daily notes, follows links |
+| `graduate` | `recent_daily` | 1 | Seeds from recent daily notes, follows links |
+| `ideas` | `recent_daily` | 1 | Seeds from recent daily notes, follows links |
+| `ghost` | `identity` | 2 | Seeds from ICOR + Values identity files |
+| `challenge` | `identity` | 1 | Seeds from ICOR + Values identity files |
+
+Commands in `_NOTION_CONTEXT_COMMANDS` (`today`, `schedule`, `ideas`, `projects`, `close-day`, `context-load`, `drift`, `resources`) also receive cached Notion data (projects, goals, dimensions) from `data/notion-registry.json`.
+
+## Known Issues (from 8-perspective audit, 2026-03-03)
+
+See `AUDIT-REPORT.md` for full details. Critical items:
+
+| Priority | Issue | Fix |
+|---|---|---|
+| P0 | `.env` with live credentials may be in git history | Rotate tokens, add to `.gitignore`, `git rm --cached .env` |
+| P0 | SQLite has no WAL mode — DB locks under thread contention | Add `PRAGMA journal_mode=WAL` at startup |
+| P0 | Vault reindex wipes table without transaction | Wrap DELETE+INSERT in BEGIN...COMMIT |
+| P1 | Unbounded thread spawning per Slack event | Replace with `ThreadPoolExecutor(max_workers=8)` |
+| P1 | No prompt caching — 60-80% API cost savings available | Add `cache_control: {"type": "ephemeral"}` to system prompt |
+| P1 | Tier 3 classifier uses Sonnet instead of Haiku | Route to `claude-haiku-4-5` for 95% cost reduction |
+| P1 | Notion push TOCTOU race creates duplicate tasks | Add `push_attempted_at` idempotency column |
+| P1 | No progress feedback after slash command ack | Add `chat_postEphemeral` "result ready" notification |
+| P2 | Zero automated tests | Add pytest suite for classifier, vault_ops, journal_indexer |
+| P2 | Prompt files reference MCP tools unavailable in Slack context | Create Slack-specific prompt versions |
+| P2 | No `/brain-help` command for 14 slash commands | Register help command with command table |
+| P2 | No `/brain:find` semantic search command | Highest-value missing feature |
