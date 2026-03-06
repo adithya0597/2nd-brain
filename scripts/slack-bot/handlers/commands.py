@@ -28,12 +28,14 @@ from core.context_loader import (
 )
 from core.db_ops import (
     get_attention_scores,
+    get_cost_summary,
     get_neglected_elements,
     get_pending_actions,
     get_recent_journal,
     query,
 )
 from core.formatter import (
+    format_cost_report,
     format_dashboard,
     format_error,
     format_help,
@@ -399,6 +401,36 @@ def _run_status_command(client, user_id):
         logger.exception("Error running status command")
 
 
+def _run_cost_command(client, user_id, user_input):
+    """Background worker: query API cost data and post dashboard (no AI call)."""
+    try:
+        # Parse optional days parameter from command text
+        days = 30
+        if user_input and user_input.strip().isdigit():
+            days = int(user_input.strip())
+
+        data = run_async(get_cost_summary(days))
+        blocks = format_cost_report(data, days)
+
+        dashboard_id = _channel_ids.get("brain-dashboard")
+        if dashboard_id:
+            client.chat_postMessage(
+                channel=dashboard_id,
+                text=f"API Cost Report (Last {days} Days)",
+                blocks=blocks,
+            )
+        else:
+            dm = client.conversations_open(users=[user_id])
+            client.chat_postMessage(
+                channel=dm["channel"]["id"],
+                text=f"API Cost Report (Last {days} Days)",
+                blocks=blocks,
+            )
+
+    except Exception:
+        logger.exception("Error running cost command")
+
+
 def register(app: App):
     """Register all slash command handlers."""
 
@@ -430,6 +462,14 @@ def register(app: App):
         user_id = command.get("user_id", "")
         user_input = command.get("text", "")
         executor.submit(_run_sync_command, client, user_id, user_input)
+
+    # Cost command (SQLite-only, no AI)
+    @app.command("/brain-cost")
+    def handle_cost(ack, command, client):
+        ack("Fetching cost data...")
+        user_id = command.get("user_id", "")
+        user_input = command.get("text", "")
+        executor.submit(_run_cost_command, client, user_id, user_input)
 
     # Help command (no AI, ephemeral response)
     @app.command("/brain-help")

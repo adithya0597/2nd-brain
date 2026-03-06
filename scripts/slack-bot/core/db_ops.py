@@ -249,6 +249,48 @@ async def log_sync_operation(
     )
 
 
+async def get_cost_summary(days: int = 30, db_path: Path = None) -> dict:
+    """Get API cost summary grouped by day and caller."""
+    daily = await query(
+        """SELECT DATE(created_at) AS date,
+                  COUNT(*) AS calls,
+                  SUM(cost_estimate_usd) AS daily_cost,
+                  SUM(input_tokens) AS input_tokens,
+                  SUM(output_tokens) AS output_tokens
+           FROM api_token_logs
+           WHERE created_at >= datetime('now', ?)
+           GROUP BY DATE(created_at)
+           ORDER BY date DESC""",
+        (f"-{days} days",),
+        db_path=db_path,
+    )
+    by_caller = await query(
+        """SELECT caller,
+                  COUNT(*) AS calls,
+                  SUM(cost_estimate_usd) AS total_cost,
+                  AVG(input_tokens) AS avg_input,
+                  AVG(output_tokens) AS avg_output
+           FROM api_token_logs
+           WHERE created_at >= datetime('now', ?)
+           GROUP BY caller
+           ORDER BY total_cost DESC""",
+        (f"-{days} days",),
+        db_path=db_path,
+    )
+    by_model = await query(
+        """SELECT model,
+                  COUNT(*) AS calls,
+                  SUM(cost_estimate_usd) AS total_cost
+           FROM api_token_logs
+           WHERE created_at >= datetime('now', ?)
+           GROUP BY model
+           ORDER BY total_cost DESC""",
+        (f"-{days} days",),
+        db_path=db_path,
+    )
+    return {"daily": daily, "by_caller": by_caller, "by_model": by_model}
+
+
 async def get_icor_without_notion_id(db_path: Path = None) -> list[dict]:
     """Get ICOR hierarchy entries that don't have a Notion page ID."""
     return await query(

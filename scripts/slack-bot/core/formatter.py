@@ -388,6 +388,7 @@ def format_help() -> list[dict]:
         ("/brain-resources", "Knowledge base catalog", "#brain-resources"),
         ("/brain-review", "GTD weekly review", "#brain-daily"),
         ("/brain-find", "Semantic vault search", "DM"),
+        ("/brain-cost", "API token usage & cost dashboard", "#brain-dashboard"),
         ("/brain-status", "Quick SQLite status dashboard", "#brain-dashboard"),
         ("/brain-sync", "Bidirectional Notion sync", "DM"),
         ("/brain-context", "Load session context", "DM"),
@@ -427,6 +428,77 @@ def format_health_check(checks: dict) -> list:
             emoji = ":white_check_mark:"
         blocks.append(_section(f"{emoji} *{name}*: {status}"))
     blocks.append(_context(f"Started at {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
+    return blocks
+
+
+def format_cost_report(data: dict, days: int = 30) -> list[dict]:
+    """Build Block Kit blocks for the API cost report.
+
+    Expected data keys:
+        - daily: list[dict] with "date", "calls", "daily_cost", "input_tokens", "output_tokens"
+        - by_caller: list[dict] with "caller", "calls", "total_cost", "avg_input", "avg_output"
+        - by_model: list[dict] with "model", "calls", "total_cost"
+    """
+    blocks = [
+        _header(f"API Cost Report (Last {days} Days)"),
+    ]
+
+    daily = data.get("daily", [])
+    by_caller = data.get("by_caller", [])
+    by_model = data.get("by_model", [])
+
+    # Summary stats
+    total_cost = sum(r.get("daily_cost", 0) or 0 for r in daily)
+    total_calls = sum(r.get("calls", 0) or 0 for r in daily)
+    avg_cost = total_cost / total_calls if total_calls else 0
+
+    blocks.append(_section(
+        f"*Total cost:* ${total_cost:.4f} | *Total calls:* {total_calls} | *Avg cost/call:* ${avg_cost:.4f}"
+    ))
+
+    blocks.append(_divider())
+
+    # Daily breakdown (last 7 days from daily data)
+    if daily:
+        lines = []
+        for row in daily[:7]:
+            date = row.get("date", "?")
+            calls = row.get("calls", 0)
+            cost = row.get("daily_cost", 0) or 0
+            inp = row.get("input_tokens", 0) or 0
+            out = row.get("output_tokens", 0) or 0
+            lines.append(f"`{date}` — {calls} calls, ${cost:.4f}, {inp:,} in / {out:,} out")
+        blocks.append(_section("*Daily Breakdown*\n" + "\n".join(lines)))
+    else:
+        blocks.append(_section("*Daily Breakdown*\nNo API calls in this period."))
+
+    blocks.append(_divider())
+
+    # Top callers
+    if by_caller:
+        lines = []
+        for row in by_caller[:10]:
+            caller = row.get("caller", "?")
+            calls = row.get("calls", 0)
+            cost = row.get("total_cost", 0) or 0
+            avg_in = int(row.get("avg_input", 0) or 0)
+            avg_out = int(row.get("avg_output", 0) or 0)
+            lines.append(f"  `{caller}` — {calls} calls, ${cost:.4f} (avg {avg_in:,} in / {avg_out:,} out)")
+        blocks.append(_section("*Top Callers*\n" + "\n".join(lines)))
+
+    blocks.append(_divider())
+
+    # Model breakdown
+    if by_model:
+        lines = []
+        for row in by_model:
+            model = row.get("model", "?")
+            calls = row.get("calls", 0)
+            cost = row.get("total_cost", 0) or 0
+            lines.append(f"  `{model}` — {calls} calls, ${cost:.4f}")
+        blocks.append(_section("*Model Breakdown*\n" + "\n".join(lines)))
+
+    blocks.append(_context(f"Generated at {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
     return blocks
 
 
