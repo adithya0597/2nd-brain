@@ -29,19 +29,18 @@ Read the template from `vault/Templates/Meeting.md` and create a structured note
 - Fill in all template sections with extracted data
 - Set frontmatter: type, date, participants, icor_elements, crm_synced: false
 
-### 4. Update People in Notion
+### 4. Update People in CRM
 For each participant identified:
-a. Use `notion-search` to find them in the People DB (`collection://231fda46-1a19-811c-ac4d-000b87d02a66`)
-b. If found, use `notion-update-page` to update their "Last Check-In" date to today
-c. If not found, offer to create a new People entry with `notion-create-pages`:
-   - Properties: Full Name, Relationship (default: "Colleague")
-d. Read `data/notion-registry.json` for any existing people mappings
+a. Check the Context Data section and `data/notion-registry.json` for existing people mappings
+b. List mentioned attendees with suggested CRM updates for the user to apply manually or via `/brain:sync-notion`:
+   - Existing contacts: suggest updating "Last Check-In" date to today
+   - New contacts: suggest creating a People entry with Full Name, Relationship (default: "Colleague")
 
-### 5. Push Action Items to Notion Tasks
+### 5. Prepare Action Items for Notion Tasks
 For each action item extracted:
-a. Create in Notion Tasks DB (`collection://231fda46-1a19-8125-95f4-000ba3e22ea6`):
+a. List the action items formatted for Notion Tasks DB (`collection://231fda46-1a19-8125-95f4-000ba3e22ea6`):
    - Properties: Name (description), Status: "To Do"
-   - If participant identified as owner, set People relation
+   - If participant identified as owner, note the People relation
 b. Insert into local SQLite:
 ```sql
 INSERT INTO action_items (description, source_file, source_date, status, icor_element, external_system)

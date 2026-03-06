@@ -70,15 +70,15 @@ ORDER BY gap_status, h.attention_score DESC;
 ```
 
 ### 2. Fetch Notion Data
-Use Notion MCP tools to pull active entities:
+Use the active projects, goals, and people from the Notion data in the Context Data section:
 
-a. **Active Projects** — Search `collection://231fda46-1a19-8171-9b6d-000b3e3409be` for projects with Status "Doing" or "Ongoing". Note their names, goals, and tags.
+a. **Active Projects** — From the Context Data, identify projects with Status "Doing" or "Ongoing". Note their names, goals, and tags.
 
-b. **Active Goals** — Search `collection://231fda46-1a19-810f-b0ac-000bbab78a4a` for goals with Status "Active". Note their names, tags, and linked projects.
+b. **Active Goals** — From the Context Data, identify goals with Status "Active". Note their names, tags, and linked projects.
 
-c. **People with recent interactions** — Search `collection://231fda46-1a19-811c-ac4d-000b87d02a66` for all people. Identify those with stale "Last Check-In" dates (>30 days) or no recent mentions in journal entries.
+c. **People with recent interactions** — From the Context Data, identify people entries. Flag those with stale "Last Check-In" dates (>30 days) or no recent mentions in journal entries.
 
-d. **Recent Notes** — Search `collection://231fda46-1a19-8139-a401-000b477c8cd0` for notes created in the last 30 days. Look for types: Idea, Voice Note, Web Clip — these are raw inputs that may not have been processed.
+d. **Recent Notes** — From the Context Data, identify notes created in the last 30 days. Look for types: Idea, Voice Note, Web Clip — these are raw inputs that may not have been processed.
 
 ### 3. Analyze Across Five Categories
 

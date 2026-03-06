@@ -56,11 +56,7 @@ SELECT * FROM vault_sync_log ORDER BY synced_at DESC LIMIT 20;
 Read data/notion-registry.json
 ```
 
-3. For operations requiring MCP tools (e.g., manual Notion queries), use the Notion MCP tools directly:
-```
-Use notion-search to query the Tasks collection
-Use notion-fetch to inspect a specific page
-```
+3. For manual Notion queries, use the Python sync engine or the Notion API directly via the `notion-client` SDK.
 
 ## Notion Database References
 - Tasks: `collection://231fda46-1a19-8125-95f4-000ba3e22ea6`

@@ -23,8 +23,8 @@ ORDER BY source_date DESC;
 ```
 
 ### 4. Fetch Active Projects from Notion
-Use the Notion MCP tool `notion-search` to search the Projects data source for active projects:
-- Search `collection://231fda46-1a19-8171-9b6d-000b3e3409be` for projects with Status "Doing" or "Ongoing"
+Review the active projects from the Notion data in the Context Data section below:
+- Identify projects with Status "Doing" or "Ongoing"
 - For each active project, note its name, status, and any related goal
 
 ### 5. Check Attention Indicators

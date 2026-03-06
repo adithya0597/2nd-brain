@@ -70,16 +70,16 @@ ORDER BY pending_actions DESC;
 ```
 
 ### 5. Fetch Active Tasks and Projects from Notion
-Use the Notion MCP tools to gather:
+Use the tasks and projects from the Notion data in the Context Data section:
 
 **Active Tasks:**
-Search `collection://231fda46-1a19-8125-95f4-000ba3e22ea6` for tasks with Status "To Do" or "Doing". Note each task's name, status, due date, priority, energy level, and linked project.
+From the Context Data, identify tasks with Status "To Do" or "Doing". Note each task's name, status, due date, priority, energy level, and linked project.
 
 **Active Projects:**
-Search `collection://231fda46-1a19-8171-9b6d-000b3e3409be` for projects with Status "Doing". Note each project's name, target deadline, and linked goal.
+From the Context Data, identify projects with Status "Doing". Note each project's name, target deadline, and linked goal.
 
 **Active Goals:**
-Search `collection://231fda46-1a19-810f-b0ac-000bbab78a4a` for goals with Status "Active". Note each goal's name and target deadline.
+From the Context Data, identify goals with Status "Active". Note each goal's name and target deadline.
 
 ### 6. Categorize All Tasks
 Group all gathered tasks, action items, and Notion items into these categories:

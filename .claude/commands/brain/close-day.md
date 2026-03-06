@@ -54,10 +54,10 @@ HAVING mentions >= 3;
 If candidates found, mention them and suggest running `/brain:graduate`.
 
 ### 7. Offer to Push Actions to Notion
-Ask the user if they want to push pending actions to the Notion Tasks DB. If yes, for each action use the Notion MCP tool `notion-create-pages` with:
-- Parent: `collection://231fda46-1a19-8125-95f4-000ba3e22ea6` (Tasks data source)
-- Properties: Name (action description), Status: "To Do"
-- After creation, update the action_items row with the external_id and external_system='notion_tasks'
+Ask the user if they want to push pending actions to the Notion Tasks DB. If yes, list the pending actions formatted as a checklist for the user to push to Notion manually or via `/brain:sync-notion`:
+- Each action should include: Name (action description), suggested Status: "To Do"
+- Target collection: Tasks DB (`collection://231fda46-1a19-8125-95f4-000ba3e22ea6`)
+- After sync, the action_items rows will be updated with external_id and external_system='notion_tasks'
 
 ### 8. Append Evening Summary
 Append to today's daily note:
