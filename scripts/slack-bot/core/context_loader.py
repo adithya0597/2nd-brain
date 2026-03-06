@@ -237,7 +237,11 @@ def _gather_graph_context(command_name: str, user_input: str) -> dict[str, str]:
         return {}
 
     try:
-        from core.vault_indexer import find_files_mentioning, find_intersection_nodes, get_linked_files
+        from core.vault_indexer import (
+            cached_find_files_mentioning as find_files_mentioning,
+            cached_find_intersection_nodes as find_intersection_nodes,
+            cached_get_linked_files as get_linked_files,
+        )
     except ImportError:
         logger.warning("vault_indexer not available, skipping graph context")
         return {}
@@ -267,7 +271,6 @@ def _gather_graph_context(command_name: str, user_input: str) -> dict[str, str]:
 
     elif method == "recent_daily":
         # For /emerge, /graduate, /ideas: start from recent daily notes
-        from core.vault_indexer import find_files_mentioning
         recent = find_files_mentioning("Daily Notes")
         seed_titles = [r["title"] for r in recent[:7]]
         if seed_titles:
@@ -314,6 +317,14 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
                 context["db"][name] = await db_ops.query(sql, params, db_path=db_path)
             except Exception as e:
                 context["db"][name] = {"error": str(e)}
+        # Augment with FTS5 ranked search results
+        try:
+            from core.fts_index import search_fts
+            fts_results = search_fts(user_input, limit=15, db_path=str(db_path))
+            if fts_results:
+                context.setdefault("db", {})["fts_matches"] = fts_results
+        except Exception:
+            pass  # fallback to existing LIKE queries
     else:
         queries = _COMMAND_QUERIES.get(command_name, {})
         for name, sql in queries.items():

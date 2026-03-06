@@ -224,6 +224,14 @@ def main():
         vault_count = index_vault()
         journal_count = index_journal()
         logger.info("Startup index: %d vault files, %d journal entries", vault_count, journal_count)
+        # Populate FTS5 index after vault index
+        try:
+            from config import DB_PATH, VAULT_PATH
+            from core.fts_index import populate_fts
+            fts_count = populate_fts(db_path=str(DB_PATH), vault_path=str(VAULT_PATH))
+            logger.info("FTS5 index populated: %d files", fts_count)
+        except Exception as e:
+            logger.warning("FTS5 population failed (non-critical): %s", e)
     except Exception:
         logger.warning("Startup indexing failed — will work without cached index")
 

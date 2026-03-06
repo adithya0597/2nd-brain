@@ -170,6 +170,12 @@ def run_full_index(vault_path: Path = None, db_path: Path = None) -> int:
     entries = scan_vault(vault_path)
     incoming = build_link_graph(entries)
     index_to_db(entries, incoming, db_path)
+    # Invalidate graph cache after reindexing so stale results are not served
+    try:
+        from core.graph_cache import invalidate as _invalidate_graph_cache
+        _invalidate_graph_cache()
+    except ImportError:
+        pass
     return len(entries)
 
 
@@ -315,3 +321,28 @@ def find_intersection_nodes(
         return results
 
     return []
+
+
+# ---------------------------------------------------------------------------
+# Cache-through wrappers (use graph_cache for TTL-based caching)
+# ---------------------------------------------------------------------------
+
+from core.graph_cache import cached_graph_call, invalidate as invalidate_graph_cache
+
+
+def cached_get_linked_files(seed_titles, depth=2, db_path=None):
+    """Cache-through wrapper for get_linked_files."""
+    return cached_graph_call(get_linked_files, "get_linked_files",
+        seed_titles=seed_titles, depth=depth, db_path=db_path)
+
+
+def cached_find_files_mentioning(topic, db_path=None):
+    """Cache-through wrapper for find_files_mentioning."""
+    return cached_graph_call(find_files_mentioning, "find_files_mentioning",
+        topic=topic, db_path=db_path)
+
+
+def cached_find_intersection_nodes(topic_a, topic_b, db_path=None):
+    """Cache-through wrapper for find_intersection_nodes."""
+    return cached_graph_call(find_intersection_nodes, "find_intersection_nodes",
+        topic_a=topic_a, topic_b=topic_b, db_path=db_path)

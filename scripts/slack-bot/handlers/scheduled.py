@@ -360,6 +360,13 @@ def job_vault_reindex(client: WebClient, channel_ids: dict):
         vault_count = index_vault()
         journal_count = index_journal()
         logger.info("Vault reindex: %d files, %d journal entries", vault_count, journal_count)
+        # Populate FTS5 index after vault reindex
+        try:
+            from core.fts_index import populate_fts
+            fts_count = populate_fts(db_path=str(DB_PATH), vault_path=str(VAULT_PATH))
+            logger.info("FTS5 index populated: %d files", fts_count)
+        except Exception as e:
+            logger.warning("FTS5 population failed: %s", e)
         _record_job_run("vault_reindex")
     except Exception:
         logger.exception("Vault reindex job failed")
