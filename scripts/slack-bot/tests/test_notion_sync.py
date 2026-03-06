@@ -399,3 +399,219 @@ class TestRegistryManager:
         rm = RegistryManager(path)
         rm.load()
         assert rm.get_tag_notion_id("Nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# Dry-run mode tests
+# ---------------------------------------------------------------------------
+
+class TestDryRunMode:
+
+    def test_dry_run_defaults_false(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+        )
+        assert syncer._dry_run is False
+
+    def test_dry_run_can_be_enabled(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        assert syncer._dry_run is True
+
+    @pytest.mark.asyncio
+    async def test_dry_run_skips_tag_create_page(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        """In dry-run, create_page should never be called for tags."""
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        elements = [{"id": 1, "name": "Test Dim", "level": "dimension", "parent_id": None}]
+
+        with patch("core.notion_sync.db_ops.get_icor_without_notion_id", AsyncMock(return_value=elements)), \
+             patch("core.notion_sync.db_ops.get_icor_hierarchy", AsyncMock(return_value=[])), \
+             patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
+             patch("core.notion_sync.icor_element_to_notion_tag", return_value={}):
+            await syncer._sync_icor_tags()
+
+        mock_notion_client.create_page.assert_not_called()
+        assert syncer._result.tags_synced == 1
+        assert len(syncer._result.dry_run_actions) == 1
+        assert "Would push tag" in syncer._result.dry_run_actions[0]
+
+    @pytest.mark.asyncio
+    async def test_dry_run_skips_action_create_page(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        """In dry-run, create_page should never be called for actions."""
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        actions = [{"id": 1, "description": "Test action", "status": "pending"}]
+
+        with patch("core.notion_sync.db_ops.get_unpushed_actions", AsyncMock(return_value=actions)), \
+             patch("core.notion_sync.db_ops.execute", AsyncMock()), \
+             patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
+             patch("core.notion_sync.action_to_notion_task", return_value={}):
+            await syncer._push_action_items()
+
+        mock_notion_client.create_page.assert_not_called()
+        assert syncer._result.tasks_pushed == 1
+        assert "Would push action" in syncer._result.dry_run_actions[0]
+
+    @pytest.mark.asyncio
+    async def test_dry_run_skips_journal_create_page(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        """In dry-run, create_page should never be called for journal entries."""
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        entries = [{"date": "2026-03-01", "summary": "Test", "content": "c"}]
+
+        with patch("core.notion_sync.db_ops.get_unsynced_journal_entries", AsyncMock(return_value=entries)), \
+             patch("core.notion_sync.db_ops.execute", AsyncMock()), \
+             patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
+             patch("core.notion_sync.journal_to_notion_note", return_value={}):
+            await syncer._push_journal_entries()
+
+        mock_notion_client.create_page.assert_not_called()
+        assert syncer._result.notes_pushed == 1
+        assert "Would push journal" in syncer._result.dry_run_actions[0]
+
+    @pytest.mark.asyncio
+    async def test_dry_run_skips_concept_create_page(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        """In dry-run, create_page should never be called for concepts."""
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        concepts = [{"id": 1, "name": "Test Concept", "status": "seedling"}]
+
+        with patch("core.notion_sync.db_ops.get_unsynced_concepts", AsyncMock(return_value=concepts)), \
+             patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
+             patch("core.notion_sync.concept_to_notion_note", return_value={}):
+            await syncer._push_concepts()
+
+        mock_notion_client.create_page.assert_not_called()
+        assert syncer._result.concepts_pushed == 1
+        assert "Would push concept" in syncer._result.dry_run_actions[0]
+
+    @pytest.mark.asyncio
+    async def test_dry_run_pull_methods_unaffected(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        """Pull methods should still work normally in dry-run."""
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        # query_database should still be called for pulls
+        mock_notion_client.query_database = AsyncMock(return_value=[])
+
+        with patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()):
+            await syncer._pull_projects()
+
+        mock_notion_client.query_database.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dry_run_skips_vault_writes(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        """In dry-run, run_full_sync should skip vault file writes and registry save."""
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        syncer._registry.load()
+
+        with patch.object(syncer, '_sync_icor_tags', AsyncMock()), \
+             patch.object(syncer, '_push_action_items', AsyncMock()), \
+             patch.object(syncer, '_pull_task_status', AsyncMock()), \
+             patch.object(syncer, '_pull_projects', AsyncMock()), \
+             patch.object(syncer, '_pull_goals', AsyncMock()), \
+             patch.object(syncer, '_push_journal_entries', AsyncMock()), \
+             patch.object(syncer, '_push_concepts', AsyncMock()), \
+             patch.object(syncer, '_sync_people', AsyncMock()), \
+             patch.object(syncer, '_update_vault_files', AsyncMock()) as mock_vault, \
+             patch.object(syncer._registry, 'save') as mock_save, \
+             patch.object(syncer, '_log_sync_operations', AsyncMock()):
+            result = await syncer.run_full_sync()
+
+        mock_vault.assert_not_called()
+        mock_save.assert_not_called()
+        assert result.dry_run is True
+
+    @pytest.mark.asyncio
+    async def test_dry_run_selective_sync_skips_registry_save(self, mock_notion_client, registry_path, test_db, vault_path, collection_ids):
+        """In dry-run selective sync, registry save should be skipped."""
+        syncer = NotionSync(
+            client=mock_notion_client,
+            registry_path=registry_path,
+            db_path=test_db,
+            vault_path=vault_path,
+            collection_ids=collection_ids,
+            dry_run=True,
+        )
+        syncer._registry.load()
+
+        with patch.object(syncer, '_push_action_items', AsyncMock()), \
+             patch.object(syncer._registry, 'save') as mock_save:
+            result = await syncer.run_selective_sync(["tasks"])
+
+        mock_save.assert_not_called()
+        assert result.dry_run is True
+
+
+class TestSyncResultDryRun:
+
+    def test_summary_shows_dry_run_header(self):
+        result = SyncResult(dry_run=True, tasks_pushed=2)
+        summary = result.summary()
+        assert summary.startswith("DRY RUN")
+        assert "Tasks pushed: 2" in summary
+
+    def test_summary_shows_simulated_actions_count(self):
+        result = SyncResult(
+            dry_run=True,
+            dry_run_actions=["Would push tag: X", "Would push tag: Y"],
+        )
+        summary = result.summary()
+        assert "Simulated actions: 2" in summary
+
+    def test_summary_normal_mode_no_dry_run_header(self):
+        result = SyncResult(tasks_pushed=2)
+        summary = result.summary()
+        assert not summary.startswith("DRY RUN")
+
+    def test_dry_run_defaults(self):
+        result = SyncResult()
+        assert result.dry_run is False
+        assert result.dry_run_actions == []

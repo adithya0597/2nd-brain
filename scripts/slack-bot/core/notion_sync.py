@@ -43,9 +43,11 @@ class SyncResult:
     ai_calls: int = 0
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    dry_run: bool = False
+    dry_run_actions: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
-        lines = ["Notion Sync Complete:"]
+        lines = ["DRY RUN — Notion Sync Complete:" if self.dry_run else "Notion Sync Complete:"]
         if self.tasks_pushed:
             lines.append(f"  Tasks pushed: {self.tasks_pushed}")
         if self.tasks_status_synced:
@@ -70,6 +72,8 @@ class SyncResult:
             lines.append(f"  Errors: {len(self.errors)}")
         if self.warnings:
             lines.append(f"  Warnings: {len(self.warnings)}")
+        if self.dry_run_actions:
+            lines.append(f"  Simulated actions: {len(self.dry_run_actions)}")
         # If nothing happened
         if len(lines) == 1:
             lines.append("  No changes needed")
@@ -199,6 +203,7 @@ class NotionSync:
         collection_ids: dict[str, str],
         ai_client=None,
         ai_model: str = None,
+        dry_run: bool = False,
     ):
         self._client = client
         self._registry = RegistryManager(registry_path)
@@ -209,6 +214,7 @@ class NotionSync:
         self._ai_model = ai_model or "claude-sonnet-4-20250514"
         self._result = SyncResult()
         self._now = datetime.utcnow().isoformat()
+        self._dry_run = dry_run
 
     # ------------------------------------------------------------------
     # Public entry points
@@ -217,6 +223,7 @@ class NotionSync:
     async def run_full_sync(self) -> SyncResult:
         """Execute the complete sync pipeline."""
         self._result = SyncResult()
+        self._result.dry_run = self._dry_run
         self._registry.load()
 
         steps = [
@@ -239,12 +246,12 @@ class NotionSync:
                 self._result.errors.append(msg)
 
         # Post-sync housekeeping
-        try:
-            await self._update_vault_files()
-        except Exception as e:
-            self._result.errors.append(f"Vault update failed: {e}")
-
-        self._registry.save()
+        if not self._dry_run:
+            try:
+                await self._update_vault_files()
+            except Exception as e:
+                self._result.errors.append(f"Vault update failed: {e}")
+            self._registry.save()
         await self._log_sync_operations()
 
         return self._result
@@ -252,6 +259,7 @@ class NotionSync:
     async def run_selective_sync(self, entity_types: list[str]) -> SyncResult:
         """Run sync for specific entity types only."""
         self._result = SyncResult()
+        self._result.dry_run = self._dry_run
         self._registry.load()
 
         type_to_step = {
@@ -273,7 +281,8 @@ class NotionSync:
                 except Exception as e:
                     self._result.errors.append(f"Step '{et}' failed: {e}")
 
-        self._registry.save()
+        if not self._dry_run:
+            self._registry.save()
         return self._result
 
     # ------------------------------------------------------------------
@@ -308,6 +317,10 @@ class NotionSync:
                             )
 
                 props = icor_element_to_notion_tag(element, parent_notion_id)
+                if self._dry_run:
+                    self._result.dry_run_actions.append(f"Would push tag: {element['name']}")
+                    self._result.tags_synced += 1
+                    continue
                 page = await self._client.create_page(
                     parent={"data_source_id": tags_db_id},
                     properties=props,
@@ -365,6 +378,16 @@ class NotionSync:
                     (action["id"],),
                     db_path=self._db_path,
                 )
+                if self._dry_run:
+                    self._result.dry_run_actions.append(f"Would push action: {action.get('description', '')[:50]}")
+                    self._result.tasks_pushed += 1
+                    # Reset push_attempted_at since we didn't actually push
+                    await db_ops.execute(
+                        "UPDATE action_items SET push_attempted_at = NULL WHERE id = ?",
+                        (action["id"],),
+                        db_path=self._db_path,
+                    )
+                    continue
                 props = action_to_notion_task(action, self._registry.data)
                 page = await self._client.create_page(
                     parent={"data_source_id": tasks_db_id},
@@ -543,6 +566,16 @@ class NotionSync:
                     (entry["date"],),
                     db_path=self._db_path,
                 )
+                if self._dry_run:
+                    self._result.dry_run_actions.append(f"Would push journal: {entry['date']}")
+                    self._result.notes_pushed += 1
+                    # Reset push_attempted_at since we didn't actually push
+                    await db_ops.execute(
+                        "UPDATE journal_entries SET push_attempted_at = NULL WHERE date = ?",
+                        (entry["date"],),
+                        db_path=self._db_path,
+                    )
+                    continue
                 props = journal_to_notion_note(entry, self._registry.data)
                 await self._client.create_page(
                     parent={"data_source_id": notes_db_id},
@@ -594,6 +627,10 @@ class NotionSync:
 
         for concept in concepts:
             try:
+                if self._dry_run:
+                    self._result.dry_run_actions.append(f"Would push concept: {concept.get('name', '')}")
+                    self._result.concepts_pushed += 1
+                    continue
                 props = concept_to_notion_note(concept, self._registry.data)
                 page = await self._client.create_page(
                     parent={"data_source_id": notes_db_id},
