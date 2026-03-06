@@ -537,6 +537,12 @@ class NotionSync:
 
         for entry in entries:
             try:
+                # Mark push attempt before calling Notion to prevent duplicates on crash
+                await db_ops.execute(
+                    "UPDATE journal_entries SET push_attempted_at = datetime('now') WHERE date = ?",
+                    (entry["date"],),
+                    db_path=self._db_path,
+                )
                 props = journal_to_notion_note(entry, self._registry.data)
                 await self._client.create_page(
                     parent={"data_source_id": notes_db_id},
@@ -556,14 +562,24 @@ class NotionSync:
                 msg = f"Push journal failed for date {entry.get('date', '?')}: {e}"
                 logger.warning(msg)
                 self._result.warnings.append(msg)
+                # Reset push_attempted_at so the entry retries on next sync
+                try:
+                    await db_ops.execute(
+                        "UPDATE journal_entries SET push_attempted_at = NULL WHERE date = ?",
+                        (entry["date"],),
+                        db_path=self._db_path,
+                    )
+                except Exception:
+                    logger.warning("Could not reset push_attempted_at for journal %s", entry.get("date"))
 
-        await db_ops.update_sync_state(
-            "notes",
-            self._now,
-            self._result.notes_pushed,
-            "push",
-            db_path=self._db_path,
-        )
+        if self._result.notes_pushed > 0:
+            await db_ops.update_sync_state(
+                "notes",
+                self._now,
+                self._result.notes_pushed,
+                "push",
+                db_path=self._db_path,
+            )
 
     # ------------------------------------------------------------------
     # Step 7: Push concepts -> Notion Notes DB

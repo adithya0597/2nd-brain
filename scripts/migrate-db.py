@@ -188,7 +188,14 @@ def migrate(db_path: Path = DB_PATH):
     except sqlite3.OperationalError:
         print("action_items.push_attempted_at column already exists")
 
-    # 10. Create scheduler_state table (persist job timestamps across restarts)
+    # 10. Add push_attempted_at column to journal_entries (Notion push idempotency)
+    try:
+        cursor.execute("ALTER TABLE journal_entries ADD COLUMN push_attempted_at TEXT")
+        print("Added push_attempted_at column to journal_entries")
+    except sqlite3.OperationalError:
+        print("journal_entries.push_attempted_at column already exists")
+
+    # 11. Create scheduler_state table (persist job timestamps across restarts)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS scheduler_state (
             job_name TEXT PRIMARY KEY,

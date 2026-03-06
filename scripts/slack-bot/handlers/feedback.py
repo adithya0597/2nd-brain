@@ -10,7 +10,8 @@ from slack_bolt import App
 
 from config import DIMENSION_CHANNELS
 from core.async_utils import run_async
-from core.db_ops import execute
+from core.db_ops import execute, query
+from handlers.commands import _channel_ids
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,27 @@ def register(app: App):
                     blocks=updated_blocks,
                     text=f"Corrected to {correct_dim}",
                 )
+
+            # Re-route the capture to the correct dimension channel
+            ch_name = DIMENSION_CHANNELS.get(correct_dim, "brain-systems")
+            ch_id = _channel_ids.get(ch_name)
+            if ch_id:
+                rows = run_async(query(
+                    "SELECT message_text FROM classifications WHERE message_ts = ?",
+                    (ts,),
+                ))
+                if rows:
+                    original_text = rows[0]["message_text"]
+                    client.chat_postMessage(
+                        channel=ch_id,
+                        text=f"*Capture (corrected):*\n> {original_text}",
+                        blocks=[
+                            {"type": "section", "text": {"type": "mrkdwn",
+                             "text": f"*Capture (corrected via feedback):*\n> {original_text}"}},
+                            {"type": "context", "elements": [{"type": "mrkdwn",
+                             "text": f"Corrected to *{correct_dim}* | User feedback"}]},
+                        ],
+                    )
 
             logger.info("Classification corrected: ts=%s, %s -> %s", ts, original_dims, correct_dim)
         except Exception:
