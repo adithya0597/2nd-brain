@@ -229,6 +229,14 @@ def migrate(db_path: Path = DB_PATH):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_token_logs_date_caller ON api_token_logs(created_at, caller)")
     print("api_token_logs indexes: model + date_caller created/verified")
 
+    # 14. Create FTS5 virtual table for full-text vault search
+    cursor.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
+            title, content, tags, file_path UNINDEXED
+        )
+    """)
+    print("vault_fts FTS5 table: created/verified")
+
     conn.commit()
     conn.close()
     print(f"Migration complete on {db_path}")

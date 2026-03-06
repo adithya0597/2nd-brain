@@ -203,6 +203,11 @@ CREATE INDEX IF NOT EXISTS idx_token_logs_caller ON api_token_logs(caller);
 CREATE INDEX IF NOT EXISTS idx_token_logs_created ON api_token_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_token_logs_model ON api_token_logs(model);
 CREATE INDEX IF NOT EXISTS idx_token_logs_date_caller ON api_token_logs(created_at, caller);
+
+-- vault_fts (migrate-db.py step 14)
+CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
+    title, content, tags, file_path UNINDEXED
+);
 """
 
 _SEED_SYNC_STATE = """
