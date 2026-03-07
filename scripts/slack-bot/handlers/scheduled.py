@@ -8,13 +8,10 @@ import logging
 import sqlite3
 from datetime import datetime, timedelta
 
-import anthropic
 import schedule
 from slack_sdk import WebClient
 
 from config import (
-    ANTHROPIC_API_KEY,
-    ANTHROPIC_MODEL,
     DB_PATH,
     DIMENSION_KEYWORDS,
     NOTION_COLLECTIONS,
@@ -23,6 +20,7 @@ from config import (
     VAULT_PATH,
     load_dynamic_keywords,
 )
+from core.ai_client import get_ai_client, get_ai_model
 from core.async_utils import run_async
 from core.context_loader import (
     build_claude_messages,
@@ -102,13 +100,32 @@ def _call_claude(brain_command: str, user_input: str = "") -> str:
     prompt = load_command_prompt(brain_command)
     messages = build_claude_messages(brain_command, user_input, context)
 
-    ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    response = ai_client.messages.create(
-        model=ANTHROPIC_MODEL,
+    ai = get_ai_client()
+    model = get_ai_model()
+    response = ai.messages.create(
+        model=model,
         max_tokens=4096,
-        system=f"{system_ctx}\n\n---\n\n{prompt}",
+        system=[
+            {
+                "type": "text",
+                "text": system_ctx,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {
+                "type": "text",
+                "text": prompt,
+                "cache_control": {"type": "ephemeral"},
+            },
+        ],
         messages=messages,
     )
+
+    try:
+        from core.token_logger import log_token_usage
+        log_token_usage(response, caller=f"scheduled_{brain_command}", model=model)
+    except Exception:
+        pass
+
     return response.content[0].text
 
 
@@ -275,8 +292,8 @@ def job_notion_sync(client: WebClient, channel_ids: dict):
                     db_path=DB_PATH,
                     vault_path=VAULT_PATH,
                     collection_ids=NOTION_COLLECTIONS,
-                    ai_client=anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None,
-                    ai_model=ANTHROPIC_MODEL,
+                    ai_client=get_ai_client(),
+                    ai_model=get_ai_model(),
                 )
                 return await syncer.run_full_sync()
             finally:
@@ -399,8 +416,8 @@ def job_vault_reindex(client: WebClient, channel_ids: dict):
 
 def job_keyword_expansion(client: WebClient, channel_ids: dict):
     """Weekly Sunday 2am: Expand keywords from recent corrections using Claude."""
-    if not ANTHROPIC_API_KEY:
-        logger.info("No ANTHROPIC_API_KEY — skipping keyword expansion")
+    if not get_ai_client():
+        logger.info("No Anthropic client configured — skipping keyword expansion")
         return
 
     try:
@@ -431,9 +448,10 @@ def job_keyword_expansion(client: WebClient, channel_ids: dict):
             indent=2,
         )
 
-        ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = ai_client.messages.create(
-            model=ANTHROPIC_MODEL,
+        ai = get_ai_client()
+        model = get_ai_model()
+        response = ai.messages.create(
+            model=model,
             max_tokens=1000,
             messages=[{
                 "role": "user",
@@ -449,6 +467,12 @@ def job_keyword_expansion(client: WebClient, channel_ids: dict):
                 ),
             }],
         )
+
+        try:
+            from core.token_logger import log_token_usage
+            log_token_usage(response, caller="scheduled_keyword_expansion", model=model)
+        except Exception:
+            pass
 
         raw = response.content[0].text.strip()
         # Strip markdown code fences if present

@@ -7,18 +7,16 @@ import json
 import logging
 from datetime import datetime
 
-import anthropic
 from slack_bolt import App
 
 from config import (
-    ANTHROPIC_API_KEY,
-    ANTHROPIC_MODEL,
     DB_PATH,
     NOTION_COLLECTIONS,
     NOTION_REGISTRY_PATH,
     NOTION_TOKEN,
     VAULT_PATH,
 )
+from core.ai_client import get_ai_client, get_ai_model
 from core.async_utils import executor, run_async
 from core.context_loader import (
     build_claude_messages,
@@ -56,7 +54,7 @@ logger = logging.getLogger(__name__)
 # Commands that auto-save reports to vault
 _AUTO_VAULT_WRITE_COMMANDS = {
     "drift", "emerge", "ideas", "ghost", "challenge",
-    "trace", "connect",
+    "trace", "connect", "engage",
 }
 
 
@@ -158,6 +156,7 @@ _COMMAND_MAP = {
     # /brain-find handled separately below (fast hybrid search path)
     "/brain-review": ("weekly-review", "brain-daily"),
     "/brain-process-meeting": ("process-meeting", "brain-daily"),
+    "/brain-engage": ("engage", "brain-daily"),
 }
 
 # Channel name -> resolved ID cache (populated by app.py at startup)
@@ -200,9 +199,9 @@ def _run_ai_command(client, user_id, brain_command, output_channel, user_input, 
         prompt = load_command_prompt(brain_command)
         messages = build_claude_messages(brain_command, user_input, context)
 
-        ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = ai_client.messages.create(
-            model=ANTHROPIC_MODEL,
+        ai = get_ai_client()
+        response = ai.messages.create(
+            model=get_ai_model(),
             max_tokens=4096,
             system=[
                 {
@@ -223,7 +222,7 @@ def _run_ai_command(client, user_id, brain_command, output_channel, user_input, 
 
         try:
             from core.token_logger import log_token_usage
-            log_token_usage(response, caller=f"command_{brain_command}", model=ANTHROPIC_MODEL)
+            log_token_usage(response, caller=f"command_{brain_command}", model=get_ai_model())
         except Exception:
             pass
 
@@ -352,8 +351,8 @@ def _run_sync_command(client, user_id, user_input):
                     db_path=DB_PATH,
                     vault_path=VAULT_PATH,
                     collection_ids=NOTION_COLLECTIONS,
-                    ai_client=anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None,
-                    ai_model=ANTHROPIC_MODEL,
+                    ai_client=get_ai_client(),
+                    ai_model=get_ai_model(),
                 )
 
                 if entity_types:
