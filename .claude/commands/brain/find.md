@@ -1,5 +1,7 @@
 # /brain:find — Semantic Vault Search
 
+> **Note:** This prompt is used for `/brain-find --ai` mode only. The default `/brain-find` uses fast hybrid search (no AI call).
+
 Search across the entire Second Brain — vault files, SQLite database, and knowledge graph — to find notes, concepts, journal entries, and action items matching a query.
 
 ## Instructions

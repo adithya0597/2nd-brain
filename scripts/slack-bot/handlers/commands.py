@@ -155,7 +155,7 @@ _COMMAND_MAP = {
     "/brain-connect": ("connect", "brain-insights"),
     "/brain-challenge": ("challenge", "brain-insights"),
     "/brain-graduate": ("graduate", "brain-insights"),
-    "/brain-find": ("find", None),
+    # /brain-find handled separately below (fast hybrid search path)
     "/brain-review": ("weekly-review", "brain-daily"),
     "/brain-process-meeting": ("process-meeting", "brain-daily"),
 }
@@ -464,6 +464,53 @@ def _run_cost_command(client, user_id, user_input):
         logger.exception("Error running cost command")
 
 
+def _run_fast_search(client, user_id, query_text):
+    """Background worker: hybrid search without Claude call (~100ms)."""
+    try:
+        from core.search import hybrid_search
+        from core.formatter import format_search_results
+
+        response = hybrid_search(query_text, limit=15)
+
+        if not response.results:
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"No results found for *\"{query_text}\"*.\n\n"
+                            f"Try:\n- Different keywords\n- Broader search terms\n"
+                            f"- `/brain-find --ai {query_text}` for AI-powered search"
+                        ),
+                    },
+                },
+            ]
+        else:
+            blocks = format_search_results(
+                query=query_text,
+                results=response.results,
+                channels_used=response.channels_used,
+                total=response.total_candidates,
+            )
+
+        # DM the user
+        dm = client.conversations_open(users=[user_id])
+        client.chat_postMessage(
+            channel=dm["channel"]["id"],
+            text=f"Search results for: {query_text}",
+            blocks=blocks,
+        )
+    except Exception:
+        logger.exception("Error running fast search")
+        try:
+            dm = client.conversations_open(users=[user_id])
+            blocks = format_error(f"Search failed for \"{query_text}\". Check bot logs.")
+            client.chat_postMessage(channel=dm["channel"]["id"], text="Search error", blocks=blocks)
+        except Exception:
+            logger.exception("Failed to send search error DM")
+
+
 def register(app: App):
     """Register all slash command handlers."""
 
@@ -480,6 +527,26 @@ def register(app: App):
             return handler
 
         app.command(slack_cmd)(_make_handler(brain_cmd, output_ch))
+
+    # Fast search command (/brain-find)
+    @app.command("/brain-find")
+    def handle_find(ack, command, client):
+        user_id = command.get("user_id", "")
+        user_input = command.get("text", "").strip()
+
+        if not user_input:
+            ack("Usage: `/brain-find <query>` or `/brain-find --ai <query>`")
+            return
+
+        # Check for --ai flag
+        if user_input.startswith("--ai "):
+            ack("Processing /brain-find (AI mode)...")
+            ai_query = user_input[5:].strip()
+            executor.submit(_run_ai_command, client, user_id, "find", None, ai_query)
+            return
+
+        ack("Searching...")
+        executor.submit(_run_fast_search, client, user_id, user_input)
 
     # Quick status command (no AI)
     @app.command("/brain-status")

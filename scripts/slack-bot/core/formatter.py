@@ -502,6 +502,54 @@ def format_cost_report(data: dict, days: int = 30) -> list[dict]:
     return blocks
 
 
+def format_search_results(
+    query: str,
+    results: list,
+    channels_used: list[str],
+    total: int,
+) -> list[dict]:
+    """Build Block Kit blocks for hybrid search results.
+
+    Args:
+        query: The original search query.
+        results: List of SearchResult objects (file_path, title, score, snippet, sources).
+        channels_used: Which search channels contributed results.
+        total: Total candidate count before dedup/limit.
+    """
+    blocks = [
+        _header(f"Search: \"{query}\""),
+        _context(f"Channels: {', '.join(channels_used)} | {total} candidates | {len(results)} results"),
+        _divider(),
+    ]
+
+    for i, r in enumerate(results[:15]):
+        # Format source badges
+        source_list = r.sources if hasattr(r, 'sources') else []
+        source_badges = " ".join(f"`{s}`" for s in source_list)
+
+        title = r.title if hasattr(r, 'title') else ""
+        file_path = r.file_path if hasattr(r, 'file_path') else ""
+        snippet = r.snippet if hasattr(r, 'snippet') else ""
+
+        text = f"*{i+1}. {title}*"
+        if file_path:
+            text += f"\n`{file_path}`"
+        if snippet:
+            text += f"\n{snippet}"
+        if source_badges:
+            text += f"\n{source_badges}"
+
+        blocks.append(_section(text))
+
+    if not results:
+        blocks.append(_section("No results found. Try different keywords or `/brain-find --ai <query>` for AI-powered search."))
+
+    blocks.append(_divider())
+    blocks.append(_context(f"Use `/brain-find --ai {query}` for AI-summarized results"))
+
+    return blocks
+
+
 def format_error(message: str) -> list[dict]:
     """Error message block."""
     return [

@@ -171,6 +171,42 @@ _ANALYTICS_COMMANDS = {
 }
 
 
+# Commands that benefit from hybrid search context (replaces graph-only traversal)
+_HYBRID_SEARCH_COMMANDS = {
+    "find": {"limit": 20},
+    "trace": {"limit": 10},
+    "ideas": {"limit": 10},
+    "connect": {"limit": 10},
+}
+
+
+def _gather_hybrid_context(command_name: str, user_input: str, db_path: Path = None) -> dict[str, str]:
+    """Use hybrid search to gather relevant vault files for a command.
+
+    Returns {relative_path: file_content} for top search results.
+    Falls back gracefully if search module unavailable.
+    """
+    search_config = _HYBRID_SEARCH_COMMANDS.get(command_name)
+    if not search_config or not user_input:
+        return {}
+
+    try:
+        from core.search import hybrid_search
+        response = hybrid_search(user_input, limit=search_config["limit"], db_path=db_path)
+
+        result = {}
+        for sr in response.results[:15]:
+            full_path = config.VAULT_PATH / sr.file_path
+            content = vault_ops.read_file(full_path)
+            if content:
+                result[sr.file_path] = content
+
+        return result
+    except Exception:
+        logger.debug("Hybrid search context unavailable", exc_info=True)
+        return {}
+
+
 async def _gather_analytics(command_name: str, db_path: Path = None) -> dict:
     """Pre-compute analytics for commands that benefit from them."""
     metrics = _ANALYTICS_COMMANDS.get(command_name)
@@ -394,6 +430,15 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
     graph_files = _gather_graph_context(command_name, user_input)
     if graph_files:
         context["graph"] = graph_files
+
+    # Gather hybrid search context (supplements graph context)
+    if command_name in _HYBRID_SEARCH_COMMANDS and user_input:
+        hybrid_files = _gather_hybrid_context(command_name, user_input, db_path=db_path)
+        if hybrid_files:
+            # Merge with graph context (hybrid may find additional files)
+            for path, content in hybrid_files.items():
+                if path not in context.get("graph", {}):
+                    context.setdefault("graph", {})[path] = content
 
     # Inject Notion context for applicable commands
     if command_name in _NOTION_CONTEXT_COMMANDS:
