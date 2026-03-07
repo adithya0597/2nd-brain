@@ -232,6 +232,14 @@ def main():
             logger.info("FTS5 index populated: %d files", fts_count)
         except Exception as e:
             logger.warning("FTS5 population failed (non-critical): %s", e)
+        # Populate vector embeddings after FTS (optional, non-critical)
+        try:
+            from core.embedding_store import embed_all_files, seed_icor_embeddings
+            embed_count = embed_all_files()
+            icor_count = seed_icor_embeddings()
+            logger.info("Vector embeddings: %d vault files, %d ICOR refs", embed_count, icor_count)
+        except Exception as e:
+            logger.warning("Vector embedding failed (non-critical): %s", e)
     except Exception:
         logger.warning("Startup indexing failed — will work without cached index")
 
