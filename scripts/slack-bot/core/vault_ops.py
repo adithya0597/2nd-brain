@@ -13,6 +13,39 @@ logger = logging.getLogger(__name__)
 _vault_lock = threading.RLock()
 
 
+def _on_vault_write(file_path: Path):
+    """Post-write hook: incrementally update vault_index and FTS5 for this file.
+
+    This is the event-driven graph update strategy (inspired by FEA's
+    "new content connects instantly" principle). Instead of a file watcher
+    daemon, every vault write function calls this hook after writing.
+
+    Runs in a background thread to avoid slowing down the write operation.
+    Errors are logged but never propagated — indexing failures should not
+    break vault writes.
+    """
+    def _do_index():
+        try:
+            from core.vault_indexer import index_single_file
+            index_single_file(file_path)
+        except Exception:
+            logger.debug("Incremental vault index failed for %s", file_path, exc_info=True)
+
+        try:
+            from core.fts_index import update_single_file_fts
+            update_single_file_fts(file_path)
+        except Exception:
+            logger.debug("Incremental FTS update failed for %s", file_path, exc_info=True)
+
+        try:
+            from core.embedding_store import embed_single_file
+            embed_single_file(file_path)
+        except Exception:
+            logger.debug("Incremental embedding failed for %s", file_path, exc_info=True)
+
+    threading.Thread(target=_do_index, daemon=True).start()
+
+
 def read_file(path: Path) -> str:
     """Safely read a file, returning empty string on failure."""
     try:
@@ -66,6 +99,7 @@ def ensure_daily_note(date: str = None) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         logger.info("Created daily note: %s", path)
+        _on_vault_write(path)
         return path
 
 
@@ -110,6 +144,7 @@ def append_to_daily_note(date: str, content: str, section: str = None) -> bool:
             path.write_text(existing.rstrip() + "\n\n" + content + "\n", encoding="utf-8")
 
         logger.info("Appended to daily note %s (section=%s)", path, section)
+        _on_vault_write(path)
         return True
 
 
@@ -202,6 +237,7 @@ classification_method: {method}
 
         path.write_text(frontmatter + body + "\n", encoding="utf-8")
         logger.info("Created inbox entry: %s (dims=%s, method=%s)", path, dims, method)
+        _on_vault_write(path)
         return path
 
 
@@ -271,6 +307,7 @@ date: {date}
 
         path.write_text(frontmatter + body + "\n", encoding="utf-8")
         logger.info("Created report: %s", path)
+        _on_vault_write(path)
 
         # Add reference to daily note
         append_to_daily_note(
@@ -336,6 +373,7 @@ date: {date}
 
         path.write_text(frontmatter + body, encoding="utf-8")
         logger.info("Created concept: %s", path)
+        _on_vault_write(path)
         return path
 
 
@@ -365,6 +403,7 @@ date: {date}
 
         path.write_text(frontmatter + body, encoding="utf-8")
         logger.info("Created weekly plan: %s", path)
+        _on_vault_write(path)
 
         # Reference in daily note
         append_to_daily_note(
@@ -472,6 +511,7 @@ date: {date}
 
         path.write_text(frontmatter + body, encoding="utf-8")
         logger.info("Created web clip: %s", path)
+        _on_vault_write(path)
 
         # Reference in daily note
         append_to_daily_note(

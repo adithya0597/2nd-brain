@@ -13,8 +13,14 @@ def migrate(db_path: Path = DB_PATH):
         print(f"Database not found at {db_path}. Creating new database.")
 
     conn = sqlite3.connect(str(db_path))
+    # Apply all PRAGMAs consistently (matches core/db_connection.py)
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA cache_size=-8000")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA mmap_size=268435456")
     cursor = conn.cursor()
 
     # 1. Create sync_state table
@@ -313,6 +319,45 @@ def migrate(db_path: Path = DB_PATH):
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_npe_name ON notion_people(name)")
     print("notion_people table: created/verified")
+
+    # 19. Embedding infrastructure (sqlite-vec)
+    # embedding_state: track model version and state
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS embedding_state (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    print("embedding_state table: created/verified")
+
+    # vec0 virtual tables require sqlite-vec extension
+    try:
+        import sqlite_vec
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+
+        cursor.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS vec_vault USING vec0(
+                embedding float[384],
+                +file_path TEXT,
+                +title TEXT,
+                +content_hash TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS vec_icor USING vec0(
+                embedding float[384],
+                +dimension TEXT,
+                +reference_text TEXT
+            )
+        """)
+        print("vec_vault + vec_icor virtual tables: created/verified")
+    except ImportError:
+        print("sqlite-vec not installed — skipping vec0 virtual tables (non-critical)")
+    except Exception as e:
+        print(f"vec0 table creation failed (non-critical): {e}")
 
     conn.commit()
     conn.close()
