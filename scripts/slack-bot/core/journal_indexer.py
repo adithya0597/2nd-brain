@@ -2,13 +2,13 @@
 import json
 import logging
 import re
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 
 import yaml
 
 import config
+from core.db_connection import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -179,35 +179,31 @@ def scan_daily_notes(vault_path: Path = None) -> list[dict]:
 
 def index_to_db(entries: list[dict], db_path: Path = None):
     """Write journal entries to SQLite (upsert by date)."""
-    db_path = db_path or config.DB_PATH
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    cursor = conn.cursor()
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
 
-    for entry in entries:
-        # Upsert: insert or update existing entry for the same date
-        cursor.execute(
-            "INSERT INTO journal_entries (date, content, mood, energy, icor_elements, summary, sentiment_score, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) "
-            "ON CONFLICT(date) DO UPDATE SET "
-            "content = excluded.content, mood = excluded.mood, energy = excluded.energy, "
-            "icor_elements = excluded.icor_elements, summary = excluded.summary, "
-            "sentiment_score = excluded.sentiment_score",
-            (
-                entry["date"],
-                entry["content"],
-                entry["mood"],
-                entry["energy"],
-                json.dumps(entry["icor_elements"]),
-                entry["summary"],
-                entry["sentiment_score"],
-            ),
-        )
+        for entry in entries:
+            # Upsert: insert or update existing entry for the same date
+            cursor.execute(
+                "INSERT INTO journal_entries (date, content, mood, energy, icor_elements, summary, sentiment_score, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) "
+                "ON CONFLICT(date) DO UPDATE SET "
+                "content = excluded.content, mood = excluded.mood, energy = excluded.energy, "
+                "icor_elements = excluded.icor_elements, summary = excluded.summary, "
+                "sentiment_score = excluded.sentiment_score",
+                (
+                    entry["date"],
+                    entry["content"],
+                    entry["mood"],
+                    entry["energy"],
+                    json.dumps(entry["icor_elements"]),
+                    entry["summary"],
+                    entry["sentiment_score"],
+                ),
+            )
 
-    conn.commit()
-    conn.close()
-    logger.info("Indexed %d journal entries to %s", len(entries), db_path)
+        conn.commit()
+    logger.info("Indexed %d journal entries to %s", len(entries), db_path or config.DB_PATH)
 
 
 def run_full_index(vault_path: Path = None, db_path: Path = None) -> int:

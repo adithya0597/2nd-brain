@@ -1,5 +1,6 @@
 """Vault file read/write operations."""
 import logging
+import os
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,9 @@ def _on_vault_write(file_path: Path):
     Errors are logged but never propagated — indexing failures should not
     break vault writes.
     """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+
     def _do_index():
         try:
             from core.vault_indexer import index_single_file
@@ -42,6 +46,18 @@ def _on_vault_write(file_path: Path):
             embed_single_file(file_path)
         except Exception:
             logger.debug("Incremental embedding failed for %s", file_path, exc_info=True)
+
+        try:
+            from core.icor_affinity import update_icor_edges_for_file
+            update_icor_edges_for_file(str(file_path.relative_to(config.VAULT_PATH)))
+        except Exception:
+            logger.debug("Incremental ICOR affinity failed for %s", file_path, exc_info=True)
+
+        try:
+            from core.graph_cache import invalidate as _invalidate_graph_cache
+            _invalidate_graph_cache()
+        except ImportError:
+            pass
 
     threading.Thread(target=_do_index, daemon=True).start()
 

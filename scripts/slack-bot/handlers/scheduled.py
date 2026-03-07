@@ -243,6 +243,16 @@ def job_dashboard_refresh(client: WebClient, channel_ids: dict):
                 text="Dashboard Refresh",
                 blocks=blocks,
             )
+
+        # Sprint 5: Run alert checks during dashboard refresh
+        try:
+            from core.alerts import run_all_checks
+            alert_result = run_all_checks()
+            if alert_result["total_new"] > 0:
+                logger.info("Alert checks: %d new alerts", alert_result["total_new"])
+        except Exception:
+            logger.warning("Alert checks failed during dashboard refresh", exc_info=True)
+
         _record_job_run("dashboard_refresh")
     except Exception:
         logger.exception("Dashboard refresh job failed")
@@ -303,7 +313,7 @@ def job_drift_report(client: WebClient, channel_ids: dict):
     try:
         logger.info("Running weekly drift report job")
         result = _call_claude("drift")
-        ch = channel_ids.get("brain-drift")
+        ch = channel_ids.get("brain-insights")
         if ch:
             _post_text(client, ch, result, header="Weekly Drift Report")
         _record_job_run("drift_report")
@@ -333,7 +343,7 @@ def job_weekly_project_summary(client: WebClient, channel_ids: dict):
     try:
         logger.info("Running weekly project summary job")
         result = _call_claude("projects")
-        ch = channel_ids.get("brain-projects")
+        ch = channel_ids.get("brain-daily")
         if ch:
             _post_text(client, ch, result, header="Weekly Project Summary")
         _record_job_run("weekly_project_summary")
@@ -349,7 +359,7 @@ def job_monthly_resource_digest(client: WebClient, channel_ids: dict):
     try:
         logger.info("Running monthly resource digest job")
         result = _call_claude("resources")
-        ch = channel_ids.get("brain-resources")
+        ch = channel_ids.get("brain-daily")
         if ch:
             _post_text(client, ch, result, header="Monthly Resource Digest")
         _record_job_run("monthly_resource_digest")
@@ -372,6 +382,16 @@ def job_vault_reindex(client: WebClient, channel_ids: dict):
             logger.info("FTS5 index populated: %d files", fts_count)
         except Exception as e:
             logger.warning("FTS5 population failed: %s", e)
+        # Sprint 3: Rebuild ICOR affinity edges + community detection
+        try:
+            from core.icor_affinity import rebuild_all_icor_edges
+            from core.community import update_community_ids
+            affinity_count = rebuild_all_icor_edges()
+            community_count = update_community_ids()
+            logger.info("Graph: %d affinity edges, %d community assignments",
+                        affinity_count, community_count)
+        except Exception as e:
+            logger.warning("ICOR affinity/community rebuild failed: %s", e)
         _record_job_run("vault_reindex")
     except Exception:
         logger.exception("Vault reindex job failed")
@@ -529,6 +549,43 @@ def job_db_backup(client: WebClient, channel_ids: dict):
         logger.exception("DB backup job failed")
 
 
+def job_daily_engagement(client: WebClient, channel_ids: dict):
+    """Daily 5:30am: Compute and store daily engagement metrics."""
+    try:
+        from core.engagement import compute_daily_metrics, save_daily_metrics
+        logger.info("Running daily engagement metrics job")
+        metrics = compute_daily_metrics()
+        save_daily_metrics(metrics)
+        logger.info("Engagement metrics saved: score=%.1f", metrics.get("engagement_score", 0))
+        _record_job_run("daily_engagement")
+    except Exception:
+        logger.exception("Daily engagement job failed")
+
+
+def job_dimension_signals(client: WebClient, channel_ids: dict):
+    """Daily 5:45am: Compute dimension momentum signals."""
+    try:
+        from core.dimension_signals import compute_dimension_signals
+        logger.info("Running dimension signals job")
+        signals = compute_dimension_signals()
+        logger.info("Dimension signals computed: %d dimensions", len(signals))
+        _record_job_run("dimension_signals")
+    except Exception:
+        logger.exception("Dimension signals job failed")
+
+
+def job_weekly_brain_level(client: WebClient, channel_ids: dict):
+    """Weekly Sunday 6:30pm: Compute Brain Level score."""
+    try:
+        from core.dimension_signals import compute_brain_level
+        logger.info("Running weekly brain level job")
+        result = compute_brain_level()
+        logger.info("Brain Level computed: level=%d", result.get("level", 0))
+        _record_job_run("weekly_brain_level")
+    except Exception:
+        logger.exception("Weekly brain level job failed")
+
+
 def job_resolve_pending_captures(client: WebClient, channel_ids: dict):
     """Every 5 min: auto-file pending captures that timed out."""
     try:
@@ -639,6 +696,15 @@ def register_schedules(app):
 
     # Daily 5am: Vault + journal re-index
     schedule.every().day.at("05:00").do(_run_job, job_vault_reindex, client, channel_ids)
+
+    # Daily 5:30am: Engagement metrics (after vault reindex)
+    schedule.every().day.at("05:30").do(_run_job, job_daily_engagement, client, channel_ids)
+
+    # Daily 5:45am: Dimension signals (after engagement)
+    schedule.every().day.at("05:45").do(_run_job, job_dimension_signals, client, channel_ids)
+
+    # Weekly Sunday 6:30pm: Brain Level score
+    schedule.every().sunday.at("18:30").do(_run_job, job_weekly_brain_level, client, channel_ids)
 
     # Every 5 min: Resolve timed-out pending captures
     schedule.every(5).minutes.do(_run_job, job_resolve_pending_captures, client, channel_ids)

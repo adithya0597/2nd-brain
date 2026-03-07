@@ -28,7 +28,7 @@ cfg_mock.CONFIDENCE_THRESHOLD = 0.60
 cfg_mock.BOUNCER_TIMEOUT_MINUTES = 15
 cfg_mock.EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 cfg_mock.EMBEDDING_DIM = 384
-sys.modules["config"] = cfg_mock
+sys.modules.setdefault("config", cfg_mock)
 sys.modules.setdefault("core.db_connection", MagicMock())
 sys.modules.setdefault("anthropic", MagicMock())
 

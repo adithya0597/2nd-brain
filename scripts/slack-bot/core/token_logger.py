@@ -1,7 +1,8 @@
 """API token usage logger — records token counts to SQLite for cost monitoring."""
 import logging
-import sqlite3
 from pathlib import Path
+
+from core.db_connection import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +73,9 @@ def log_token_usage(
 
         cost = _estimate_cost(model, input_tokens, output_tokens, cache_read, cache_create)
 
-        if db_path is None:
-            from config import DB_PATH
-            db_path = DB_PATH
+        db_path_resolved = Path(db_path) if db_path else None
 
-        conn = sqlite3.connect(str(db_path))
-        try:
+        with get_connection(db_path_resolved) as conn:
             conn.execute(
                 """INSERT INTO api_token_logs
                    (caller, model, input_tokens, output_tokens,
@@ -86,8 +84,6 @@ def log_token_usage(
                 (caller, model, input_tokens, output_tokens, cache_read, cache_create, cost),
             )
             conn.commit()
-        finally:
-            conn.close()
 
         return {
             "input_tokens": input_tokens,

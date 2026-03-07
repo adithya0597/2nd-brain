@@ -377,3 +377,57 @@ def search_similar(query_text: str, limit: int = 10, db_path: Path = None) -> li
         return []
     finally:
         conn.close()
+
+
+def get_file_embedding(file_path: str, db_path: Path = None) -> bytes | None:
+    """Get the raw embedding bytes for a vault file.
+
+    Args:
+        file_path: Relative path within the vault (e.g. ``"Daily Notes/2026-03-06.md"``).
+        db_path: Optional override for the database path.
+
+    Returns:
+        The serialized ``float[384]`` bytes, or ``None`` if not found or
+        if sqlite-vec is unavailable.
+    """
+    conn = _get_vec_connection(db_path)
+    if conn is None:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT embedding FROM vec_vault WHERE file_path = ?",
+            (file_path,),
+        ).fetchone()
+        return row["embedding"] if row else None
+    except Exception:
+        logger.debug("Failed to get embedding for %s", file_path, exc_info=True)
+        return None
+    finally:
+        conn.close()
+
+
+def get_icor_embeddings(db_path: Path = None) -> dict[str, list[bytes]]:
+    """Get all ICOR reference embeddings grouped by dimension.
+
+    Returns:
+        ``{dimension_name: [embedding_bytes, ...]}`` where each
+        ``embedding_bytes`` is a serialized ``float[384]`` vector.
+        Returns ``{}`` if sqlite-vec is unavailable or no ICOR
+        embeddings have been seeded.
+    """
+    conn = _get_vec_connection(db_path)
+    if conn is None:
+        return {}
+    try:
+        rows = conn.execute(
+            "SELECT dimension, embedding FROM vec_icor ORDER BY dimension"
+        ).fetchall()
+        result: dict[str, list[bytes]] = {}
+        for row in rows:
+            result.setdefault(row["dimension"], []).append(row["embedding"])
+        return result
+    except Exception:
+        logger.debug("Failed to get ICOR embeddings", exc_info=True)
+        return {}
+    finally:
+        conn.close()

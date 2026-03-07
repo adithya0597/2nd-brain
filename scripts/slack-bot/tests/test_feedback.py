@@ -343,14 +343,14 @@ class TestHandleDimensionSelect:
         assert "Health & Vitality" in text
         assert "Mind & Growth" in text
 
-    def test_reroutes_capture_to_correct_dimension_channel(self):
+    def test_logs_corrected_capture_to_captures_log(self):
+        """Corrected capture should INSERT into captures_log (not post to channel)."""
         mock_query = MagicMock(return_value=[{"message_text": "My health update"}])
         mock_execute = MagicMock(return_value=None)
 
         with patch.object(fb_mod, "query", mock_query), \
              patch.object(fb_mod, "execute", mock_execute), \
-             patch.object(fb_mod, "run_async", side_effect=lambda c: c), \
-             patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"}):
+             patch.object(fb_mod, "run_async", side_effect=lambda c: c):
 
             ack = MagicMock()
             client = MagicMock()
@@ -363,13 +363,10 @@ class TestHandleDimensionSelect:
 
             handle_dimension_select(ack, body, client)
 
-            client.chat_postMessage.assert_called_once()
-            post_kwargs = client.chat_postMessage.call_args[1]
-            assert post_kwargs["channel"] == "C_HEALTH"
-            assert "My health update" in post_kwargs["text"]
-            blocks = post_kwargs["blocks"]
-            section_text = blocks[0]["text"]["text"]
-            assert "corrected" in section_text.lower()
+            # Should NOT post to dimension channel (channels consolidated)
+            client.chat_postMessage.assert_not_called()
+            # Should have called execute for captures_log insert
+            assert mock_execute.call_count >= 1
 
     @patch("handlers.commands._channel_ids", {})
     @patch("handlers.feedback.run_async")
@@ -508,14 +505,14 @@ class TestHandleDimensionSelect:
         text = context_blocks[0]["elements"][0]["text"]
         assert "none" in text
 
-    def test_reroute_block_includes_feedback_context(self):
+    def test_captures_log_insert_uses_user_corrected_method(self):
+        """Captures_log insert should use 'user_corrected' method."""
         mock_query = MagicMock(return_value=[{"message_text": "Weekly gym session"}])
         mock_execute = MagicMock(return_value=None)
 
         with patch.object(fb_mod, "query", mock_query), \
              patch.object(fb_mod, "execute", mock_execute), \
-             patch.object(fb_mod, "run_async", side_effect=lambda c: c), \
-             patch("handlers.commands._channel_ids", {"brain-health": "C_HEALTH"}):
+             patch.object(fb_mod, "run_async", side_effect=lambda c: c):
 
             ack = MagicMock()
             client = MagicMock()
@@ -528,8 +525,9 @@ class TestHandleDimensionSelect:
 
             handle_dimension_select(ack, body, client)
 
-            post_kwargs = client.chat_postMessage.call_args[1]
-            blocks = post_kwargs["blocks"]
-            context_blocks = [b for b in blocks if b.get("type") == "context"]
-            assert len(context_blocks) == 1
-            assert "feedback" in context_blocks[0]["elements"][0]["text"].lower()
+            # Find the captures_log INSERT call
+            insert_calls = [
+                c for c in mock_execute.call_args_list
+                if "captures_log" in str(c)
+            ]
+            assert len(insert_calls) >= 1, "Should have inserted into captures_log"

@@ -1,4 +1,9 @@
-"""Vault file indexer: scan markdown files, extract links/tags, build graph."""
+"""Vault file indexer: scan markdown files, extract links/tags, build graph.
+
+Uses vault_nodes + vault_edges graph schema via graph_ops module.
+The vault_index VIEW provides backward compatibility for callers expecting
+the old JSON-column format.
+"""
 import json
 import logging
 import re
@@ -9,6 +14,13 @@ from pathlib import Path
 import yaml
 
 import config
+from core.db_connection import get_connection
+from core.graph_ops import (
+    get_neighbors,
+    get_node_by_title,
+    rebuild_wikilink_edges_for_node,
+    upsert_node,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +58,40 @@ def _title_from_path(path: Path) -> str:
     return path.stem
 
 
+def _parse_single_file(md_file: Path, vault_path: Path) -> dict | None:
+    """Parse a single markdown file and extract metadata.
+
+    Returns a dict with file_path, title, type, frontmatter, outgoing_links,
+    tags, word_count, last_modified -- or None if the file can't be read.
+    """
+    rel = md_file.relative_to(vault_path)
+    if any(part.startswith(".") for part in rel.parts):
+        return None
+
+    try:
+        content = md_file.read_text(encoding="utf-8")
+    except Exception:
+        logger.warning("Could not read %s", md_file)
+        return None
+
+    fm = _extract_frontmatter(content)
+    links = _extract_wikilinks(content)
+    tags = _extract_tags(content)
+    word_count = len(content.split())
+    mtime = datetime.fromtimestamp(md_file.stat().st_mtime).isoformat()
+
+    return {
+        "file_path": str(rel),
+        "title": fm.get("title") or _title_from_path(md_file),
+        "type": fm.get("type", ""),
+        "frontmatter": fm,
+        "outgoing_links": links,
+        "tags": tags,
+        "word_count": word_count,
+        "last_modified": mtime,
+    }
+
+
 def scan_vault(vault_path: Path = None) -> list[dict]:
     """Scan all markdown files in the vault and extract metadata.
 
@@ -56,33 +102,9 @@ def scan_vault(vault_path: Path = None) -> list[dict]:
     results = []
 
     for md_file in sorted(vault_path.rglob("*.md")):
-        # Skip hidden directories and .obsidian
-        rel = md_file.relative_to(vault_path)
-        if any(part.startswith(".") for part in rel.parts):
-            continue
-
-        try:
-            content = md_file.read_text(encoding="utf-8")
-        except Exception:
-            logger.warning("Could not read %s", md_file)
-            continue
-
-        fm = _extract_frontmatter(content)
-        links = _extract_wikilinks(content)
-        tags = _extract_tags(content)
-        word_count = len(content.split())
-        mtime = datetime.fromtimestamp(md_file.stat().st_mtime).isoformat()
-
-        results.append({
-            "file_path": str(rel),
-            "title": fm.get("title") or _title_from_path(md_file),
-            "type": fm.get("type", ""),
-            "frontmatter": fm,
-            "outgoing_links": links,
-            "tags": tags,
-            "word_count": word_count,
-            "last_modified": mtime,
-        })
+        entry = _parse_single_file(md_file, vault_path)
+        if entry:
+            results.append(entry)
 
     return results
 
@@ -100,69 +122,134 @@ def build_link_graph(entries: list[dict]) -> dict[str, list[str]]:
 
 
 def index_to_db(entries: list[dict], incoming: dict[str, list[str]], db_path: Path = None):
-    """Write vault index entries to SQLite.
+    """Write vault index entries to the graph schema (vault_nodes + vault_edges).
 
-    Creates/replaces the vault_index table with current scan results.
+    Replaces all document nodes and rebuilds wikilink edges from scratch.
+    The incoming parameter is accepted for API compatibility but is no longer
+    used -- edges encode the incoming/outgoing relationship directly.
     """
-    db_path = db_path or config.DB_PATH
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    cursor = conn.cursor()
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
 
-    # Ensure table exists
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS vault_index (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_path TEXT UNIQUE NOT NULL,
-            title TEXT NOT NULL,
-            type TEXT DEFAULT '',
-            frontmatter_json TEXT DEFAULT '{}',
-            outgoing_links_json TEXT DEFAULT '[]',
-            incoming_links_json TEXT DEFAULT '[]',
-            tags_json TEXT DEFAULT '[]',
-            word_count INTEGER DEFAULT 0,
-            last_modified TEXT,
-            indexed_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_index(title)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_index(type)")
+        # Use a transaction so interrupted reindex doesn't leave an empty graph
+        conn.execute("BEGIN")
 
-    # Use a transaction so interrupted reindex doesn't leave an empty table
-    conn.execute("BEGIN")
-    try:
-        cursor.execute("DELETE FROM vault_index")
+        # Delete all existing document nodes (cascaded FK deletes their edges)
+        cursor.execute("DELETE FROM vault_nodes WHERE node_type = 'document'")
 
+        # Phase 1: Insert all nodes, collecting node_ids by file_path
+        node_ids: dict[str, int] = {}
         for entry in entries:
-            title = entry["title"]
-            incoming_links = incoming.get(title, [])
+            frontmatter_json = json.dumps(entry["frontmatter"], default=str)
+            tags_json = json.dumps(entry["tags"])
 
             cursor.execute(
-                "INSERT INTO vault_index "
-                "(file_path, title, type, frontmatter_json, outgoing_links_json, "
-                "incoming_links_json, tags_json, word_count, last_modified) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                """INSERT INTO vault_nodes
+                   (file_path, title, type, frontmatter_json, tags_json,
+                    word_count, last_modified, indexed_at, node_type)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), 'document')
+                """,
                 (
                     entry["file_path"],
-                    title,
+                    entry["title"],
                     entry["type"],
-                    json.dumps(entry["frontmatter"], default=str),
-                    json.dumps(entry["outgoing_links"]),
-                    json.dumps(incoming_links),
-                    json.dumps(entry["tags"]),
+                    frontmatter_json,
+                    tags_json,
                     entry["word_count"],
                     entry["last_modified"],
                 ),
             )
+            node_ids[entry["file_path"]] = cursor.lastrowid
+
+        # Phase 2: Build title -> node_id lookup for edge resolution
+        #   Includes all node types (document + icor_dimension) so wikilinks
+        #   pointing at ICOR dimension nodes also resolve correctly.
+        title_to_id: dict[str, int] = {}
+        cursor.execute("SELECT id, title FROM vault_nodes")
+        for row_id, row_title in cursor.fetchall():
+            title_to_id[row_title] = row_id
+
+        # Phase 3: Create wikilink edges for each entry
+        edge_count = 0
+        for entry in entries:
+            source_id = node_ids.get(entry["file_path"])
+            if source_id is None:
+                continue
+
+            for link_title in entry["outgoing_links"]:
+                target_id = title_to_id.get(link_title)
+                if target_id and target_id != source_id:
+                    cursor.execute(
+                        """INSERT OR IGNORE INTO vault_edges
+                           (source_node_id, target_node_id, edge_type, weight)
+                           VALUES (?, ?, 'wikilink', 1.0)
+                        """,
+                        (source_id, target_id),
+                    )
+                    edge_count += cursor.rowcount
 
         conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-    logger.info("Indexed %d vault files to %s", len(entries), db_path)
+
+    logger.info(
+        "Indexed %d vault files (%d wikilink edges) to %s",
+        len(entries), edge_count, db_path or config.DB_PATH,
+    )
+
+
+def index_single_file(file_path: Path, vault_path: Path = None, db_path: Path = None):
+    """Incrementally index a single vault file.
+
+    This is the event-driven alternative to a file watcher. Called by
+    vault_ops post-write hooks after any vault write operation.
+
+    Steps:
+    1. Parse the single file for metadata, links, tags
+    2. Upsert its node in vault_nodes via graph_ops
+    3. Rebuild outgoing wikilink edges for this node
+    4. Invalidate graph cache
+    """
+    vault_path = vault_path or config.VAULT_PATH
+
+    # Make sure file_path is absolute
+    if not file_path.is_absolute():
+        file_path = vault_path / file_path
+
+    if not file_path.exists():
+        logger.warning("index_single_file: file not found: %s", file_path)
+        return
+
+    entry = _parse_single_file(file_path, vault_path)
+    if not entry:
+        return
+
+    # 1. Upsert the node
+    node_id = upsert_node(
+        file_path=entry["file_path"],
+        title=entry["title"],
+        type=entry["type"],
+        frontmatter=entry["frontmatter"],
+        tags=entry["tags"],
+        word_count=entry["word_count"],
+        last_modified=entry["last_modified"],
+        node_type="document",
+        db_path=db_path,
+    )
+
+    # 2. Rebuild outgoing wikilink edges (deletes old edges, creates new ones)
+    rebuild_wikilink_edges_for_node(
+        node_id=node_id,
+        outgoing_links=entry["outgoing_links"],
+        db_path=db_path,
+    )
+
+    # 3. Invalidate graph cache
+    try:
+        from core.graph_cache import invalidate as _invalidate_graph_cache
+        _invalidate_graph_cache()
+    except ImportError:
+        pass
+
+    logger.info("Incrementally indexed: %s", entry["file_path"])
 
 
 def run_full_index(vault_path: Path = None, db_path: Path = None) -> int:
@@ -189,64 +276,100 @@ def get_linked_files(
     depth: int = 2,
     db_path: Path = None,
 ) -> list[dict]:
-    """Walk the link graph from seed titles up to N hops.
+    """Walk the link graph from seed titles up to N hops via vault_edges.
 
-    Returns a list of vault_index rows reachable from the seeds,
-    ordered by distance (closest first).
+    Returns a list of vault_index-compatible row dicts reachable from the
+    seeds, ordered by distance (closest first). Each dict includes a ``_hop``
+    field indicating the number of hops from the nearest seed.
     """
-    db_path = db_path or config.DB_PATH
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        cursor = conn.cursor()
 
-    visited: set[str] = set()
-    results: list[dict] = []
-    frontier = set(seed_titles)
+        # Resolve seed titles to node IDs
+        if not seed_titles:
+            return []
 
-    for hop in range(depth + 1):
-        if not frontier:
-            break
-
-        placeholders = ",".join("?" for _ in frontier)
+        placeholders = ",".join("?" for _ in seed_titles)
         cursor.execute(
-            f"SELECT * FROM vault_index WHERE title IN ({placeholders})",
-            list(frontier),
+            f"SELECT id, title FROM vault_nodes WHERE title IN ({placeholders})",
+            list(seed_titles),
         )
-        rows = [dict(r) for r in cursor.fetchall()]
+        seed_rows = cursor.fetchall()
 
-        next_frontier: set[str] = set()
-        all_incoming_fps: set[str] = set()
-        for row in rows:
-            title = row["title"]
-            if title in visited:
-                continue
-            visited.add(title)
-            row["_hop"] = hop
-            results.append(row)
+        if not seed_rows:
+            return []
 
-            # Expand outgoing and incoming links
-            outgoing = json.loads(row.get("outgoing_links_json", "[]"))
-            incoming = json.loads(row.get("incoming_links_json", "[]"))
-            all_incoming_fps.update(incoming)
-            for link_title in outgoing:
-                next_frontier.add(link_title)
+        # Collect seed node IDs and mark them as visited
+        visited_ids: set[int] = set()
+        results: list[dict] = []
 
-        # Batch-resolve incoming file paths to titles (single query)
-        if all_incoming_fps:
-            fps_list = list(all_incoming_fps)
-            placeholders = ",".join("?" for _ in fps_list)
+        # Add seed nodes themselves at hop 0
+        seed_ids: list[int] = []
+        for row in seed_rows:
+            nid = row["id"]
+            seed_ids.append(nid)
+            visited_ids.add(nid)
+
+            # Fetch the seed node's vault_index-compatible row
             cursor.execute(
-                f"SELECT file_path, title FROM vault_index WHERE file_path IN ({placeholders})",
-                fps_list,
+                "SELECT * FROM vault_index WHERE id = ?", (nid,)
             )
-            for fp_row in cursor.fetchall():
-                next_frontier.add(fp_row["title"])
+            vi_row = cursor.fetchone()
+            if vi_row:
+                d = dict(vi_row)
+                d["_hop"] = 0
+                results.append(d)
 
-        frontier = next_frontier - visited
+        # BFS expansion using graph_ops.get_neighbors for each seed
+        # We do a combined BFS across all seeds using edge queries directly
+        frontier: set[int] = set(seed_ids)
 
-    conn.close()
+        for hop in range(1, depth + 1):
+            if not frontier:
+                break
+
+            next_frontier: set[int] = set()
+
+            for nid in frontier:
+                # Outgoing neighbors via wikilink edges
+                for row in conn.execute(
+                    "SELECT n.id FROM vault_edges e "
+                    "JOIN vault_nodes n ON e.target_node_id = n.id "
+                    "WHERE e.source_node_id = ? AND e.edge_type = 'wikilink'",
+                    (nid,),
+                ).fetchall():
+                    rid = row["id"]
+                    if rid not in visited_ids:
+                        visited_ids.add(rid)
+                        next_frontier.add(rid)
+
+                # Incoming neighbors via wikilink edges
+                for row in conn.execute(
+                    "SELECT n.id FROM vault_edges e "
+                    "JOIN vault_nodes n ON e.source_node_id = n.id "
+                    "WHERE e.target_node_id = ? AND e.edge_type = 'wikilink'",
+                    (nid,),
+                ).fetchall():
+                    rid = row["id"]
+                    if rid not in visited_ids:
+                        visited_ids.add(rid)
+                        next_frontier.add(rid)
+
+            # Batch-fetch vault_index rows for all newly discovered nodes
+            if next_frontier:
+                nf_list = list(next_frontier)
+                ph = ",".join("?" for _ in nf_list)
+                cursor.execute(
+                    f"SELECT * FROM vault_index WHERE id IN ({ph})",
+                    nf_list,
+                )
+                for vi_row in cursor.fetchall():
+                    d = dict(vi_row)
+                    d["_hop"] = hop
+                    results.append(d)
+
+            frontier = next_frontier
+
     return results
 
 
@@ -254,25 +377,49 @@ def find_files_mentioning(
     topic: str,
     db_path: Path = None,
 ) -> list[dict]:
-    """Find vault files whose content mentions a topic (via title or link)."""
-    db_path = db_path or config.DB_PATH
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    """Find vault files whose content mentions a topic (via title, links, or tags).
 
-    # Search by title match, outgoing links containing topic, or tags
-    cursor.execute(
-        "SELECT * FROM vault_index WHERE "
-        "title LIKE ? OR "
-        "outgoing_links_json LIKE ? OR "
-        "tags_json LIKE ?",
-        (f"%{topic}%", f"%{topic}%", f"%{topic}%"),
-    )
-    results = [dict(r) for r in cursor.fetchall()]
-    conn.close()
-    return results
+    Uses vault_nodes for title/tag matching and vault_edges for link-based
+    discovery. Returns vault_index-compatible row dicts.
+    """
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        cursor = conn.cursor()
+
+        # 1. Find nodes whose title matches the topic
+        cursor.execute(
+            "SELECT id FROM vault_nodes WHERE title LIKE ? AND node_type = 'document'",
+            (f"%{topic}%",),
+        )
+        matching_ids: set[int] = {row["id"] for row in cursor.fetchall()}
+
+        # 2. Find nodes whose tags match the topic
+        cursor.execute(
+            "SELECT id FROM vault_nodes WHERE tags_json LIKE ? AND node_type = 'document'",
+            (f"%{topic}%",),
+        )
+        matching_ids.update(row["id"] for row in cursor.fetchall())
+
+        # 3. Find nodes that link TO a node whose title matches the topic
+        #    (i.e., they have an outgoing wikilink edge to a topic-matching node)
+        cursor.execute(
+            "SELECT DISTINCT e.source_node_id FROM vault_edges e "
+            "JOIN vault_nodes target ON e.target_node_id = target.id "
+            "WHERE e.edge_type = 'wikilink' AND target.title LIKE ?",
+            (f"%{topic}%",),
+        )
+        matching_ids.update(row["source_node_id"] for row in cursor.fetchall())
+
+        if not matching_ids:
+            return []
+
+        # Fetch vault_index-compatible rows for all matching nodes
+        id_list = list(matching_ids)
+        placeholders = ",".join("?" for _ in id_list)
+        cursor.execute(
+            f"SELECT * FROM vault_index WHERE id IN ({placeholders})",
+            id_list,
+        )
+        return [dict(r) for r in cursor.fetchall()]
 
 
 def find_intersection_nodes(
@@ -287,38 +434,26 @@ def find_intersection_nodes(
     # Direct intersection
     shared = files_a & files_b
     if shared:
-        db_path = db_path or config.DB_PATH
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.row_factory = sqlite3.Row
-        placeholders = ",".join("?" for _ in shared)
-        cursor = conn.execute(
-            f"SELECT * FROM vault_index WHERE title IN ({placeholders})",
-            list(shared),
-        )
-        results = [dict(r) for r in cursor.fetchall()]
-        conn.close()
-        return results
+        with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+            placeholders = ",".join("?" for _ in shared)
+            cursor = conn.execute(
+                f"SELECT * FROM vault_index WHERE title IN ({placeholders})",
+                list(shared),
+            )
+            return [dict(r) for r in cursor.fetchall()]
 
     # Try 1-hop neighbors
     linked_a = {r["title"] for r in get_linked_files(list(files_a)[:10], depth=1, db_path=db_path)}
     linked_b = {r["title"] for r in get_linked_files(list(files_b)[:10], depth=1, db_path=db_path)}
     bridge = linked_a & linked_b
     if bridge:
-        db_path = db_path or config.DB_PATH
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.row_factory = sqlite3.Row
-        placeholders = ",".join("?" for _ in bridge)
-        cursor = conn.execute(
-            f"SELECT * FROM vault_index WHERE title IN ({placeholders})",
-            list(bridge),
-        )
-        results = [dict(r) for r in cursor.fetchall()]
-        conn.close()
-        return results
+        with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+            placeholders = ",".join("?" for _ in bridge)
+            cursor = conn.execute(
+                f"SELECT * FROM vault_index WHERE title IN ({placeholders})",
+                list(bridge),
+            )
+            return [dict(r) for r in cursor.fetchall()]
 
     return []
 

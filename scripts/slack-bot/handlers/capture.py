@@ -323,105 +323,28 @@ def _process_capture(client, event, channel_ids: dict):
         # Log classification to DB
         _log_classification(text, ts, result)
 
-        # --- Slack routing (only if classified) ---
-        target_channel_names = []
+        # --- Log to captures_log (replaces dimension channel routing) ---
         if dimensions:
-            for i, dim in enumerate(dimensions):
-                ch_name = DIMENSION_CHANNELS.get(dim, "brain-systems")
-                target_channel_names.append(ch_name)
-                ch_id = channel_ids.get(ch_name)
-                if not ch_id:
-                    continue
-
-                label = "Primary" if i == 0 else "Also relevant"
-                client.chat_postMessage(
-                    channel=ch_id,
-                    text=f"*New capture from inbox:*\n> {text}",
-                    blocks=[
-                        {
-                            "type": "section",
-                            "text": {
-                                "type": "mrkdwn",
-                                "text": f"*New capture from inbox:*\n> {text}",
-                            },
-                        },
-                        {
-                            "type": "context",
-                            "elements": [
-                                {
-                                    "type": "mrkdwn",
-                                    "text": (
-                                        f"{label} | Routed from #brain-inbox | {today} | "
-                                        f"{method} ({confidence:.0%})"
-                                    ),
-                                }
-                            ],
-                        },
-                    ],
-                )
-
-        # Cross-post to PARA channels if keywords match
-        primary_channel = target_channel_names[0] if target_channel_names else "brain-inbox"
-        if _detect_project_mention(text):
-            projects_ch = channel_ids.get("brain-projects")
-            if projects_ch:
-                client.chat_postMessage(
-                    channel=projects_ch,
-                    text="Project-related capture from inbox",
-                    blocks=[
-                        {
-                            "type": "section",
-                            "text": {
-                                "type": "mrkdwn",
-                                "text": f":file_folder: *Project-related capture:*\n> {text}",
-                            },
-                        },
-                        {
-                            "type": "context",
-                            "elements": [
-                                {
-                                    "type": "mrkdwn",
-                                    "text": f"Cross-posted from #brain-inbox → #{primary_channel} | {today}",
-                                }
-                            ],
-                        },
-                    ],
-                )
-
-        if _detect_resource_mention(text):
-            resources_ch = channel_ids.get("brain-resources")
-            if resources_ch:
-                client.chat_postMessage(
-                    channel=resources_ch,
-                    text="Resource-related capture from inbox",
-                    blocks=[
-                        {
-                            "type": "section",
-                            "text": {
-                                "type": "mrkdwn",
-                                "text": f":books: *Resource-related capture:*\n> {text}",
-                            },
-                        },
-                        {
-                            "type": "context",
-                            "elements": [
-                                {
-                                    "type": "mrkdwn",
-                                    "text": f"Cross-posted from #brain-inbox → #{primary_channel} | {today}",
-                                }
-                            ],
-                        },
-                    ],
-                )
+            import json as _json
+            try:
+                run_async(execute(
+                    "INSERT INTO captures_log "
+                    "(message_text, dimensions_json, confidence, method, is_actionable, source_channel) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (text, _json.dumps(dimensions), confidence, method,
+                     1 if result.is_actionable else 0, "brain-inbox"),
+                ))
+            except Exception:
+                logger.exception("Failed to log capture to captures_log")
 
         # Reply in thread in #brain-inbox
-        blocks = format_capture_confirmation(text, dimensions, target_channel_names)
+        blocks = format_capture_confirmation(text, dimensions, [])
         # Append feedback buttons
         blocks.extend(_build_feedback_buttons(ts, dimensions))
 
         summary_text = (
-            f"Captured and routed to {', '.join('#' + c for c in target_channel_names)}"
-            if target_channel_names
+            f"Captured: {' + '.join(dimensions)}"
+            if dimensions
             else "Captured to inbox (uncategorized)"
         )
         client.chat_postMessage(
@@ -448,42 +371,22 @@ def _process_capture(client, event, channel_ids: dict):
 def _process_bouncer_resolution(client, text: str, ts: str, dimension: str, inbox_channel: str):
     """Complete routing for a bounced capture after user clarification."""
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
+        import json as _json
 
-        # Route to the correct dimension channel
-        from handlers.commands import _channel_ids as cmd_channel_ids
-
-        ch_name = DIMENSION_CHANNELS.get(dimension, "brain-systems")
-        ch_id = cmd_channel_ids.get(ch_name)
-
-        if ch_id:
-            client.chat_postMessage(
-                channel=ch_id,
-                text=f"*Capture (user-clarified):*\n> {text}",
-                blocks=[
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f"*Capture (user-clarified):*\n> {text}",
-                        },
-                    },
-                    {
-                        "type": "context",
-                        "elements": [{
-                            "type": "mrkdwn",
-                            "text": f"User selected *{dimension}* | {today}",
-                        }],
-                    },
-                ],
-            )
+        # Log to captures_log (replaces dimension channel routing)
+        run_async(execute(
+            "INSERT INTO captures_log "
+            "(message_text, dimensions_json, confidence, method, is_actionable, source_channel) "
+            "VALUES (?, ?, 1.0, 'user_clarified', 0, ?)",
+            (text, _json.dumps([dimension]), "brain-inbox"),
+        ))
 
         # Reply in inbox thread
         if inbox_channel:
             client.chat_postMessage(
                 channel=inbox_channel,
                 thread_ts=ts,
-                text=f"Routed to #{ch_name} (user-clarified)",
+                text=f"Filed to {dimension} (user-clarified)",
             )
 
         # Update classification record

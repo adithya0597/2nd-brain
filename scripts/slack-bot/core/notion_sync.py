@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from core import db_ops
+from core import db_ops, sync_outbox
 from core.notion_client import NotionClientWrapper
 from core.notion_mappers import (
     action_to_notion_task,
@@ -373,24 +373,34 @@ class NotionSync:
 
         tasks_db_id = _strip_collection(self._collections["tasks"])
 
+        # Phase 1: Enqueue all unpushed items into the outbox
         for action in actions:
+            payload = json.dumps({
+                "id": action["id"],
+                "description": action.get("description", ""),
+                "source_file": action.get("source_file"),
+                "source_date": action.get("source_date"),
+                "icor_element": action.get("icor_element"),
+                "icor_project": action.get("icor_project"),
+                "status": action.get("status"),
+            })
+            await sync_outbox.enqueue(
+                "action_item", str(action["id"]), "create", payload,
+                db_path=self._db_path,
+            )
+
+        if self._dry_run:
+            self._result.dry_run_actions.extend(
+                f"Would push action: {a.get('description', '')[:50]}" for a in actions
+            )
+            self._result.tasks_pushed += len(actions)
+            return
+
+        # Phase 2: Dequeue and process
+        batch = await sync_outbox.dequeue_batch(db_path=self._db_path)
+        for item in batch:
             try:
-                # Mark push attempt before calling Notion to prevent duplicates on crash
-                await db_ops.execute(
-                    "UPDATE action_items SET push_attempted_at = datetime('now') WHERE id = ?",
-                    (action["id"],),
-                    db_path=self._db_path,
-                )
-                if self._dry_run:
-                    self._result.dry_run_actions.append(f"Would push action: {action.get('description', '')[:50]}")
-                    self._result.tasks_pushed += 1
-                    # Reset push_attempted_at since we didn't actually push
-                    await db_ops.execute(
-                        "UPDATE action_items SET push_attempted_at = NULL WHERE id = ?",
-                        (action["id"],),
-                        db_path=self._db_path,
-                    )
-                    continue
+                action = json.loads(item["payload_json"])
                 props = action_to_notion_task(action, self._registry.data)
                 page = await self._client.create_page(
                     parent={"data_source_id": tasks_db_id},
@@ -398,6 +408,9 @@ class NotionSync:
                 )
                 await db_ops.update_action_external(
                     action["id"], page["id"], db_path=self._db_path
+                )
+                await sync_outbox.confirm(
+                    item["id"], page["id"], db_path=self._db_path
                 )
                 await db_ops.log_sync_operation(
                     "push_task",
@@ -410,18 +423,12 @@ class NotionSync:
                 self._result.tasks_pushed += 1
 
             except Exception as e:
-                msg = f"Push task failed for action {action.get('id', '?')}: {e}"
+                msg = f"Push task failed for action {item.get('entity_id', '?')}: {e}"
                 logger.warning(msg)
                 self._result.warnings.append(msg)
-                # Reset push_attempted_at so the item retries on next sync
-                try:
-                    await db_ops.execute(
-                        "UPDATE action_items SET push_attempted_at = NULL WHERE id = ?",
-                        (action["id"],),
-                        db_path=self._db_path,
-                    )
-                except Exception:
-                    logger.warning("Could not reset push_attempted_at for action %s", action.get("id"))
+                await sync_outbox.fail(
+                    item["id"], str(e), db_path=self._db_path
+                )
 
         await db_ops.update_sync_state(
             "tasks",
@@ -583,28 +590,43 @@ class NotionSync:
 
         notes_db_id = _strip_collection(self._collections["notes"])
 
+        # Phase 1: Enqueue all unsynced entries
         for entry in entries:
+            payload = json.dumps({
+                "date": entry.get("date"),
+                "content": entry.get("content"),
+                "mood": entry.get("mood"),
+                "energy": entry.get("energy"),
+                "icor_elements": entry.get("icor_elements"),
+                "summary": entry.get("summary"),
+                "sentiment_score": entry.get("sentiment_score"),
+            })
+            await sync_outbox.enqueue(
+                "journal", entry["date"], "create", payload,
+                db_path=self._db_path,
+            )
+
+        if self._dry_run:
+            self._result.dry_run_actions.extend(
+                f"Would push journal: {e['date']}" for e in entries
+            )
+            self._result.notes_pushed += len(entries)
+            return
+
+        # Phase 2: Dequeue and process
+        batch = await sync_outbox.dequeue_batch(db_path=self._db_path)
+        for item in batch:
+            if item["entity_type"] != "journal":
+                continue
             try:
-                # Mark push attempt before calling Notion to prevent duplicates on crash
-                await db_ops.execute(
-                    "UPDATE journal_entries SET push_attempted_at = datetime('now') WHERE date = ?",
-                    (entry["date"],),
-                    db_path=self._db_path,
-                )
-                if self._dry_run:
-                    self._result.dry_run_actions.append(f"Would push journal: {entry['date']}")
-                    self._result.notes_pushed += 1
-                    # Reset push_attempted_at since we didn't actually push
-                    await db_ops.execute(
-                        "UPDATE journal_entries SET push_attempted_at = NULL WHERE date = ?",
-                        (entry["date"],),
-                        db_path=self._db_path,
-                    )
-                    continue
+                entry = json.loads(item["payload_json"])
                 props = journal_to_notion_note(entry, self._registry.data)
-                await self._client.create_page(
+                page = await self._client.create_page(
                     parent={"data_source_id": notes_db_id},
                     properties=props,
+                )
+                await sync_outbox.confirm(
+                    item["id"], page["id"], db_path=self._db_path
                 )
                 await db_ops.log_sync_operation(
                     "push_journal",
@@ -617,18 +639,12 @@ class NotionSync:
                 self._result.notes_pushed += 1
 
             except Exception as e:
-                msg = f"Push journal failed for date {entry.get('date', '?')}: {e}"
+                msg = f"Push journal failed for date {item.get('entity_id', '?')}: {e}"
                 logger.warning(msg)
                 self._result.warnings.append(msg)
-                # Reset push_attempted_at so the entry retries on next sync
-                try:
-                    await db_ops.execute(
-                        "UPDATE journal_entries SET push_attempted_at = NULL WHERE date = ?",
-                        (entry["date"],),
-                        db_path=self._db_path,
-                    )
-                except Exception:
-                    logger.warning("Could not reset push_attempted_at for journal %s", entry.get("date"))
+                await sync_outbox.fail(
+                    item["id"], str(e), db_path=self._db_path
+                )
 
         if self._result.notes_pushed > 0:
             await db_ops.update_sync_state(
@@ -650,12 +666,36 @@ class NotionSync:
 
         notes_db_id = _strip_collection(self._collections["notes"])
 
+        # Phase 1: Enqueue all unsynced concepts
         for concept in concepts:
+            payload = json.dumps({
+                "id": concept["id"],
+                "name": concept.get("name", ""),
+                "file_path": concept.get("file_path"),
+                "status": concept.get("status"),
+                "mention_count": concept.get("mention_count"),
+                "last_mentioned": concept.get("last_mentioned"),
+                "icor_elements": concept.get("icor_elements"),
+            })
+            await sync_outbox.enqueue(
+                "concept", str(concept["id"]), "create", payload,
+                db_path=self._db_path,
+            )
+
+        if self._dry_run:
+            self._result.dry_run_actions.extend(
+                f"Would push concept: {c.get('name', '')}" for c in concepts
+            )
+            self._result.concepts_pushed += len(concepts)
+            return
+
+        # Phase 2: Dequeue and process
+        batch = await sync_outbox.dequeue_batch(db_path=self._db_path)
+        for item in batch:
+            if item["entity_type"] != "concept":
+                continue
             try:
-                if self._dry_run:
-                    self._result.dry_run_actions.append(f"Would push concept: {concept.get('name', '')}")
-                    self._result.concepts_pushed += 1
-                    continue
+                concept = json.loads(item["payload_json"])
                 props = concept_to_notion_note(concept, self._registry.data)
                 page = await self._client.create_page(
                     parent={"data_source_id": notes_db_id},
@@ -663,6 +703,9 @@ class NotionSync:
                 )
                 await db_ops.update_concept_notion_id(
                     concept["id"], page["id"], db_path=self._db_path
+                )
+                await sync_outbox.confirm(
+                    item["id"], page["id"], db_path=self._db_path
                 )
                 await db_ops.log_sync_operation(
                     "push_concept",
@@ -675,9 +718,12 @@ class NotionSync:
                 self._result.concepts_pushed += 1
 
             except Exception as e:
-                msg = f"Push concept failed for '{concept.get('name', '?')}': {e}"
+                msg = f"Push concept failed for '{item.get('entity_id', '?')}': {e}"
                 logger.warning(msg)
                 self._result.warnings.append(msg)
+                await sync_outbox.fail(
+                    item["id"], str(e), db_path=self._db_path
+                )
 
         await db_ops.update_sync_state(
             "concepts",

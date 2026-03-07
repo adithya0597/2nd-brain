@@ -161,26 +161,19 @@ def register(app: App):
                     text=f"Corrected to {correct_dim}",
                 )
 
-            # Re-route the capture to the correct dimension channel
-            ch_name = config.DIMENSION_CHANNELS.get(correct_dim, "brain-systems")
-            ch_id = _commands_mod._channel_ids.get(ch_name)
-            if ch_id:
-                rows = run_async(query(
-                    "SELECT message_text FROM classifications WHERE message_ts = ?",
-                    (ts,),
+            # Log corrected capture to captures_log (replaces dimension channel routing)
+            rows = run_async(query(
+                "SELECT message_text FROM classifications WHERE message_ts = ?",
+                (ts,),
+            ))
+            if rows:
+                import json as _json
+                run_async(execute(
+                    "INSERT INTO captures_log "
+                    "(message_text, dimensions_json, confidence, method, is_actionable, source_channel) "
+                    "VALUES (?, ?, 1.0, 'user_corrected', 0, 'brain-inbox')",
+                    (rows[0]["message_text"], _json.dumps([correct_dim])),
                 ))
-                if rows:
-                    original_text = rows[0]["message_text"]
-                    client.chat_postMessage(
-                        channel=ch_id,
-                        text=f"*Capture (corrected):*\n> {original_text}",
-                        blocks=[
-                            {"type": "section", "text": {"type": "mrkdwn",
-                             "text": f"*Capture (corrected via feedback):*\n> {original_text}"}},
-                            {"type": "context", "elements": [{"type": "mrkdwn",
-                             "text": f"Corrected to *{correct_dim}* | User feedback"}]},
-                        ],
-                    )
 
             logger.info("Classification corrected: ts=%s, %s -> %s", ts, original_dims, correct_dim)
         except Exception:

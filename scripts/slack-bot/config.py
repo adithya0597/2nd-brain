@@ -1,7 +1,6 @@
 """Configuration for Second Brain Slack Bot."""
 import logging
 import os
-import sqlite3
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -48,30 +47,19 @@ NOTION_COLLECTIONS = {
 # Channel name -> purpose mapping
 CHANNELS = {
     "brain-inbox": "Raw capture and routing",
-    "brain-daily": "Morning briefings and evening reviews",
-    "brain-actions": "Action items with interactive buttons",
-    "brain-dashboard": "ICOR heatmap and project status",
-    "brain-ideas": "Idea generation reports",
-    "brain-drift": "Alignment drift reports",
-    "brain-insights": "Pattern synthesis and reflections",
-    "brain-health": "Health & Vitality",
-    "brain-wealth": "Wealth & Finance",
-    "brain-relations": "Relationships",
-    "brain-growth": "Mind & Growth",
-    "brain-purpose": "Purpose & Impact",
-    "brain-systems": "Systems & Environment",
-    "brain-projects": "Active projects and cross-dimensional tracking",
-    "brain-resources": "Reference materials, tools, and knowledge bases",
+    "brain-daily": "Morning briefings, evening reviews, actions, projects, resources",
+    "brain-insights": "Drift analysis, idea generation, pattern synthesis, and reflections",
+    "brain-dashboard": "ICOR heatmap, project status, and cost tracking",
 }
 
-# ICOR dimension -> channel mapping (for routing captures)
+# ICOR dimension -> channel mapping (captures now go to captures_log table, not Slack channels)
 DIMENSION_CHANNELS = {
-    "Health & Vitality": "brain-health",
-    "Wealth & Finance": "brain-wealth",
-    "Relationships": "brain-relations",
-    "Mind & Growth": "brain-growth",
-    "Purpose & Impact": "brain-purpose",
-    "Systems & Environment": "brain-systems",
+    "Health & Vitality": None,
+    "Wealth & Finance": None,
+    "Relationships": None,
+    "Mind & Growth": None,
+    "Purpose & Impact": None,
+    "Systems & Environment": None,
 }
 
 # Keywords for quick routing (no AI needed)
@@ -102,16 +90,16 @@ def load_dynamic_keywords() -> dict[str, list[str]]:
     merged = {dim: list(kws) for dim, kws in DIMENSION_KEYWORDS.items()}
 
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.execute(
-            "SELECT dimension, keyword FROM keyword_feedback "
-            "WHERE success_count > fail_count"
-        )
-        for row in cursor.fetchall():
-            dim, kw = row
-            if dim in merged and kw not in merged[dim]:
-                merged[dim].append(kw)
-        conn.close()
+        from core.db_connection import get_connection
+        with get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT dimension, keyword FROM keyword_feedback "
+                "WHERE success_count > fail_count"
+            )
+            for row in cursor.fetchall():
+                dim, kw = row
+                if dim in merged and kw not in merged[dim]:
+                    merged[dim].append(kw)
         logger.info("Dynamic keywords loaded: %s", {d: len(v) for d, v in merged.items()})
     except Exception:
         logger.warning("Failed to load dynamic keywords, using seeds only")

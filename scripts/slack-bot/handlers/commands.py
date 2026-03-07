@@ -143,13 +143,13 @@ def _write_command_output_to_vault(brain_command: str, result_text: str, user_in
 _COMMAND_MAP = {
     "/brain-today": ("today", "brain-daily"),
     "/brain-close": ("close-day", "brain-daily"),
-    "/brain-drift": ("drift", "brain-drift"),
+    "/brain-drift": ("drift", "brain-insights"),
     "/brain-emerge": ("emerge", "brain-insights"),
-    "/brain-ideas": ("ideas", "brain-ideas"),
+    "/brain-ideas": ("ideas", "brain-insights"),
     "/brain-schedule": ("schedule", "brain-daily"),
     "/brain-ghost": ("ghost", "brain-insights"),
-    "/brain-projects": ("projects", "brain-projects"),
-    "/brain-resources": ("resources", "brain-resources"),
+    "/brain-projects": ("projects", "brain-daily"),
+    "/brain-resources": ("resources", "brain-daily"),
     "/brain-context": ("context-load", None),
     "/brain-trace": ("trace", "brain-insights"),
     "/brain-connect": ("connect", "brain-insights"),
@@ -169,10 +169,32 @@ def set_channel_ids(ids: dict[str, str]):
     _channel_ids.update(ids)
 
 
-def _run_ai_command(client, user_id, brain_command, output_channel, user_input):
+def _run_ai_command(client, user_id, brain_command, output_channel, user_input, trigger_channel_id=None):
     """Background worker: gather context, call Claude, post result."""
     try:
+        # Stage 1: Gathering context
+        if trigger_channel_id:
+            try:
+                client.chat_postEphemeral(
+                    channel=trigger_channel_id,
+                    user=user_id,
+                    text=f"Gathering context for /{brain_command}...",
+                )
+            except Exception:
+                pass
+
         context = run_async(gather_command_context(brain_command, user_input=user_input))
+
+        # Stage 2: Calling Claude
+        if trigger_channel_id:
+            try:
+                client.chat_postEphemeral(
+                    channel=trigger_channel_id,
+                    user=user_id,
+                    text=f"Asking Claude about /{brain_command}...",
+                )
+            except Exception:
+                pass
 
         system_ctx = load_system_context()
         prompt = load_command_prompt(brain_command)
@@ -283,16 +305,17 @@ def _run_ai_command(client, user_id, brain_command, output_channel, user_input):
             blocks=blocks,
         )
 
-        # Notify user that results are ready
-        if output_channel and output_channel in _channel_ids:
+        # Stage 3: Results posted notification
+        if trigger_channel_id:
+            target = f"#{output_channel}" if output_channel else "DM"
             try:
                 client.chat_postEphemeral(
-                    channel=_channel_ids[output_channel],
+                    channel=trigger_channel_id,
                     user=user_id,
-                    text=f"Your /{brain_command} results are ready in #{output_channel}",
+                    text=f"/{brain_command} results posted to {target}",
                 )
             except Exception:
-                logger.debug("Could not send result notification")
+                pass
 
     except Exception:
         logger.exception("Error running AI command: %s", brain_command)
@@ -522,7 +545,8 @@ def register(app: App):
                 ack(f"Processing /{brain_command}...")
                 user_id = command.get("user_id", "")
                 user_input = command.get("text", "")
-                executor.submit(_run_ai_command, client, user_id, brain_command, output_channel, user_input)
+                trigger_channel_id = command.get("channel_id", "")
+                executor.submit(_run_ai_command, client, user_id, brain_command, output_channel, user_input, trigger_channel_id)
 
             return handler
 
@@ -542,7 +566,8 @@ def register(app: App):
         if user_input.startswith("--ai "):
             ack("Processing /brain-find (AI mode)...")
             ai_query = user_input[5:].strip()
-            executor.submit(_run_ai_command, client, user_id, "find", None, ai_query)
+            trigger_channel_id = command.get("channel_id", "")
+            executor.submit(_run_ai_command, client, user_id, "find", None, ai_query, trigger_channel_id)
             return
 
         ack("Searching...")

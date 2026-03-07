@@ -5,17 +5,14 @@ from pathlib import Path
 import aiosqlite
 
 import config
+from core.db_connection import get_async_connection
 
 logger = logging.getLogger(__name__)
 
 
 async def query(sql: str, params: tuple = (), db_path: Path = None) -> list[dict]:
     """Run a SELECT query and return results as a list of dicts."""
-    db_path = db_path or config.DB_PATH
-    async with aiosqlite.connect(str(db_path)) as db:
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.execute("PRAGMA foreign_keys = ON")
-        db.row_factory = aiosqlite.Row
+    async with get_async_connection(db_path, row_factory=aiosqlite.Row) as db:
         async with db.execute(sql, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -23,10 +20,7 @@ async def query(sql: str, params: tuple = (), db_path: Path = None) -> list[dict
 
 async def execute(sql: str, params: tuple = (), db_path: Path = None) -> int:
     """Run an INSERT/UPDATE/DELETE and return lastrowid."""
-    db_path = db_path or config.DB_PATH
-    async with aiosqlite.connect(str(db_path)) as db:
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.execute("PRAGMA foreign_keys = ON")
+    async with get_async_connection(db_path) as db:
         cursor = await db.execute(sql, params)
         await db.commit()
         return cursor.lastrowid
@@ -144,13 +138,11 @@ async def update_sync_state(
 async def get_unpushed_actions(db_path: Path = None) -> list[dict]:
     """Get action items that haven't been pushed to Notion yet.
 
-    Skips items with a recent push_attempted_at but no external_id,
-    to avoid duplicate pushes after a crash during Notion create_page.
+    TTL hack removed — sync_outbox handles idempotency now.
     """
     return await query(
         "SELECT id, description, source_file, source_date, icor_element, icor_project, status "
         "FROM action_items WHERE status = 'pending' AND external_id IS NULL "
-        "AND (push_attempted_at IS NULL OR push_attempted_at < datetime('now', '-1 hour')) "
         "ORDER BY created_at ASC",
         db_path=db_path,
     )
@@ -333,11 +325,7 @@ async def compute_attention_scores(days: int = 30, db_path: Path = None) -> int:
     today = date.today().isoformat()
     period_start = (date.today() - timedelta(days=days)).isoformat()
 
-    async with aiosqlite.connect(str(db_path)) as db:
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.execute("PRAGMA foreign_keys = ON")
-        db.row_factory = aiosqlite.Row
-
+    async with get_async_connection(db_path, row_factory=aiosqlite.Row) as db:
         # 1. Get all key elements
         async with db.execute(
             "SELECT id, name FROM icor_hierarchy WHERE level = 'key_element'"
@@ -361,7 +349,7 @@ async def compute_attention_scores(days: int = 30, db_path: Path = None) -> int:
 
         for entry in entries:
             try:
-                icor_els = _json.loads(entry.get("icor_elements") or "[]")
+                icor_els = _json.loads(entry.get("data") or entry.get("icor_elements") or "[]")
             except (ValueError, TypeError):
                 icor_els = []
 

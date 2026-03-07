@@ -446,7 +446,7 @@ class TestCommandHandlerDrift:
         assert "/brain-drift" in _COMMAND_MAP
         brain_cmd, output_ch = _COMMAND_MAP["/brain-drift"]
         assert brain_cmd == "drift"
-        assert output_ch == "brain-drift"
+        assert output_ch == "brain-insights"
 
 
 # ===========================================================================

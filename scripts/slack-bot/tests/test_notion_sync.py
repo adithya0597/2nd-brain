@@ -82,14 +82,23 @@ def sync_instance(mock_notion_client, registry_path, test_db, vault_path, collec
 class TestPushJournalEntries:
 
     @pytest.mark.asyncio
-    async def test_sets_push_attempted_at_before_create_page(self, sync_instance, test_db):
-        """push_attempted_at should be set BEFORE calling Notion create_page."""
+    async def test_enqueues_to_outbox_before_create_page(self, sync_instance, test_db):
+        """Entries should be enqueued to the outbox before Notion create_page."""
         call_order = []
 
-        async def mock_execute(sql, params=(), db_path=None):
-            if "push_attempted_at" in sql and "datetime" in sql:
-                call_order.append("set_push_attempted_at")
-            return 0
+        async def mock_enqueue(*args, **kwargs):
+            call_order.append("enqueue")
+            return 1
+
+        async def mock_dequeue(*args, **kwargs):
+            call_order.append("dequeue")
+            return [{"id": 1, "entity_type": "journal", "entity_id": "2026-03-01",
+                     "operation": "create",
+                     "payload_json": '{"date": "2026-03-01", "summary": "Test entry"}',
+                     "attempt_count": 0, "max_attempts": 3}]
+
+        async def mock_confirm(*args, **kwargs):
+            call_order.append("confirm")
 
         async def mock_create_page(**kwargs):
             call_order.append("create_page")
@@ -98,39 +107,41 @@ class TestPushJournalEntries:
         entries = [{"date": "2026-03-01", "summary": "Test entry", "content": "content"}]
 
         with patch("core.notion_sync.db_ops.get_unsynced_journal_entries", AsyncMock(return_value=entries)), \
-             patch("core.notion_sync.db_ops.execute", side_effect=mock_execute), \
+             patch("core.notion_sync.sync_outbox.enqueue", side_effect=mock_enqueue), \
+             patch("core.notion_sync.sync_outbox.dequeue_batch", side_effect=mock_dequeue), \
+             patch("core.notion_sync.sync_outbox.confirm", side_effect=mock_confirm), \
              patch("core.notion_sync.db_ops.log_sync_operation", AsyncMock()), \
              patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
              patch("core.notion_sync.journal_to_notion_note", return_value={}):
             sync_instance._client.create_page = mock_create_page
             await sync_instance._push_journal_entries()
 
-        assert call_order == ["set_push_attempted_at", "create_page"]
+        assert call_order == ["enqueue", "dequeue", "create_page", "confirm"]
 
     @pytest.mark.asyncio
-    async def test_resets_push_attempted_at_on_failure(self, sync_instance):
-        """On create_page failure, push_attempted_at should be reset to NULL."""
-        execute_calls = []
-
-        async def mock_execute(sql, params=(), db_path=None):
-            execute_calls.append(sql)
-            return 0
+    async def test_calls_outbox_fail_on_create_page_failure(self, sync_instance):
+        """On create_page failure, sync_outbox.fail should be called."""
+        mock_fail = AsyncMock()
 
         entries = [{"date": "2026-03-01", "summary": "Test entry", "content": "content"}]
 
         with patch("core.notion_sync.db_ops.get_unsynced_journal_entries", AsyncMock(return_value=entries)), \
-             patch("core.notion_sync.db_ops.execute", side_effect=mock_execute), \
-             patch("core.notion_sync.db_ops.log_sync_operation", AsyncMock()), \
+             patch("core.notion_sync.sync_outbox.enqueue", AsyncMock(return_value=1)), \
+             patch("core.notion_sync.sync_outbox.dequeue_batch", AsyncMock(return_value=[
+                 {"id": 1, "entity_type": "journal", "entity_id": "2026-03-01",
+                  "operation": "create",
+                  "payload_json": '{"date": "2026-03-01", "summary": "Test entry"}',
+                  "attempt_count": 0, "max_attempts": 3}
+             ])), \
+             patch("core.notion_sync.sync_outbox.fail", mock_fail), \
              patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
              patch("core.notion_sync.journal_to_notion_note", return_value={}):
             sync_instance._client.create_page = AsyncMock(side_effect=Exception("Notion API error"))
             await sync_instance._push_journal_entries()
 
-        # Should have set push_attempted_at, then reset it to NULL
-        set_calls = [s for s in execute_calls if "push_attempted_at = datetime" in s]
-        reset_calls = [s for s in execute_calls if "push_attempted_at = NULL" in s]
-        assert len(set_calls) == 1
-        assert len(reset_calls) == 1
+        mock_fail.assert_called_once()
+        assert mock_fail.call_args[0][0] == 1  # outbox_id
+        assert "Notion API error" in mock_fail.call_args[0][1]  # error_message
 
     @pytest.mark.asyncio
     async def test_update_sync_state_called_when_notes_pushed(self, sync_instance):
@@ -277,14 +288,23 @@ class TestPushJournalEntries:
 class TestPushActionItems:
 
     @pytest.mark.asyncio
-    async def test_sets_push_attempted_at_before_create(self, sync_instance):
-        """push_attempted_at should be set BEFORE Notion create_page for actions too."""
+    async def test_enqueues_to_outbox_before_create(self, sync_instance):
+        """Actions should be enqueued to outbox before Notion create_page."""
         call_order = []
 
-        async def mock_execute(sql, params=(), db_path=None):
-            if "push_attempted_at" in sql and "datetime" in sql:
-                call_order.append("set_push_attempted_at")
-            return 0
+        async def mock_enqueue(*args, **kwargs):
+            call_order.append("enqueue")
+            return 1
+
+        async def mock_dequeue(*args, **kwargs):
+            call_order.append("dequeue")
+            return [{"id": 1, "entity_type": "action_item", "entity_id": "1",
+                     "operation": "create",
+                     "payload_json": '{"id": 1, "description": "Do thing", "status": "pending"}',
+                     "attempt_count": 0, "max_attempts": 3}]
+
+        async def mock_confirm(*args, **kwargs):
+            call_order.append("confirm")
 
         async def mock_create_page(**kwargs):
             call_order.append("create_page")
@@ -293,7 +313,9 @@ class TestPushActionItems:
         actions = [{"id": 1, "description": "Do thing", "status": "pending"}]
 
         with patch("core.notion_sync.db_ops.get_unpushed_actions", AsyncMock(return_value=actions)), \
-             patch("core.notion_sync.db_ops.execute", side_effect=mock_execute), \
+             patch("core.notion_sync.sync_outbox.enqueue", side_effect=mock_enqueue), \
+             patch("core.notion_sync.sync_outbox.dequeue_batch", side_effect=mock_dequeue), \
+             patch("core.notion_sync.sync_outbox.confirm", side_effect=mock_confirm), \
              patch("core.notion_sync.db_ops.update_action_external", AsyncMock()), \
              patch("core.notion_sync.db_ops.log_sync_operation", AsyncMock()), \
              patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
@@ -301,28 +323,31 @@ class TestPushActionItems:
             sync_instance._client.create_page = mock_create_page
             await sync_instance._push_action_items()
 
-        assert call_order == ["set_push_attempted_at", "create_page"]
+        assert call_order == ["enqueue", "dequeue", "create_page", "confirm"]
 
     @pytest.mark.asyncio
-    async def test_resets_push_attempted_at_on_action_failure(self, sync_instance):
-        """On action push failure, push_attempted_at should be reset to NULL."""
-        execute_calls = []
-
-        async def mock_execute(sql, params=(), db_path=None):
-            execute_calls.append(sql)
-            return 0
+    async def test_calls_outbox_fail_on_action_failure(self, sync_instance):
+        """On action push failure, sync_outbox.fail should be called."""
+        mock_fail = AsyncMock()
 
         actions = [{"id": 1, "description": "Do thing", "status": "pending"}]
 
         with patch("core.notion_sync.db_ops.get_unpushed_actions", AsyncMock(return_value=actions)), \
-             patch("core.notion_sync.db_ops.execute", side_effect=mock_execute), \
+             patch("core.notion_sync.sync_outbox.enqueue", AsyncMock(return_value=1)), \
+             patch("core.notion_sync.sync_outbox.dequeue_batch", AsyncMock(return_value=[
+                 {"id": 1, "entity_type": "action_item", "entity_id": "1",
+                  "operation": "create",
+                  "payload_json": '{"id": 1, "description": "Do thing", "status": "pending"}',
+                  "attempt_count": 0, "max_attempts": 3}
+             ])), \
+             patch("core.notion_sync.sync_outbox.fail", mock_fail), \
              patch("core.notion_sync.db_ops.update_sync_state", AsyncMock()), \
              patch("core.notion_sync.action_to_notion_task", return_value={}):
             sync_instance._client.create_page = AsyncMock(side_effect=Exception("fail"))
             await sync_instance._push_action_items()
 
-        reset_calls = [s for s in execute_calls if "push_attempted_at = NULL" in s]
-        assert len(reset_calls) == 1
+        mock_fail.assert_called_once()
+        assert mock_fail.call_args[0][0] == 1  # outbox_id
 
 
 # ---------------------------------------------------------------------------

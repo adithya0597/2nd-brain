@@ -87,7 +87,9 @@ def _search_graph(query_text: str, limit: int = 15, db_path: Path = None) -> lis
 
         # Get total vault file count for super-node detection
         with get_connection(db_path, row_factory=sqlite3.Row) as conn:
-            total_count = conn.execute("SELECT COUNT(*) as c FROM vault_index").fetchone()["c"]
+            total_count = conn.execute(
+                "SELECT COUNT(*) as c FROM vault_nodes WHERE node_type='document'"
+            ).fetchone()["c"]
 
         seed_files = find_files_mentioning(query_text, db_path=db_path)
 

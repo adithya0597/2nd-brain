@@ -20,6 +20,55 @@ sys.modules.setdefault("config", _mock_config)
 from core.vault_indexer import get_linked_files
 from core.notion_sync import NotionSync, RegistryManager
 
+# ---------------------------------------------------------------------------
+# Schema DDL for vault_nodes + vault_edges + vault_index VIEW
+# ---------------------------------------------------------------------------
+
+_GRAPH_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS vault_nodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    type TEXT DEFAULT '',
+    frontmatter_json TEXT DEFAULT '{}',
+    tags_json TEXT DEFAULT '[]',
+    word_count INTEGER DEFAULT 0,
+    last_modified TEXT,
+    indexed_at TEXT DEFAULT (datetime('now')),
+    node_type TEXT DEFAULT 'document' CHECK(node_type IN ('document','icor_dimension','icor_element','concept','tag')),
+    community_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_nodes(title);
+CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_nodes(type);
+
+CREATE TABLE IF NOT EXISTS vault_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_node_id INTEGER NOT NULL,
+    target_node_id INTEGER NOT NULL,
+    edge_type TEXT NOT NULL CHECK(edge_type IN ('wikilink','tag_shared','semantic_similarity','icor_affinity')),
+    weight REAL DEFAULT 1.0,
+    metadata_json TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(source_node_id, target_node_id, edge_type),
+    FOREIGN KEY (source_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ve_source ON vault_edges(source_node_id);
+CREATE INDEX IF NOT EXISTS idx_ve_target ON vault_edges(target_node_id);
+CREATE INDEX IF NOT EXISTS idx_ve_type ON vault_edges(edge_type);
+
+CREATE VIEW IF NOT EXISTS vault_index AS
+SELECT n.id, n.file_path, n.title, n.type, n.frontmatter_json,
+    COALESCE((SELECT json_group_array(t.title) FROM vault_edges e
+              JOIN vault_nodes t ON e.target_node_id=t.id
+              WHERE e.source_node_id=n.id AND e.edge_type='wikilink'),'[]') AS outgoing_links_json,
+    COALESCE((SELECT json_group_array(s.file_path) FROM vault_edges e
+              JOIN vault_nodes s ON e.source_node_id=s.id
+              WHERE e.target_node_id=n.id AND e.edge_type='wikilink'),'[]') AS incoming_links_json,
+    n.tags_json, n.word_count, n.last_modified, n.indexed_at
+FROM vault_nodes n WHERE n.node_type='document';
+"""
+
 
 # ---------------------------------------------------------------------------
 # Batch file path resolution in vault_indexer
@@ -28,44 +77,34 @@ from core.notion_sync import NotionSync, RegistryManager
 class TestBatchFilePathResolution:
 
     def _setup_vault_index(self, db_path: Path):
-        """Populate vault_index with test data for graph traversal."""
+        """Populate vault_nodes + vault_edges with test data for graph traversal."""
         conn = sqlite3.connect(str(db_path))
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS vault_index (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_path TEXT UNIQUE NOT NULL,
-                title TEXT NOT NULL,
-                type TEXT DEFAULT '',
-                frontmatter_json TEXT DEFAULT '{}',
-                outgoing_links_json TEXT DEFAULT '[]',
-                incoming_links_json TEXT DEFAULT '[]',
-                tags_json TEXT DEFAULT '[]',
-                word_count INTEGER DEFAULT 0,
-                last_modified TEXT,
-                indexed_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_index(title)")
+        conn.executescript(_GRAPH_SCHEMA_SQL)
 
-        # Insert test files:
-        # A -> B (outgoing link)
-        # C -> A (incoming link to A)
+        # Insert test nodes:
+        # A -> B (outgoing wikilink)
+        # C -> A (outgoing wikilink)
         conn.execute(
-            "INSERT INTO vault_index (file_path, title, outgoing_links_json, incoming_links_json) "
-            "VALUES (?, ?, ?, ?)",
-            ("Concepts/A.md", "A", json.dumps(["B"]), json.dumps(["Concepts/C.md"])),
+            "INSERT INTO vault_nodes (file_path, title, node_type) VALUES (?, ?, 'document')",
+            ("Concepts/A.md", "A"),
         )
         conn.execute(
-            "INSERT INTO vault_index (file_path, title, outgoing_links_json, incoming_links_json) "
-            "VALUES (?, ?, ?, ?)",
-            ("Concepts/B.md", "B", json.dumps([]), json.dumps(["Concepts/A.md"])),
+            "INSERT INTO vault_nodes (file_path, title, node_type) VALUES (?, ?, 'document')",
+            ("Concepts/B.md", "B"),
         )
         conn.execute(
-            "INSERT INTO vault_index (file_path, title, outgoing_links_json, incoming_links_json) "
-            "VALUES (?, ?, ?, ?)",
-            ("Concepts/C.md", "C", json.dumps(["A"]), json.dumps([])),
+            "INSERT INTO vault_nodes (file_path, title, node_type) VALUES (?, ?, 'document')",
+            ("Concepts/C.md", "C"),
+        )
+
+        # Wikilink edges: A->B (1->2), C->A (3->1)
+        conn.execute(
+            "INSERT INTO vault_edges (source_node_id, target_node_id, edge_type) VALUES (1, 2, 'wikilink')"
+        )
+        conn.execute(
+            "INSERT INTO vault_edges (source_node_id, target_node_id, edge_type) VALUES (3, 1, 'wikilink')"
         )
         conn.commit()
         conn.close()
@@ -116,33 +155,24 @@ class TestBatchFilePathResolution:
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS vault_index (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_path TEXT UNIQUE NOT NULL,
-                title TEXT NOT NULL,
-                type TEXT DEFAULT '',
-                frontmatter_json TEXT DEFAULT '{}',
-                outgoing_links_json TEXT DEFAULT '[]',
-                incoming_links_json TEXT DEFAULT '[]',
-                tags_json TEXT DEFAULT '[]',
-                word_count INTEGER DEFAULT 0,
-                last_modified TEXT,
-                indexed_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_index(title)")
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executescript(_GRAPH_SCHEMA_SQL)
 
-        # Create a node with many incoming links
-        incoming_fps = [f"Notes/Note-{i}.md" for i in range(20)]
+        # Create a hub node (id=1) with many incoming wikilink edges
         conn.execute(
-            "INSERT INTO vault_index (file_path, title, incoming_links_json) VALUES (?, ?, ?)",
-            ("Concepts/Hub.md", "Hub", json.dumps(incoming_fps)),
+            "INSERT INTO vault_nodes (file_path, title, node_type) VALUES (?, ?, 'document')",
+            ("Concepts/Hub.md", "Hub"),
         )
-        for i, fp in enumerate(incoming_fps):
+        for i in range(20):
+            fp = f"Notes/Note-{i}.md"
             conn.execute(
-                "INSERT INTO vault_index (file_path, title, outgoing_links_json) VALUES (?, ?, ?)",
-                (fp, f"Note-{i}", json.dumps(["Hub"])),
+                "INSERT INTO vault_nodes (file_path, title, node_type) VALUES (?, ?, 'document')",
+                (fp, f"Note-{i}"),
+            )
+            # Edge from Note-{i} (id=i+2, since Hub is id=1) -> Hub (id=1)
+            conn.execute(
+                "INSERT INTO vault_edges (source_node_id, target_node_id, edge_type) VALUES (?, 1, 'wikilink')",
+                (i + 2,),
             )
         conn.commit()
         conn.close()

@@ -42,12 +42,23 @@ _REQUIRED_DIMENSION_KEYWORDS = {
 
 
 def _ensure_config_defaults():
-    """Ensure the config mock in sys.modules has required real attributes."""
+    """Ensure the config mock in sys.modules has required real attributes.
+
+    Always force-sets critical attributes (DIMENSION_KEYWORDS, DIMENSION_CHANNELS)
+    to prevent test contamination from module-level mocking in individual test files.
+    """
     cfg = sys.modules.get("config")
     if cfg is None:
         return
-    # Only patch MagicMock auto-attributes, not real values
+    # Always force-set critical attributes that tests depend on
+    _FORCE_SET = {"DIMENSION_CHANNELS", "DIMENSION_KEYWORDS"}
     for attr, default in [
+        ("CHANNELS", {
+            "brain-inbox": "Raw capture and routing",
+            "brain-daily": "Morning briefings, evening reviews, actions, projects, resources",
+            "brain-insights": "Drift analysis, idea generation, pattern synthesis, and reflections",
+            "brain-dashboard": "ICOR heatmap, project status, and cost tracking",
+        }),
         ("DIMENSION_CHANNELS", _REQUIRED_DIMENSION_CHANNELS),
         ("DIMENSION_KEYWORDS", _REQUIRED_DIMENSION_KEYWORDS),
         ("PROJECT_KEYWORDS", ["project", "milestone"]),
@@ -55,10 +66,17 @@ def _ensure_config_defaults():
         ("OWNER_SLACK_ID", ""),
         ("CONFIDENCE_THRESHOLD", 0.60),
         ("BOUNCER_TIMEOUT_MINUTES", 15),
+        ("ANTHROPIC_API_KEY", ""),
+        ("CLASSIFIER_LLM_MODEL", "claude-haiku-4-5-20251001"),
+        ("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
+        ("EMBEDDING_DIM", 384),
     ]:
-        val = getattr(cfg, attr, None)
-        if val is None or isinstance(val, MagicMock):
+        if attr in _FORCE_SET:
             setattr(cfg, attr, default)
+        else:
+            val = getattr(cfg, attr, None)
+            if val is None or isinstance(val, MagicMock):
+                setattr(cfg, attr, default)
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -66,6 +84,7 @@ def _fix_config_mock():
     """Session-scoped fixture to fix config mock attributes after all imports."""
     _ensure_config_defaults()
     yield
+
 
 
 @pytest.fixture(autouse=True)
@@ -220,22 +239,55 @@ CREATE TABLE IF NOT EXISTS keyword_feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_keyword_fb_dim ON keyword_feedback(dimension);
 
--- vault_index (migrate-db.py)
-CREATE TABLE IF NOT EXISTS vault_index (
+-- vault_nodes (migrate-db.py step 20 — replaces vault_index TABLE)
+CREATE TABLE IF NOT EXISTS vault_nodes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_path TEXT UNIQUE NOT NULL,
     title TEXT NOT NULL,
     type TEXT DEFAULT '',
     frontmatter_json TEXT DEFAULT '{}',
-    outgoing_links_json TEXT DEFAULT '[]',
-    incoming_links_json TEXT DEFAULT '[]',
     tags_json TEXT DEFAULT '[]',
     word_count INTEGER DEFAULT 0,
     last_modified TEXT,
-    indexed_at TEXT DEFAULT (datetime('now'))
+    indexed_at TEXT DEFAULT (datetime('now')),
+    node_type TEXT DEFAULT 'document' CHECK(node_type IN ('document', 'icor_dimension', 'icor_element', 'concept', 'tag')),
+    community_id INTEGER
 );
-CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_index(title);
-CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_index(type);
+CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_nodes(title);
+CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_nodes(type);
+CREATE INDEX IF NOT EXISTS idx_vault_node_type ON vault_nodes(node_type);
+CREATE INDEX IF NOT EXISTS idx_vault_community ON vault_nodes(community_id);
+
+-- vault_edges (migrate-db.py step 20)
+CREATE TABLE IF NOT EXISTS vault_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_node_id INTEGER NOT NULL,
+    target_node_id INTEGER NOT NULL,
+    edge_type TEXT NOT NULL CHECK(edge_type IN ('wikilink', 'tag_shared', 'semantic_similarity', 'icor_affinity')),
+    weight REAL DEFAULT 1.0,
+    metadata_json TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(source_node_id, target_node_id, edge_type),
+    FOREIGN KEY (source_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ve_source ON vault_edges(source_node_id);
+CREATE INDEX IF NOT EXISTS idx_ve_target ON vault_edges(target_node_id);
+CREATE INDEX IF NOT EXISTS idx_ve_type ON vault_edges(edge_type);
+CREATE INDEX IF NOT EXISTS idx_ve_source_type ON vault_edges(source_node_id, edge_type);
+CREATE INDEX IF NOT EXISTS idx_ve_target_type ON vault_edges(target_node_id, edge_type);
+
+-- vault_index VIEW (backward-compatible with old vault_index TABLE)
+CREATE VIEW IF NOT EXISTS vault_index AS
+SELECT n.id, n.file_path, n.title, n.type, n.frontmatter_json,
+    COALESCE((SELECT json_group_array(t.title) FROM vault_edges e
+              JOIN vault_nodes t ON e.target_node_id=t.id
+              WHERE e.source_node_id=n.id AND e.edge_type='wikilink'),'[]') AS outgoing_links_json,
+    COALESCE((SELECT json_group_array(s.file_path) FROM vault_edges e
+              JOIN vault_nodes s ON e.source_node_id=s.id
+              WHERE e.target_node_id=n.id AND e.edge_type='wikilink'),'[]') AS incoming_links_json,
+    n.tags_json, n.word_count, n.last_modified, n.indexed_at
+FROM vault_nodes n WHERE n.node_type='document';
 
 -- scheduler_state (migrate-db.py)
 CREATE TABLE IF NOT EXISTS scheduler_state (
@@ -295,6 +347,42 @@ CREATE TABLE IF NOT EXISTS pending_captures (
 CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_captures(status);
 CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_captures(created_at);
 
+-- sync_outbox (migrate-db.py step 21)
+CREATE TABLE IF NOT EXISTS sync_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    operation TEXT NOT NULL DEFAULT 'create'
+        CHECK(operation IN ('create', 'update', 'delete')),
+    payload_json TEXT NOT NULL,
+    status TEXT DEFAULT 'pending'
+        CHECK(status IN ('pending', 'processing', 'confirmed', 'failed', 'dead_letter')),
+    attempt_count INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 3,
+    notion_page_id TEXT,
+    error_message TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    processing_at TEXT,
+    confirmed_at TEXT,
+    UNIQUE(entity_type, entity_id, operation)
+);
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON sync_outbox(status);
+CREATE INDEX IF NOT EXISTS idx_outbox_entity ON sync_outbox(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_outbox_created ON sync_outbox(created_at);
+
+-- captures_log (migrate-db.py step 21)
+CREATE TABLE IF NOT EXISTS captures_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_text TEXT NOT NULL,
+    dimensions_json TEXT DEFAULT '[]',
+    confidence REAL,
+    method TEXT,
+    is_actionable INTEGER DEFAULT 0,
+    source_channel TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_captures_log_created ON captures_log(created_at);
+
 -- notion_projects (migrate-db.py step 16)
 CREATE TABLE IF NOT EXISTS notion_projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -338,6 +426,93 @@ CREATE TABLE IF NOT EXISTS notion_people (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_npe_name ON notion_people(name);
+
+-- engagement_daily (migrate-db.py step 22a)
+CREATE TABLE IF NOT EXISTS engagement_daily (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT UNIQUE NOT NULL,
+    captures_count INTEGER DEFAULT 0,
+    actionable_captures INTEGER DEFAULT 0,
+    actions_created INTEGER DEFAULT 0,
+    actions_completed INTEGER DEFAULT 0,
+    actions_pending INTEGER DEFAULT 0,
+    journal_entry_count INTEGER DEFAULT 0,
+    journal_word_count INTEGER DEFAULT 0,
+    avg_sentiment REAL DEFAULT 0.0,
+    mood TEXT,
+    energy TEXT,
+    dimension_mentions_json TEXT DEFAULT '{}',
+    vault_files_modified INTEGER DEFAULT 0,
+    vault_files_created INTEGER DEFAULT 0,
+    edges_created INTEGER DEFAULT 0,
+    notion_items_synced INTEGER DEFAULT 0,
+    engagement_score REAL DEFAULT 0.0,
+    computed_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_engagement_date ON engagement_daily(date);
+
+-- dimension_signals (migrate-db.py step 22b)
+CREATE TABLE IF NOT EXISTS dimension_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    dimension TEXT NOT NULL,
+    mentions INTEGER DEFAULT 0,
+    captures INTEGER DEFAULT 0,
+    actions_created INTEGER DEFAULT 0,
+    actions_completed INTEGER DEFAULT 0,
+    rolling_7d_mentions INTEGER DEFAULT 0,
+    rolling_7d_captures INTEGER DEFAULT 0,
+    rolling_30d_mentions INTEGER DEFAULT 0,
+    momentum TEXT DEFAULT 'cold'
+        CHECK(momentum IN ('hot', 'warm', 'cold', 'frozen')),
+    momentum_score REAL DEFAULT 0.0,
+    trend TEXT DEFAULT 'stable'
+        CHECK(trend IN ('rising', 'stable', 'declining')),
+    computed_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(date, dimension)
+);
+CREATE INDEX IF NOT EXISTS idx_ds_date ON dimension_signals(date);
+CREATE INDEX IF NOT EXISTS idx_ds_dimension ON dimension_signals(dimension);
+
+-- brain_level (migrate-db.py step 22c)
+CREATE TABLE IF NOT EXISTS brain_level (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period TEXT UNIQUE NOT NULL,
+    level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 10),
+    consistency_score REAL DEFAULT 0.0,
+    breadth_score REAL DEFAULT 0.0,
+    depth_score REAL DEFAULT 0.0,
+    growth_score REAL DEFAULT 0.0,
+    momentum_score REAL DEFAULT 0.0,
+    days_active INTEGER DEFAULT 0,
+    total_captures INTEGER DEFAULT 0,
+    total_actions_completed INTEGER DEFAULT 0,
+    hot_dimensions INTEGER DEFAULT 0,
+    frozen_dimensions INTEGER DEFAULT 0,
+    computed_at TEXT DEFAULT (datetime('now'))
+);
+
+-- alerts (migrate-db.py step 22d)
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_type TEXT NOT NULL
+        CHECK(alert_type IN ('drift', 'stale_actions', 'neglected_dimension',
+            'knowledge_gap', 'streak_break', 'engagement_drop')),
+    severity TEXT NOT NULL DEFAULT 'info'
+        CHECK(severity IN ('critical', 'warning', 'info')),
+    dimension TEXT,
+    title TEXT NOT NULL,
+    details_json TEXT DEFAULT '{}',
+    status TEXT DEFAULT 'active'
+        CHECK(status IN ('active', 'dismissed', 'resolved')),
+    dismissed_at TEXT,
+    resolved_at TEXT,
+    fingerprint TEXT UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
+CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(alert_type);
+CREATE INDEX IF NOT EXISTS idx_alerts_fingerprint ON alerts(fingerprint);
 """
 
 _SEED_SYNC_STATE = """
@@ -440,3 +615,37 @@ def mock_config(test_db, temp_vault):
         patch("config.DB_PATH", test_db),
     ):
         yield {"db_path": test_db, "vault_path": temp_vault}
+
+
+@pytest.fixture()
+def vault_graph_db(test_db):
+    """test_db with sample vault graph nodes + edges populated."""
+    conn = sqlite3.connect(str(test_db))
+    conn.execute("PRAGMA foreign_keys=ON")
+
+    # Insert sample nodes (all node_type='document')
+    nodes = [
+        ("Daily Notes/2026-03-01.md", "2026-03-01", "journal", '{}', '[]', 150, "2026-03-01T10:00:00"),
+        ("Concepts/Fitness.md", "Fitness", "concept", '{}', '["health"]', 200, "2026-03-01T10:00:00"),
+        ("Concepts/Nutrition.md", "Nutrition", "concept", '{}', '["health"]', 180, "2026-03-01T10:00:00"),
+        ("Identity/ICOR.md", "ICOR", "", '{}', '[]', 500, "2026-03-01T10:00:00"),
+        ("Projects/Side-Project.md", "Side-Project", "project", '{}', '["dev"]', 300, "2026-03-01T10:00:00"),
+    ]
+    for fp, title, typ, fm, tags, wc, lm in nodes:
+        conn.execute(
+            "INSERT INTO vault_nodes (file_path, title, type, frontmatter_json, tags_json, word_count, last_modified) VALUES (?,?,?,?,?,?,?)",
+            (fp, title, typ, fm, tags, wc, lm),
+        )
+
+    # Insert edges (wikilinks)
+    # Daily note links to Fitness and Nutrition
+    conn.execute("INSERT INTO vault_edges (source_node_id, target_node_id, edge_type) VALUES (1, 2, 'wikilink')")
+    conn.execute("INSERT INTO vault_edges (source_node_id, target_node_id, edge_type) VALUES (1, 3, 'wikilink')")
+    # Fitness links to Nutrition
+    conn.execute("INSERT INTO vault_edges (source_node_id, target_node_id, edge_type) VALUES (2, 3, 'wikilink')")
+    # ICOR links to Side-Project
+    conn.execute("INSERT INTO vault_edges (source_node_id, target_node_id, edge_type) VALUES (4, 5, 'wikilink')")
+
+    conn.commit()
+    conn.close()
+    return test_db

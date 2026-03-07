@@ -11,6 +11,9 @@ import re
 import sqlite3
 from pathlib import Path
 
+import config
+from core.db_connection import get_connection
+
 logger = logging.getLogger(__name__)
 
 # Regex to strip YAML frontmatter (leading --- ... --- block)
@@ -33,7 +36,7 @@ def fts5_escape(text: str) -> str:
     return " ".join(words)
 
 
-def populate_fts(db_path: str, vault_path: str) -> int:
+def populate_fts(db_path: str = None, vault_path: str = None) -> int:
     """Read all vault_index rows and index their content into vault_fts.
 
     Args:
@@ -43,9 +46,10 @@ def populate_fts(db_path: str, vault_path: str) -> int:
     Returns:
         Number of entries indexed.
     """
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
+    db_path = db_path or str(config.DB_PATH)
+    vault_path = vault_path or str(config.VAULT_PATH)
+
+    with get_connection(Path(db_path), row_factory=sqlite3.Row) as conn:
         rows = conn.execute(
             "SELECT file_path, title, tags_json FROM vault_index"
         ).fetchall()
@@ -88,11 +92,65 @@ def populate_fts(db_path: str, vault_path: str) -> int:
         count = len(entries)
         logger.info("FTS index populated with %d entries", count)
         return count
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-    finally:
-        conn.close()
+
+
+def update_single_file_fts(
+    file_path: Path,
+    vault_path: Path = None,
+    db_path: Path = None,
+) -> bool:
+    """Incrementally update the FTS5 index for a single file.
+
+    Called by vault_ops post-write hooks. Avoids a full FTS rebuild
+    by deleting and re-inserting only the affected row.
+
+    Returns True if the file was indexed, False otherwise.
+    """
+    vault_path = vault_path or config.VAULT_PATH
+    db_path = db_path or config.DB_PATH
+
+    if not file_path.is_absolute():
+        file_path = vault_path / file_path
+
+    if not file_path.exists():
+        return False
+
+    rel_path = str(file_path.relative_to(vault_path))
+
+    # Read file content
+    try:
+        raw_content = file_path.read_text(encoding="utf-8")
+        content = _FRONTMATTER_RE.sub("", raw_content).strip()
+    except (OSError, IOError):
+        logger.warning("FTS update: could not read %s", file_path)
+        return False
+
+    # Get title and tags from vault_index (already updated by index_single_file)
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        row = conn.execute(
+            "SELECT title, tags_json FROM vault_index WHERE file_path = ?",
+            (rel_path,),
+        ).fetchone()
+
+        title = row["title"] if row else file_path.stem
+        tags_text = ""
+        if row:
+            try:
+                tags_list = json.loads(row["tags_json"] or "[]")
+                tags_text = ", ".join(str(t) for t in tags_list)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Delete old FTS entry and insert new one
+        conn.execute("DELETE FROM vault_fts WHERE file_path = ?", (rel_path,))
+        conn.execute(
+            "INSERT INTO vault_fts (title, content, tags, file_path) VALUES (?, ?, ?, ?)",
+            (title, content, tags_text, rel_path),
+        )
+        conn.commit()
+
+    logger.debug("FTS updated: %s", rel_path)
+    return True
 
 
 def search_fts(
@@ -103,8 +161,7 @@ def search_fts(
     Args:
         query_text: User search query (will be escaped for FTS5 safety).
         limit: Maximum number of results to return.
-        db_path: Path to SQLite database. Defaults to data/brain.db relative
-                 to the project root.
+        db_path: Path to SQLite database. Defaults to config.DB_PATH.
 
     Returns:
         List of dicts with keys: file_path, title, snippet, rank.
@@ -117,15 +174,9 @@ def search_fts(
     if not escaped:
         return []
 
-    if db_path is None:
-        # Resolve default: scripts/slack-bot/core/ -> project root -> data/brain.db
-        db_path = str(
-            Path(__file__).parent.parent.parent.parent / "data" / "brain.db"
-        )
+    db_path = Path(db_path) if db_path else config.DB_PATH
 
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
         sql = (
             "SELECT file_path, title, "
             "snippet(vault_fts, 1, '**', '**', '...', 32) as snippet, "
@@ -149,5 +200,3 @@ def search_fts(
             }
             for r in rows
         ]
-    finally:
-        conn.close()

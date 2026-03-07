@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """One-time migration: add sync_state table and concept_metadata.notion_id column."""
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -134,24 +135,32 @@ def migrate(db_path: Path = DB_PATH):
     print("keyword_feedback table: created/verified")
 
     # 7. Create vault_index table (vault file graph index)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS vault_index (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_path TEXT UNIQUE NOT NULL,
-            title TEXT NOT NULL,
-            type TEXT DEFAULT '',
-            frontmatter_json TEXT DEFAULT '{}',
-            outgoing_links_json TEXT DEFAULT '[]',
-            incoming_links_json TEXT DEFAULT '[]',
-            tags_json TEXT DEFAULT '[]',
-            word_count INTEGER DEFAULT 0,
-            last_modified TEXT,
-            indexed_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_index(title)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_index(type)")
-    print("vault_index table: created/verified")
+    # After Step 20, vault_index is a VIEW over vault_nodes — skip table+index creation.
+    cursor.execute(
+        "SELECT type FROM sqlite_master WHERE name='vault_index'"
+    )
+    vi_obj = cursor.fetchone()
+    if vi_obj and vi_obj[0] == "view":
+        print("vault_index is a VIEW (post Step 20) — skipping table creation")
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS vault_index (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT UNIQUE NOT NULL,
+                title TEXT NOT NULL,
+                type TEXT DEFAULT '',
+                frontmatter_json TEXT DEFAULT '{}',
+                outgoing_links_json TEXT DEFAULT '[]',
+                incoming_links_json TEXT DEFAULT '[]',
+                tags_json TEXT DEFAULT '[]',
+                word_count INTEGER DEFAULT 0,
+                last_modified TEXT,
+                indexed_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_index(title)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_index(type)")
+        print("vault_index table: created/verified")
 
     # 8. Ensure journal_entries has unique constraint on date
     cursor.execute("PRAGMA table_info(journal_entries)")
@@ -360,19 +369,410 @@ def migrate(db_path: Path = DB_PATH):
         print(f"vec0 table creation failed (non-critical): {e}")
 
     conn.commit()
+
+    # 20. Graph schema: vault_nodes + vault_edges (replaces vault_index table)
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='vault_nodes'"
+    )
+    if cursor.fetchone():
+        print("vault_nodes table already exists — skipping Step 20")
+    else:
+        print("Step 20: Creating vault_nodes + vault_edges graph schema...")
+
+        # 20a. Create vault_nodes table
+        cursor.execute("""
+            CREATE TABLE vault_nodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT UNIQUE NOT NULL,
+                title TEXT NOT NULL,
+                type TEXT DEFAULT '',
+                frontmatter_json TEXT DEFAULT '{}',
+                tags_json TEXT DEFAULT '[]',
+                word_count INTEGER DEFAULT 0,
+                last_modified TEXT,
+                indexed_at TEXT DEFAULT (datetime('now')),
+                node_type TEXT DEFAULT 'document'
+                    CHECK(node_type IN (
+                        'document','icor_dimension','icor_element','concept','tag'
+                    )),
+                community_id INTEGER
+            )
+        """)
+        print("  vault_nodes table: created")
+
+        # 20b. Create vault_edges table
+        cursor.execute("""
+            CREATE TABLE vault_edges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_node_id INTEGER NOT NULL
+                    REFERENCES vault_nodes(id) ON DELETE CASCADE,
+                target_node_id INTEGER NOT NULL
+                    REFERENCES vault_nodes(id) ON DELETE CASCADE,
+                edge_type TEXT NOT NULL
+                    CHECK(edge_type IN (
+                        'wikilink','tag_shared','semantic_similarity','icor_affinity'
+                    )),
+                weight REAL DEFAULT 1.0,
+                metadata_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(source_node_id, target_node_id, edge_type)
+            )
+        """)
+        print("  vault_edges table: created")
+
+        # 20c. Create indexes
+        cursor.execute(
+            "CREATE INDEX idx_ve_source ON vault_edges(source_node_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_ve_target ON vault_edges(target_node_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_ve_type ON vault_edges(edge_type)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_ve_source_type ON vault_edges(source_node_id, edge_type)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_ve_target_type ON vault_edges(target_node_id, edge_type)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_vn_node_type ON vault_nodes(node_type)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_vn_community ON vault_nodes(community_id)"
+        )
+        print("  indexes: created")
+
+        # 20d. Migrate data from vault_index TABLE (if it exists as a table)
+        cursor.execute(
+            "SELECT name, type FROM sqlite_master "
+            "WHERE name='vault_index' AND type='table'"
+        )
+        has_vault_index_table = cursor.fetchone() is not None
+
+        wikilink_edge_count = 0
+
+        if has_vault_index_table:
+            # Copy rows from vault_index into vault_nodes
+            cursor.execute("""
+                INSERT INTO vault_nodes
+                    (file_path, title, type, frontmatter_json, tags_json,
+                     word_count, last_modified, indexed_at)
+                SELECT file_path, title, type, frontmatter_json, tags_json,
+                       word_count, last_modified, indexed_at
+                FROM vault_index
+            """)
+            migrated_count = cursor.rowcount
+            print(f"  migrated {migrated_count} rows from vault_index -> vault_nodes")
+
+            # 20e. Parse outgoing_links_json and create wikilink edges
+            # Build a title -> node id lookup
+            cursor.execute("SELECT id, title FROM vault_nodes")
+            title_to_id = {}
+            for row in cursor.fetchall():
+                title_to_id[row[0]] = row[1]  # id -> title
+            # Invert: title -> id
+            title_to_id = {v: k for k, v in title_to_id.items()}
+
+            cursor.execute(
+                "SELECT id, title, outgoing_links_json FROM vault_index"
+            )
+            for row in cursor.fetchall():
+                vi_id, vi_title, outgoing_json = row
+                source_id = title_to_id.get(vi_title)
+                if source_id is None:
+                    continue
+                try:
+                    outgoing = json.loads(outgoing_json or "[]")
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                for link_title in outgoing:
+                    target_id = title_to_id.get(link_title)
+                    if target_id and target_id != source_id:
+                        try:
+                            cursor.execute(
+                                "INSERT OR IGNORE INTO vault_edges "
+                                "(source_node_id, target_node_id, edge_type, weight) "
+                                "VALUES (?, ?, 'wikilink', 1.0)",
+                                (source_id, target_id),
+                            )
+                            wikilink_edge_count += cursor.rowcount
+                        except sqlite3.IntegrityError:
+                            pass
+            print(f"  created {wikilink_edge_count} wikilink edges from outgoing_links")
+
+            # 20f. Drop the vault_index TABLE
+            cursor.execute("DROP TABLE vault_index")
+            print("  dropped vault_index table")
+
+            # Drop old indexes that were on vault_index (they're gone with the table)
+        else:
+            print("  vault_index table not found — skipping data migration")
+
+        # 20g. Create backward-compatible vault_index VIEW
+        cursor.execute("""
+            CREATE VIEW IF NOT EXISTS vault_index AS
+            SELECT
+                n.id,
+                n.file_path,
+                n.title,
+                n.type,
+                n.frontmatter_json,
+                COALESCE(
+                    (SELECT json_group_array(t.title)
+                     FROM vault_edges e
+                     JOIN vault_nodes t ON e.target_node_id = t.id
+                     WHERE e.source_node_id = n.id AND e.edge_type = 'wikilink'),
+                    '[]'
+                ) AS outgoing_links_json,
+                COALESCE(
+                    (SELECT json_group_array(s.file_path)
+                     FROM vault_edges e
+                     JOIN vault_nodes s ON e.source_node_id = s.id
+                     WHERE e.target_node_id = n.id AND e.edge_type = 'wikilink'),
+                    '[]'
+                ) AS incoming_links_json,
+                n.tags_json,
+                n.word_count,
+                n.last_modified,
+                n.indexed_at
+            FROM vault_nodes n
+            WHERE n.node_type = 'document'
+        """)
+        print("  vault_index VIEW: created (backward-compatible)")
+
+        # 20h. Create indexes on vault_nodes that replace the old vault_index indexes
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vault_title ON vault_nodes(title)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vault_type ON vault_nodes(type)"
+        )
+        print("  idx_vault_title + idx_vault_type: created on vault_nodes")
+
+        # 20i. Seed 6 ICOR dimension nodes
+        icor_dimensions = [
+            "Health & Vitality",
+            "Wealth & Finance",
+            "Relationships",
+            "Mind & Growth",
+            "Purpose & Impact",
+            "Systems & Environment",
+        ]
+        for dim in icor_dimensions:
+            cursor.execute(
+                "INSERT OR IGNORE INTO vault_nodes "
+                "(file_path, title, node_type) "
+                "VALUES (?, ?, 'icor_dimension')",
+                (f"icor://{dim}", dim),
+            )
+        print(f"  seeded {len(icor_dimensions)} ICOR dimension nodes")
+
+        conn.commit()
+        print("Step 20 complete: vault_nodes + vault_edges graph schema ready")
+
+    # 21. Sync outbox + captures_log tables (Sprint 4)
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_outbox'"
+    )
+    if cursor.fetchone():
+        print("sync_outbox table already exists — skipping Step 21")
+    else:
+        cursor.execute("""
+            CREATE TABLE sync_outbox (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                operation TEXT NOT NULL DEFAULT 'create'
+                    CHECK(operation IN ('create', 'update', 'delete')),
+                payload_json TEXT NOT NULL,
+                status TEXT DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'processing', 'confirmed', 'failed', 'dead_letter')),
+                attempt_count INTEGER DEFAULT 0,
+                max_attempts INTEGER DEFAULT 3,
+                notion_page_id TEXT,
+                error_message TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                processing_at TEXT,
+                confirmed_at TEXT,
+                UNIQUE(entity_type, entity_id, operation)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX idx_outbox_status ON sync_outbox(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_outbox_entity ON sync_outbox(entity_type, entity_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_outbox_created ON sync_outbox(created_at)"
+        )
+        print("sync_outbox table: created with indexes")
+
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='captures_log'"
+    )
+    if cursor.fetchone():
+        print("captures_log table already exists — skipping")
+    else:
+        cursor.execute("""
+            CREATE TABLE captures_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_text TEXT NOT NULL,
+                dimensions_json TEXT DEFAULT '[]',
+                confidence REAL,
+                method TEXT,
+                is_actionable INTEGER DEFAULT 0,
+                source_channel TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX idx_captures_log_created ON captures_log(created_at)"
+        )
+        print("captures_log table: created with indexes")
+
+    conn.commit()
+    print("Step 21 complete: sync_outbox + captures_log tables ready")
+
+    # 22. Engagement + dimension signals + brain level + alerts (Sprint 5)
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='engagement_daily'"
+    )
+    if cursor.fetchone():
+        print("engagement_daily table already exists — skipping Step 22")
+    else:
+        # 22a. engagement_daily — daily metric snapshot
+        cursor.execute("""
+            CREATE TABLE engagement_daily (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT UNIQUE NOT NULL,
+                captures_count INTEGER DEFAULT 0,
+                actionable_captures INTEGER DEFAULT 0,
+                actions_created INTEGER DEFAULT 0,
+                actions_completed INTEGER DEFAULT 0,
+                actions_pending INTEGER DEFAULT 0,
+                journal_entry_count INTEGER DEFAULT 0,
+                journal_word_count INTEGER DEFAULT 0,
+                avg_sentiment REAL DEFAULT 0.0,
+                mood TEXT,
+                energy TEXT,
+                dimension_mentions_json TEXT DEFAULT '{}',
+                vault_files_modified INTEGER DEFAULT 0,
+                vault_files_created INTEGER DEFAULT 0,
+                edges_created INTEGER DEFAULT 0,
+                notion_items_synced INTEGER DEFAULT 0,
+                engagement_score REAL DEFAULT 0.0,
+                computed_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX idx_engagement_date ON engagement_daily(date)"
+        )
+        print("engagement_daily table: created")
+
+        # 22b. dimension_signals — per-dimension daily momentum
+        cursor.execute("""
+            CREATE TABLE dimension_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                dimension TEXT NOT NULL,
+                mentions INTEGER DEFAULT 0,
+                captures INTEGER DEFAULT 0,
+                actions_created INTEGER DEFAULT 0,
+                actions_completed INTEGER DEFAULT 0,
+                rolling_7d_mentions INTEGER DEFAULT 0,
+                rolling_7d_captures INTEGER DEFAULT 0,
+                rolling_30d_mentions INTEGER DEFAULT 0,
+                momentum TEXT DEFAULT 'cold'
+                    CHECK(momentum IN ('hot', 'warm', 'cold', 'frozen')),
+                momentum_score REAL DEFAULT 0.0,
+                trend TEXT DEFAULT 'stable'
+                    CHECK(trend IN ('rising', 'stable', 'declining')),
+                computed_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(date, dimension)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX idx_ds_date ON dimension_signals(date)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_ds_dimension ON dimension_signals(dimension)"
+        )
+        print("dimension_signals table: created")
+
+        # 22c. brain_level — monthly aggregate engagement
+        cursor.execute("""
+            CREATE TABLE brain_level (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period TEXT UNIQUE NOT NULL,
+                level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 10),
+                consistency_score REAL DEFAULT 0.0,
+                breadth_score REAL DEFAULT 0.0,
+                depth_score REAL DEFAULT 0.0,
+                growth_score REAL DEFAULT 0.0,
+                momentum_score REAL DEFAULT 0.0,
+                days_active INTEGER DEFAULT 0,
+                total_captures INTEGER DEFAULT 0,
+                total_actions_completed INTEGER DEFAULT 0,
+                hot_dimensions INTEGER DEFAULT 0,
+                frozen_dimensions INTEGER DEFAULT 0,
+                computed_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        print("brain_level table: created")
+
+        # 22d. alerts — pattern-detected alerts
+        cursor.execute("""
+            CREATE TABLE alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_type TEXT NOT NULL
+                    CHECK(alert_type IN ('drift', 'stale_actions', 'neglected_dimension',
+                        'knowledge_gap', 'streak_break', 'engagement_drop')),
+                severity TEXT NOT NULL DEFAULT 'info'
+                    CHECK(severity IN ('critical', 'warning', 'info')),
+                dimension TEXT,
+                title TEXT NOT NULL,
+                details_json TEXT DEFAULT '{}',
+                status TEXT DEFAULT 'active'
+                    CHECK(status IN ('active', 'dismissed', 'resolved')),
+                dismissed_at TEXT,
+                resolved_at TEXT,
+                fingerprint TEXT UNIQUE,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX idx_alerts_status ON alerts(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_alerts_type ON alerts(alert_type)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_alerts_fingerprint ON alerts(fingerprint)"
+        )
+        print("alerts table: created")
+
+        conn.commit()
+        print("Step 22 complete: engagement + signals + brain_level + alerts")
+
     conn.close()
-    print(f"Migration complete on {db_path}")
+    print(f"\nMigration complete on {db_path}")
     print(f"  - sync_state table: created/verified")
     print(f"  - Seeded {len(entity_types)} entity types")
     print(f"  - action_items: delegated_to column + CHECK constraint verified")
     print(f"  - classifications table: created/verified")
     print(f"  - keyword_feedback table: created/verified")
-    print(f"  - vault_index table: created/verified")
+    print(f"  - vault_nodes + vault_edges: graph schema created/verified")
+    print(f"  - vault_index VIEW: backward-compatible view created/verified")
     print(f"  - journal_entries: date uniqueness verified")
     print(f"  - action_items.push_attempted_at: idempotency column verified")
     print(f"  - scheduler_state table: created/verified")
     print(f"  - api_token_logs table: created/verified")
     print(f"  - pending_captures table: created/verified")
+    print(f"  - sync_outbox + captures_log tables: created/verified")
+    print(f"  - engagement + signals + brain_level + alerts: created/verified")
 
 
 if __name__ == "__main__":

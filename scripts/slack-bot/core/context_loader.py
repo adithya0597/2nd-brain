@@ -344,6 +344,7 @@ def _gather_graph_context(command_name: str, user_input: str) -> dict[str, str]:
 
     elif method == "intersection" and user_input:
         # For /connect: parse "domain A" "domain B" from user input
+        # Enhanced: also include bridge nodes connecting communities
         parts = user_input.strip().split('"')
         topics = [p.strip() for p in parts if p.strip()]
         if len(topics) >= 2:
@@ -353,13 +354,33 @@ def _gather_graph_context(command_name: str, user_input: str) -> dict[str, str]:
             linked_rows = get_linked_files(
                 [r["title"] for r in seed_files[:10]], depth=depth,
             )
+        try:
+            from core.community import get_bridge_nodes
+            bridges = get_bridge_nodes(min_communities=2)
+            for node in bridges[:5]:
+                if node not in linked_rows:
+                    node["_hop"] = 99
+                    linked_rows.append(node)
+        except Exception:
+            pass
 
     elif method == "recent_daily":
         # For /emerge, /graduate, /ideas: start from recent daily notes
+        # Enhanced: for /emerge, also include community members
         recent = find_files_mentioning("Daily Notes")
         seed_titles = [r["title"] for r in recent[:7]]
         if seed_titles:
             linked_rows = get_linked_files(seed_titles, depth=depth)
+        if command_name == "emerge":
+            try:
+                from core.community import get_bridge_nodes
+                bridges = get_bridge_nodes(min_communities=2)
+                for node in bridges[:5]:
+                    if node not in linked_rows:
+                        node["_hop"] = 99  # mark as bridge
+                        linked_rows.append(node)
+            except Exception:
+                pass
 
     elif method == "identity":
         # For /ghost, /challenge: start from identity files
@@ -379,7 +400,7 @@ def _gather_graph_context(command_name: str, user_input: str) -> dict[str, str]:
     return result
 
 
-async def gather_command_context(command_name: str, user_input: str = "", db_path: Path = None) -> dict:
+async def gather_command_context(command_name: str, user_input: str = "", db_path: Path = None, progress_callback=None) -> dict:
     """Run relevant SQL queries, read vault files, and gather graph context.
 
     Returns a dict with:
@@ -418,6 +439,9 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
             except Exception as e:
                 context["db"][name] = {"error": str(e)}
 
+    if progress_callback:
+        progress_callback("db_complete")
+
     # Read vault files
     vault_files = _COMMAND_VAULT_FILES.get(command_name, [])
     for rel_path in vault_files:
@@ -425,6 +449,9 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
         content = vault_ops.read_file(full_path)
         if content:
             context["vault"][rel_path] = content
+
+    if progress_callback:
+        progress_callback("vault_complete")
 
     # Gather graph-connected vault files
     graph_files = _gather_graph_context(command_name, user_input)
@@ -439,6 +466,9 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
             for path, content in hybrid_files.items():
                 if path not in context.get("graph", {}):
                     context.setdefault("graph", {})[path] = content
+
+    if progress_callback:
+        progress_callback("graph_complete")
 
     # Inject Notion context for applicable commands
     if command_name in _NOTION_CONTEXT_COMMANDS:

@@ -240,6 +240,18 @@ def main():
             logger.info("Vector embeddings: %d vault files, %d ICOR refs", embed_count, icor_count)
         except Exception as e:
             logger.warning("Vector embedding failed (non-critical): %s", e)
+        # Sprint 3: Graph schema + ICOR affinity + community detection
+        try:
+            from core.graph_ops import ensure_icor_nodes
+            from core.icor_affinity import rebuild_all_icor_edges
+            from core.community import update_community_ids
+            ensure_icor_nodes()
+            affinity_count = rebuild_all_icor_edges()
+            community_count = update_community_ids()
+            logger.info("Graph: ICOR nodes ensured, %d affinity edges, %d communities assigned",
+                        affinity_count, community_count)
+        except Exception as e:
+            logger.warning("Graph/community setup failed (non-critical): %s", e)
     except Exception:
         logger.warning("Startup indexing failed — will work without cached index")
 
