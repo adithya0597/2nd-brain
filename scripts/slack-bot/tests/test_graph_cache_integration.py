@@ -12,11 +12,8 @@ SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
 
-# Mock config before importing any bot modules
-_mock_config = MagicMock()
-_mock_config.DB_PATH = Path("/dev/null")
-_mock_config.VAULT_PATH = Path("/dev/null")
-sys.modules.setdefault("config", _mock_config)
+# Mock config before importing any bot modules (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
 
 from core.graph_cache import GraphCache, cached_graph_call, get_cache, invalidate
 from core.vault_indexer import (

@@ -27,42 +27,9 @@ e2e = pytest.mark.skipif(
     reason=f"Real database not found at {REAL_DB}",
 )
 
-# Mock config before importing any bot modules
-_mock_config = MagicMock()
-_mock_config.DB_PATH = REAL_DB
-_mock_config.VAULT_PATH = REAL_VAULT
-_mock_config.DIMENSION_CHANNELS = {
-    "Health & Vitality": "brain-health",
-    "Wealth & Finance": "brain-wealth",
-    "Relationships": "brain-relations",
-    "Mind & Growth": "brain-growth",
-    "Purpose & Impact": "brain-purpose",
-    "Systems & Environment": "brain-systems",
-}
-_mock_config.DIMENSION_KEYWORDS = {
-    "Health & Vitality": ["health", "fitness", "workout", "diet", "sleep"],
-    "Wealth & Finance": ["money", "finance", "invest", "budget"],
-    "Relationships": ["friend", "family", "relationship", "partner"],
-    "Mind & Growth": ["learn", "read", "book", "course", "study"],
-    "Purpose & Impact": ["career", "mission", "purpose", "impact"],
-    "Systems & Environment": ["system", "automate", "tool", "setup"],
-}
-_mock_config.ANTHROPIC_API_KEY = ""
-_mock_config.ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
-_mock_config.NOTION_TOKEN = ""
-_mock_config.NOTION_COLLECTIONS = {
-    "tasks": "collection://test-tasks",
-    "projects": "collection://test-projects",
-    "goals": "collection://test-goals",
-    "tags": "collection://test-tags",
-    "notes": "collection://test-notes",
-    "people": "collection://test-people",
-}
-_mock_config.NOTION_REGISTRY_PATH = PROJECT_ROOT / "data" / "notion-registry.json"
-_mock_config.PROJECT_ROOT = PROJECT_ROOT
-_mock_config.COMMANDS_PATH = PROJECT_ROOT / ".claude" / "commands" / "brain"
-_mock_config.CLAUDE_MD_PATH = PROJECT_ROOT / "CLAUDE.md"
-sys.modules.setdefault("config", _mock_config)
+# Mock config before importing any bot modules (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
+import config  # noqa: E402 — conftest populates all attributes
 
 from core.db_ops import get_cost_summary, get_icor_hierarchy, query
 from core.formatter import format_cost_report, format_help
@@ -208,7 +175,7 @@ class TestClassificationPipeline:
         """Keyword tier should classify health-related text correctly."""
         from core.classifier import MessageClassifier
 
-        clf = MessageClassifier(keywords=_mock_config.DIMENSION_KEYWORDS)
+        clf = MessageClassifier(keywords=config.DIMENSION_KEYWORDS)
         result = clf.classify("I need to schedule a workout at the gym tomorrow")
         assert not result.is_noise
         if result.matches:
@@ -218,7 +185,7 @@ class TestClassificationPipeline:
         """Finance keywords should route to Wealth & Finance."""
         from core.classifier import MessageClassifier
 
-        clf = MessageClassifier(keywords=_mock_config.DIMENSION_KEYWORDS)
+        clf = MessageClassifier(keywords=config.DIMENSION_KEYWORDS)
         result = clf.classify("Need to review my monthly budget and investment portfolio")
         assert not result.is_noise
         if result.matches:
@@ -228,7 +195,7 @@ class TestClassificationPipeline:
         """Noise filter should catch casual greetings."""
         from core.classifier import MessageClassifier
 
-        clf = MessageClassifier(keywords=_mock_config.DIMENSION_KEYWORDS)
+        clf = MessageClassifier(keywords=config.DIMENSION_KEYWORDS)
         result = clf.classify("hey what's up")
         assert result.is_noise
 
@@ -236,7 +203,7 @@ class TestClassificationPipeline:
         """Action patterns should be detected."""
         from core.classifier import MessageClassifier
 
-        clf = MessageClassifier(keywords=_mock_config.DIMENSION_KEYWORDS)
+        clf = MessageClassifier(keywords=config.DIMENSION_KEYWORDS)
         result = clf.classify("I need to buy groceries and schedule a dentist appointment")
         assert result.is_actionable
 
@@ -545,7 +512,7 @@ class TestTagLookupBuilder:
             registry_path=registry_path,
             db_path=test_db,
             vault_path=vault,
-            collection_ids=_mock_config.NOTION_COLLECTIONS,
+            collection_ids=config.NOTION_COLLECTIONS,
         )
         syncer._registry.load()
         lookup = syncer._build_tag_lookup()

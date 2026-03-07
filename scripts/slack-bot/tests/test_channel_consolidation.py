@@ -20,48 +20,8 @@ import pytest
 # ---------------------------------------------------------------------------
 # Module mocking (before any project imports)
 # ---------------------------------------------------------------------------
-_cfg = MagicMock()
-_cfg.DIMENSION_CHANNELS = {
-    "Health & Vitality": None,
-    "Wealth & Finance": None,
-    "Relationships": None,
-    "Mind & Growth": None,
-    "Purpose & Impact": None,
-    "Systems & Environment": None,
-}
-_cfg.DIMENSION_KEYWORDS = {
-    "Health & Vitality": ["health", "fitness"],
-    "Wealth & Finance": ["money", "finance"],
-    "Relationships": ["friend", "family"],
-    "Mind & Growth": ["learn", "read"],
-    "Purpose & Impact": ["career", "mission"],
-    "Systems & Environment": ["system", "automate"],
-}
-_cfg.CHANNELS = {
-    "brain-inbox": "Raw capture and routing",
-    "brain-daily": "Morning briefings, evening reviews, actions, projects, resources",
-    "brain-insights": "Drift analysis, idea generation, pattern synthesis, and reflections",
-    "brain-dashboard": "ICOR heatmap, project status, and cost tracking",
-}
-_cfg.PROJECT_KEYWORDS = ["project", "milestone"]
-_cfg.RESOURCE_KEYWORDS = ["article", "book"]
-_cfg.OWNER_SLACK_ID = ""
-_cfg.CONFIDENCE_THRESHOLD = 0.60
-_cfg.BOUNCER_TIMEOUT_MINUTES = 15
-_cfg.ANTHROPIC_API_KEY = ""
-_cfg.ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
-_cfg.CLASSIFIER_LLM_MODEL = "claude-haiku-4-5-20251001"
-_cfg.EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-_cfg.EMBEDDING_DIM = 384
-_cfg.DB_PATH = MagicMock()
-_cfg.VAULT_PATH = MagicMock()
-_cfg.COMMANDS_PATH = MagicMock()
-_cfg.CLAUDE_MD_PATH = MagicMock()
-_cfg.NOTION_REGISTRY_PATH = MagicMock()
-_cfg.NOTION_TOKEN = ""
-_cfg.NOTION_COLLECTIONS = {}
-_cfg.load_dynamic_keywords = MagicMock(return_value=_cfg.DIMENSION_KEYWORDS)
-sys.modules.setdefault("config", _cfg)
+# Mock config before importing (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
 
 for mod_name in (
     "anthropic", "slack_bolt", "slack_sdk",

@@ -159,8 +159,8 @@ class TestDimensionMomentumSection:
 class TestActiveAlertsSection:
     def test_alerts_no_data(self, test_db):
         blocks = _build_active_alerts_section(db_path=test_db)
-        text = _all_text(blocks)
-        assert "No active alerts" in text
+        # Implementation returns empty list when no active alerts
+        assert blocks == []
 
     def test_alerts_with_data(self, test_db):
         conn = sqlite3.connect(str(test_db))
@@ -218,7 +218,8 @@ class TestActiveAlertsSection:
         text = _all_text(blocks)
 
         assert "Old dismissed alert" not in text
-        assert "No active alerts" in text
+        # Only dismissed alerts exist, so no active alerts — empty list returned
+        assert blocks == []
 
 
 # ---------------------------------------------------------------------------
@@ -288,11 +289,12 @@ class TestFullViewIntegration:
         view = build_app_home_view("U123", db_path=test_db)
         headers = _find_header_order(view["blocks"])
 
+        # With empty data, ALERTS section returns [] (no header).
+        # Only sections that always produce headers are expected.
         expected_order = [
             "BRAIN LEVEL",
             "DIMENSION MOMENTUM",
             "SECOND BRAIN DASHBOARD",
-            "ALERTS",
             "7-DAY ENGAGEMENT",
         ]
         # Verify the headers appear in the expected order

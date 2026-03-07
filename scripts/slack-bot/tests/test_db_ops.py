@@ -11,9 +11,7 @@ if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
 
 # Mock config before importing db_ops
-_mock_config = MagicMock()
-_mock_config.DB_PATH = Path("/dev/null")  # Will be overridden per-test
-sys.modules.setdefault("config", _mock_config)
+sys.modules.setdefault("config", MagicMock())
 
 from core.db_ops import (
     query,

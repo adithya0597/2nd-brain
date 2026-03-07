@@ -9,44 +9,13 @@ import pytest
 # ---------------------------------------------------------------------------
 # Mock dependencies before importing modules under test
 # ---------------------------------------------------------------------------
-cfg_mock = sys.modules.setdefault("config", MagicMock())
-cfg_mock.ANTHROPIC_API_KEY = "test-key"
-cfg_mock.ANTHROPIC_MODEL = "claude-test"
-cfg_mock.DB_PATH = Path("/tmp/test.db")
-cfg_mock.VAULT_PATH = Path("/tmp/vault")
-cfg_mock.COMMANDS_PATH = Path("/tmp/commands")
-cfg_mock.CLAUDE_MD_PATH = Path("/tmp/CLAUDE.md")
-cfg_mock.NOTION_REGISTRY_PATH = Path("/tmp/notion-registry.json")
-cfg_mock.NOTION_TOKEN = ""
-cfg_mock.NOTION_COLLECTIONS = {}
-cfg_mock.DIMENSION_CHANNELS = {
-    "Health & Vitality": "brain-health",
-    "Wealth & Finance": "brain-wealth",
-    "Relationships": "brain-relations",
-    "Mind & Growth": "brain-growth",
-    "Purpose & Impact": "brain-purpose",
-    "Systems & Environment": "brain-systems",
-}
-cfg_mock.DIMENSION_KEYWORDS = {
-    "Health & Vitality": ["health", "fitness"],
-    "Wealth & Finance": ["money", "finance"],
-    "Relationships": ["friend", "family"],
-    "Mind & Growth": ["learn", "read"],
-    "Purpose & Impact": ["career", "mission"],
-    "Systems & Environment": ["system", "automate"],
-}
-cfg_mock.PROJECT_KEYWORDS = ["project", "milestone"]
-cfg_mock.RESOURCE_KEYWORDS = ["article", "book"]
-cfg_mock.OWNER_SLACK_ID = ""
-cfg_mock.CONFIDENCE_THRESHOLD = 0.60
-cfg_mock.BOUNCER_TIMEOUT_MINUTES = 15
-cfg_mock.CLASSIFIER_LLM_MODEL = "claude-haiku-4-5-20251001"
-cfg_mock.EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-cfg_mock.EMBEDDING_DIM = 384
+# Mock config before importing (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
 
 sys.modules.setdefault("slack_bolt", MagicMock())
 sys.modules.setdefault("anthropic", MagicMock())
 sys.modules.setdefault("core.db_connection", MagicMock())
+sys.modules.setdefault("core.ai_client", MagicMock())
 sys.modules.setdefault("core.async_utils", MagicMock())
 sys.modules.setdefault("core.formatter", MagicMock())
 sys.modules.setdefault("core.notion_client", MagicMock())
@@ -85,11 +54,10 @@ class TestRunAiCommandProgress:
              patch("handlers.commands.load_system_context", return_value="system"), \
              patch("handlers.commands.load_command_prompt", return_value="prompt"), \
              patch("handlers.commands.build_claude_messages", return_value=[{"role": "user", "content": "test"}]), \
-             patch("handlers.commands.anthropic") as mock_anthropic, \
+             patch("handlers.commands.get_ai_client", return_value=ai_client_instance), \
+             patch("handlers.commands.get_ai_model", return_value="claude-test"), \
              patch("handlers.commands._write_command_output_to_vault"), \
              patch("handlers.commands._channel_ids", {"brain-daily": "C123"}):
-
-            mock_anthropic.Anthropic.return_value = ai_client_instance
 
             from handlers.commands import _run_ai_command
             _run_ai_command(client, "U123", "today", "brain-daily", "", trigger_channel_id="C999")
@@ -112,11 +80,10 @@ class TestRunAiCommandProgress:
              patch("handlers.commands.load_system_context", return_value="system"), \
              patch("handlers.commands.load_command_prompt", return_value="prompt"), \
              patch("handlers.commands.build_claude_messages", return_value=[{"role": "user", "content": "test"}]), \
-             patch("handlers.commands.anthropic") as mock_anthropic, \
+             patch("handlers.commands.get_ai_client", return_value=ai_client_instance), \
+             patch("handlers.commands.get_ai_model", return_value="claude-test"), \
              patch("handlers.commands._write_command_output_to_vault"), \
              patch("handlers.commands._channel_ids", {"brain-daily": "C123"}):
-
-            mock_anthropic.Anthropic.return_value = ai_client_instance
 
             from handlers.commands import _run_ai_command
             _run_ai_command(client, "U123", "today", "brain-daily", "")
@@ -132,11 +99,10 @@ class TestRunAiCommandProgress:
              patch("handlers.commands.load_system_context", return_value="system"), \
              patch("handlers.commands.load_command_prompt", return_value="prompt"), \
              patch("handlers.commands.build_claude_messages", return_value=[{"role": "user", "content": "test"}]), \
-             patch("handlers.commands.anthropic") as mock_anthropic, \
+             patch("handlers.commands.get_ai_client", return_value=ai_client_instance), \
+             patch("handlers.commands.get_ai_model", return_value="claude-test"), \
              patch("handlers.commands._write_command_output_to_vault"), \
              patch("handlers.commands._channel_ids", {"brain-daily": "C123"}):
-
-            mock_anthropic.Anthropic.return_value = ai_client_instance
 
             from handlers.commands import _run_ai_command
             # Should not raise
@@ -154,10 +120,9 @@ class TestRunAiCommandProgress:
              patch("handlers.commands.load_system_context", return_value="system"), \
              patch("handlers.commands.load_command_prompt", return_value="prompt"), \
              patch("handlers.commands.build_claude_messages", return_value=[{"role": "user", "content": "test"}]), \
-             patch("handlers.commands.anthropic") as mock_anthropic, \
+             patch("handlers.commands.get_ai_client", return_value=ai_client_instance), \
+             patch("handlers.commands.get_ai_model", return_value="claude-test"), \
              patch("handlers.commands._write_command_output_to_vault"):
-
-            mock_anthropic.Anthropic.return_value = ai_client_instance
 
             from handlers.commands import _run_ai_command
             _run_ai_command(client, "U123", "context-load", None, "", trigger_channel_id="C999")

@@ -10,10 +10,8 @@ SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
 
-# Mock config before importing modules
-_mock_config = MagicMock()
-_mock_config.DB_PATH = Path("/dev/null")
-sys.modules.setdefault("config", _mock_config)
+# Mock config before importing modules (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
 
 from core.db_ops import get_cost_summary, execute
 from core.formatter import format_cost_report

@@ -32,51 +32,69 @@ _REQUIRED_DIMENSION_CHANNELS = {
 }
 
 _REQUIRED_DIMENSION_KEYWORDS = {
-    "Health & Vitality": ["health", "fitness"],
-    "Wealth & Finance": ["money", "finance"],
-    "Relationships": ["friend", "family"],
-    "Mind & Growth": ["learn", "read"],
-    "Purpose & Impact": ["career", "mission"],
-    "Systems & Environment": ["system", "automate"],
+    "Health & Vitality": ["health", "fitness", "workout", "diet", "sleep", "exercise", "nutrition", "meditation", "yoga", "running", "gym", "weight", "mental health", "work out", "working out", "well-being", "wellbeing", "calorie", "stretch"],
+    "Wealth & Finance": ["money", "finance", "invest", "portfolio", "budget", "savings", "income", "expense", "crypto", "stocks", "salary", "debt", "tax", "side hustle", "net worth", "credit card", "bank account", "real estate"],
+    "Relationships": ["friend", "family", "relationship", "dating", "partner", "social", "network", "community", "mentor", "colleague", "hang out", "hanging out", "catch up", "catching up", "get together"],
+    "Mind & Growth": ["learn", "read", "book", "course", "study", "skill", "knowledge", "research", "education", "mindset", "philosophy", "psychology", "self improvement", "self-improvement", "personal growth", "online course"],
+    "Purpose & Impact": ["career", "mission", "purpose", "impact", "contribute", "volunteer", "leadership", "legacy", "meaning", "values", "give back", "side project", "open source", "passion project"],
+    "Systems & Environment": ["system", "automate", "tool", "setup", "organize", "clean", "home", "workspace", "routine", "habit", "process", "workflow", "set up", "setting up", "clean up", "cleaning up", "time management"],
 }
 
 
 def _ensure_config_defaults():
     """Ensure the config mock in sys.modules has required real attributes.
 
-    Always force-sets critical attributes (DIMENSION_KEYWORDS, DIMENSION_CHANNELS)
-    to prevent test contamination from module-level mocking in individual test files.
+    Force-sets ALL config attributes every time to prevent cross-test contamination
+    from module-level mocking in individual test files.
     """
     cfg = sys.modules.get("config")
     if cfg is None:
         return
-    # Always force-set critical attributes that tests depend on
-    _FORCE_SET = {"DIMENSION_CHANNELS", "DIMENSION_KEYWORDS"}
-    for attr, default in [
-        ("CHANNELS", {
+    # Force-set every config attribute unconditionally.
+    # This prevents the "first test file alphabetically wins" problem where
+    # sys.modules.setdefault("config", MagicMock()) returns the existing mock
+    # and subsequent attribute assignments mutate the shared object.
+    _ALL_DEFAULTS = {
+        # Paths
+        "DB_PATH": Path("/dev/null"),
+        "VAULT_PATH": Path("/tmp/test-vault"),
+        "COMMANDS_PATH": Path("/dev/null"),
+        "CLAUDE_MD_PATH": Path("/dev/null"),
+        "NOTION_REGISTRY_PATH": Path("/dev/null"),
+        "PROJECT_ROOT": Path("/tmp"),
+        # Slack tokens
+        "SLACK_BOT_TOKEN": "xoxb-test",
+        "SLACK_APP_TOKEN": "xapp-test",
+        "SLACK_SIGNING_SECRET": "",
+        "OWNER_SLACK_ID": "",
+        # Anthropic
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_MODEL": "claude-sonnet-4-5-20250929",
+        "CLASSIFIER_LLM_MODEL": "claude-haiku-4-5-20251001",
+        # Embedding
+        "EMBEDDING_MODEL": "BAAI/bge-small-en-v1.5",
+        "EMBEDDING_DIM": 384,
+        # Notion
+        "NOTION_TOKEN": "",
+        "NOTION_COLLECTIONS": {},
+        # Channels
+        "CHANNELS": {
             "brain-inbox": "Raw capture and routing",
             "brain-daily": "Morning briefings, evening reviews, actions, projects, resources",
             "brain-insights": "Drift analysis, idea generation, pattern synthesis, and reflections",
             "brain-dashboard": "ICOR heatmap, project status, and cost tracking",
-        }),
-        ("DIMENSION_CHANNELS", _REQUIRED_DIMENSION_CHANNELS),
-        ("DIMENSION_KEYWORDS", _REQUIRED_DIMENSION_KEYWORDS),
-        ("PROJECT_KEYWORDS", ["project", "milestone"]),
-        ("RESOURCE_KEYWORDS", ["article", "book"]),
-        ("OWNER_SLACK_ID", ""),
-        ("CONFIDENCE_THRESHOLD", 0.60),
-        ("BOUNCER_TIMEOUT_MINUTES", 15),
-        ("ANTHROPIC_API_KEY", ""),
-        ("CLASSIFIER_LLM_MODEL", "claude-haiku-4-5-20251001"),
-        ("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
-        ("EMBEDDING_DIM", 384),
-    ]:
-        if attr in _FORCE_SET:
-            setattr(cfg, attr, default)
-        else:
-            val = getattr(cfg, attr, None)
-            if val is None or isinstance(val, MagicMock):
-                setattr(cfg, attr, default)
+        },
+        "DIMENSION_CHANNELS": _REQUIRED_DIMENSION_CHANNELS,
+        "DIMENSION_KEYWORDS": _REQUIRED_DIMENSION_KEYWORDS,
+        # Keywords
+        "PROJECT_KEYWORDS": ["project", "milestone"],
+        "RESOURCE_KEYWORDS": ["article", "book"],
+        # Thresholds
+        "CONFIDENCE_THRESHOLD": 0.60,
+        "BOUNCER_TIMEOUT_MINUTES": 15,
+    }
+    for attr, default in _ALL_DEFAULTS.items():
+        setattr(cfg, attr, default)
 
 
 @pytest.fixture(autouse=True, scope="session")

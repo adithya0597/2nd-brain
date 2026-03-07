@@ -10,58 +10,9 @@ SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
 
-# We need to mock config before importing classifier, because classifier.py
-# does `import config` at module level and config.py reads env vars that
-# won't be set in test environments.
-_mock_config = MagicMock()
-_mock_config.DIMENSION_KEYWORDS = {
-    "Health & Vitality": [
-        "health", "fitness", "workout", "diet", "sleep", "exercise",
-        "nutrition", "meditation", "yoga", "running", "gym", "weight",
-        "mental health", "work out", "working out", "well-being",
-        "wellbeing", "calorie", "stretch",
-    ],
-    "Wealth & Finance": [
-        "money", "finance", "invest", "portfolio", "budget", "savings",
-        "income", "expense", "crypto", "stocks", "salary", "debt", "tax",
-        "side hustle", "net worth", "credit card", "bank account",
-        "real estate",
-    ],
-    "Relationships": [
-        "friend", "family", "relationship", "dating", "partner", "social",
-        "network", "community", "mentor", "colleague", "hang out",
-        "hanging out", "catch up", "catching up", "get together",
-    ],
-    "Mind & Growth": [
-        "learn", "read", "book", "course", "study", "skill", "knowledge",
-        "research", "education", "mindset", "philosophy", "psychology",
-        "self improvement", "self-improvement", "personal growth",
-        "online course",
-    ],
-    "Purpose & Impact": [
-        "career", "mission", "purpose", "impact", "contribute", "volunteer",
-        "leadership", "legacy", "meaning", "values", "give back",
-        "side project", "open source", "passion project",
-    ],
-    "Systems & Environment": [
-        "system", "automate", "tool", "setup", "organize", "clean", "home",
-        "workspace", "routine", "habit", "process", "workflow", "set up",
-        "setting up", "clean up", "cleaning up", "time management",
-    ],
-}
-_mock_config.DIMENSION_CHANNELS = {
-    "Health & Vitality": "brain-health",
-    "Wealth & Finance": "brain-wealth",
-    "Relationships": "brain-relations",
-    "Mind & Growth": "brain-growth",
-    "Purpose & Impact": "brain-purpose",
-    "Systems & Environment": "brain-systems",
-}
-_mock_config.ANTHROPIC_API_KEY = ""
-_mock_config.ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
-
-# Patch config in sys.modules before importing classifier
-sys.modules.setdefault("config", _mock_config)
+# Mock config before importing classifier (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
+import config  # noqa: E402 — conftest populates all attributes
 
 # Now import — classifier will see our mock config
 from core.classifier import (
@@ -80,7 +31,7 @@ from core.classifier import (
 @pytest.fixture()
 def classifier():
     """Return a MessageClassifier with the standard keyword set."""
-    return MessageClassifier(keywords=dict(_mock_config.DIMENSION_KEYWORDS))
+    return MessageClassifier(keywords=dict(config.DIMENSION_KEYWORDS))
 
 
 # ---------------------------------------------------------------------------

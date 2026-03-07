@@ -11,17 +11,8 @@ SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
 
-# Mock config before importing journal_indexer
-_mock_config = MagicMock()
-_mock_config.DIMENSION_CHANNELS = {
-    "Health & Vitality": "brain-health",
-    "Wealth & Finance": "brain-wealth",
-    "Relationships": "brain-relations",
-    "Mind & Growth": "brain-growth",
-    "Purpose & Impact": "brain-purpose",
-    "Systems & Environment": "brain-systems",
-}
-sys.modules.setdefault("config", _mock_config)
+# Mock config before importing journal_indexer (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
 
 from core.journal_indexer import (
     _detect_mood,

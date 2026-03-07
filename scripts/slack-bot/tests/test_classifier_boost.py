@@ -4,31 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Ensure config mock has required attributes
-cfg_mock = MagicMock()
-cfg_mock.DIMENSION_CHANNELS = {
-    "Health & Vitality": "brain-health",
-    "Wealth & Finance": "brain-wealth",
-    "Relationships": "brain-relations",
-    "Mind & Growth": "brain-growth",
-    "Purpose & Impact": "brain-purpose",
-    "Systems & Environment": "brain-systems",
-}
-cfg_mock.DIMENSION_KEYWORDS = {
-    "Health & Vitality": ["health", "fitness", "workout"],
-    "Wealth & Finance": ["money", "finance", "invest"],
-    "Relationships": ["friend", "family"],
-    "Mind & Growth": ["learn", "read", "book"],
-    "Purpose & Impact": ["career", "mission"],
-    "Systems & Environment": ["system", "automate"],
-}
-cfg_mock.ANTHROPIC_API_KEY = ""
-cfg_mock.CLASSIFIER_LLM_MODEL = "claude-haiku-4-5-20251001"
-cfg_mock.CONFIDENCE_THRESHOLD = 0.60
-cfg_mock.BOUNCER_TIMEOUT_MINUTES = 15
-cfg_mock.EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-cfg_mock.EMBEDDING_DIM = 384
-sys.modules.setdefault("config", cfg_mock)
+# Mock config before importing (conftest sets all defaults)
+sys.modules.setdefault("config", MagicMock())
 sys.modules.setdefault("core.db_connection", MagicMock())
 sys.modules.setdefault("anthropic", MagicMock())
 
