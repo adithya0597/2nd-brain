@@ -20,6 +20,14 @@ _COMMAND_QUERIES = {
         "pending_actions": "SELECT id, description, source_file, icor_element FROM action_items WHERE status = 'pending' AND source_date <= date('now', '-1 day') ORDER BY source_date DESC",
         "neglected": "SELECT h.name AS key_element, p.name AS dimension, h.last_mentioned, CASE WHEN h.last_mentioned IS NULL THEN 'Never mentioned' ELSE CAST(julianday('now') - julianday(h.last_mentioned) AS INTEGER) || ' days ago' END AS last_activity FROM icor_hierarchy h JOIN icor_hierarchy p ON h.parent_id = p.id WHERE h.level = 'key_element' AND (h.last_mentioned IS NULL OR h.last_mentioned < date('now', '-7 days')) ORDER BY h.last_mentioned ASC NULLS FIRST",
         "recent_journal": "SELECT date, summary, mood, energy, icor_elements FROM journal_entries WHERE date >= date('now', '-7 days') ORDER BY date DESC",
+        "mood_energy_7d": """
+            SELECT date, mood, energy FROM journal_entries
+            WHERE date >= date('now', '-7 days') ORDER BY date DESC
+        """,
+        "engagement_trend_7d": """
+            SELECT date, engagement_score FROM engagement_daily
+            WHERE date >= date('now', '-7 days') ORDER BY date DESC
+        """,
     },
     "close-day": {
         "today_journal": "SELECT id, content, mood, energy, icor_elements FROM journal_entries WHERE date = date('now') ORDER BY created_at",
@@ -55,6 +63,14 @@ _COMMAND_QUERIES = {
         "energy_patterns": "SELECT CASE CAST(strftime('%w', date) AS INTEGER) WHEN 0 THEN 'Sunday' WHEN 1 THEN 'Monday' WHEN 2 THEN 'Tuesday' WHEN 3 THEN 'Wednesday' WHEN 4 THEN 'Thursday' WHEN 5 THEN 'Friday' WHEN 6 THEN 'Saturday' END AS day_name, CAST(strftime('%w', date) AS INTEGER) AS day_num, COUNT(*) AS entries, ROUND(AVG(CASE energy WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 END), 1) AS avg_energy, ROUND(AVG(sentiment_score), 2) AS avg_sentiment, ROUND(AVG(CASE mood WHEN 'great' THEN 5 WHEN 'good' THEN 4 WHEN 'okay' THEN 3 WHEN 'low' THEN 2 WHEN 'bad' THEN 1 END), 1) AS avg_mood FROM journal_entries WHERE date >= date('now', '-90 days') GROUP BY day_num ORDER BY day_num",
         "pending_actions": "SELECT ai.id, ai.description, ai.source_date, ai.icor_element, ai.icor_project, h.name AS element_name, p.name AS dimension_name, CAST(julianday('now') - julianday(ai.source_date) AS INTEGER) AS age_days FROM action_items ai LEFT JOIN icor_hierarchy h ON ai.icor_element = h.name LEFT JOIN icor_hierarchy p ON h.parent_id = p.id WHERE ai.status = 'pending' ORDER BY ai.source_date ASC",
         "dimension_coverage": "SELECT p.name AS dimension, COUNT(DISTINCT ai.id) AS pending_actions, COUNT(DISTINCT CASE WHEN ai.source_date >= date('now', '-7 days') THEN ai.id END) AS recent_actions, MAX(h.attention_score) AS max_attention, MIN(COALESCE(h.last_mentioned, '2000-01-01')) AS oldest_mention FROM icor_hierarchy p LEFT JOIN icor_hierarchy h ON h.parent_id = p.id AND h.level = 'key_element' LEFT JOIN action_items ai ON ai.icor_element = h.name AND ai.status = 'pending' WHERE p.level = 'dimension' GROUP BY p.name ORDER BY pending_actions DESC",
+        "mood_energy_30d": """
+            SELECT date, mood, energy FROM journal_entries
+            WHERE date >= date('now', '-30 days') ORDER BY date DESC
+        """,
+        "engagement_trend_30d": """
+            SELECT date, engagement_score FROM engagement_daily
+            WHERE date >= date('now', '-30 days') ORDER BY date DESC
+        """,
     },
     "emerge": {
         "recent_journal": "SELECT date, content, icor_elements, summary, sentiment_score FROM journal_entries WHERE date >= date('now', '-30 days') ORDER BY date DESC",
@@ -84,6 +100,36 @@ _COMMAND_QUERIES = {
         "pending_actions": "SELECT id, description, source_date, status, icor_element, icor_project, CAST(julianday('now') - julianday(source_date) AS INTEGER) AS age_days FROM action_items WHERE status != 'done' ORDER BY created_at DESC",
         "attention": "SELECT dimension, key_element, current_attention FROM attention_indicators ORDER BY dimension",
         "icor_hierarchy": "SELECT h.id, h.level, h.name, p.name AS parent_name, h.attention_score, h.last_mentioned FROM icor_hierarchy h LEFT JOIN icor_hierarchy p ON h.parent_id = p.id ORDER BY h.id",
+    },
+    "engage": {
+        "brain_level": """
+            SELECT level, consistency, breadth, depth, growth, momentum, computed_at
+            FROM brain_level ORDER BY computed_at DESC LIMIT 1
+        """,
+        "engagement_7d": """
+            SELECT date, engagement_score, journal_count, action_created,
+                   action_completed, vault_files_modified, concepts_touched
+            FROM engagement_daily
+            ORDER BY date DESC LIMIT 7
+        """,
+        "dimension_signals": """
+            SELECT dimension, touchpoints, momentum, trend, period_start, period_end
+            FROM dimension_signals
+            WHERE period_end = (SELECT MAX(period_end) FROM dimension_signals)
+        """,
+        "active_alerts": """
+            SELECT alert_type, severity, title, detail, created_at
+            FROM alerts WHERE dismissed = 0
+            ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END
+        """,
+        "engagement_30d_avg": """
+            SELECT ROUND(AVG(engagement_score), 2) as avg_score,
+                   ROUND(AVG(journal_count), 1) as avg_journals,
+                   ROUND(AVG(action_completed), 1) as avg_completed,
+                   COUNT(*) as days_tracked
+            FROM engagement_daily
+            WHERE date >= date('now', '-30 days')
+        """,
     },
 }
 
@@ -141,6 +187,7 @@ _COMMAND_VAULT_FILES = {
         "Identity/ICOR.md",
         "Identity/Active-Projects.md",
     ],
+    "engage": ["Identity/ICOR.md"],
 }
 
 # Commands that should get graph context (seed_method, depth)
@@ -158,7 +205,7 @@ _GRAPH_CONTEXT_COMMANDS = {
 # Commands that benefit from Notion context
 _NOTION_CONTEXT_COMMANDS = {
     "today", "schedule", "ideas", "projects", "close-day",
-    "context-load", "drift", "resources", "weekly-review",
+    "context-load", "drift", "resources", "weekly-review", "engage",
 }
 
 # Commands that benefit from pre-computed analytics

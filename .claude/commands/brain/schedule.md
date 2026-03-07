@@ -177,7 +177,13 @@ Based on your journal history (last 90 days), your typical energy pattern:
 3. [Over-commitment adjustment if any day exceeds capacity]
 ```
 
-### 9. Save Options
+### 9. 30-Day Trends
+
+If trend data is available in the Context Data (mood_energy_30d, engagement_trend_30d):
+
+Use the 30-day mood, energy, and engagement trends to inform scheduling decisions. If certain days consistently show low energy, schedule lighter tasks on those days. If engagement has been declining over the past weeks, suggest building in more variety or reducing over-commitment. Include a brief "Trend Insights" note in the Weekly Overview section.
+
+### 10. Save Options
 Offer the user these options:
 - **Append to daily notes:** Add each day's task list to the corresponding `vault/Daily Notes/YYYY-MM-DD.md` file under a "## Scheduled Tasks" section
 - **Save as weekly plan:** Save the full schedule to `vault/Projects/Weekly-Plan-YYYY-MM-DD.md` (using the Monday date)

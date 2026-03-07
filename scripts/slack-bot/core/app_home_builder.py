@@ -167,8 +167,6 @@ def _build_dimension_momentum_section(db_path=None) -> list[dict]:
 
 def _build_active_alerts_section(db_path=None) -> list[dict]:
     """Build the active alerts section with Dismiss buttons."""
-    blocks = [_header("ALERTS")]
-
     _SEVERITY_INDICATORS = {
         "critical": "!!",
         "warning": "!",
@@ -195,8 +193,9 @@ def _build_active_alerts_section(db_path=None) -> list[dict]:
         rows = []
 
     if not rows:
-        blocks.append(_section("No active alerts"))
-        return blocks
+        return []
+
+    blocks = [_header("ALERTS")]
 
     for alert_id, severity, title in rows:
         sev_ind = _SEVERITY_INDICATORS.get(severity, "i")
@@ -346,8 +345,6 @@ def _build_quick_actions() -> list[dict]:
 
 def _build_recent_captures(limit_per_dim: int = 3, db_path=None) -> list[dict]:
     """Build the recent captures section, grouped by dimension."""
-    blocks = [_divider(), _section("*RECENT CAPTURES*")]
-
     try:
         with get_connection(db_path=db_path) as conn:
             rows = conn.execute(
@@ -363,8 +360,9 @@ def _build_recent_captures(limit_per_dim: int = 3, db_path=None) -> list[dict]:
         rows = []
 
     if not rows:
-        blocks.append(_context("No recent captures"))
-        return blocks
+        return []
+
+    blocks = [_divider(), _section("*RECENT CAPTURES*")]
 
     # Group by dimension
     by_dim: dict[str, list[tuple[str, str]]] = {}
@@ -394,8 +392,6 @@ def _build_recent_captures(limit_per_dim: int = 3, db_path=None) -> list[dict]:
 
 def _build_pending_actions(limit: int = 5, db_path=None) -> list[dict]:
     """Build the pending actions section with Complete/Snooze buttons."""
-    blocks = [_divider(), _section("*PENDING ACTIONS*")]
-
     try:
         with get_connection(db_path=db_path) as conn:
             rows = conn.execute(
@@ -413,8 +409,9 @@ def _build_pending_actions(limit: int = 5, db_path=None) -> list[dict]:
         rows = []
 
     if not rows:
-        blocks.append(_context("No pending actions"))
-        return blocks
+        return []
+
+    blocks = [_divider(), _section("*PENDING ACTIONS*")]
 
     for row_id, description, icor_element, source_date in rows:
         action_id = str(row_id)

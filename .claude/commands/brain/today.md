@@ -72,4 +72,10 @@ Based on your ICOR priorities and recent patterns, consider focusing on:
 3. [Specific suggestion]
 ```
 
+### 7. Cross-Session Trends
+
+If mood/energy trend data is available in the Context Data (mood_energy_7d, engagement_trend_7d):
+
+Compare today's mood and energy with the 7-day trend. Note if the user's engagement has been rising or declining. If there's a notable pattern (e.g., consistently low energy on certain days, or a multi-day mood dip), mention it briefly in the briefing under a "Trends" subsection.
+
 Present the briefing to the user and confirm it was appended to today's daily note.

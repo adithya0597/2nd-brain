@@ -412,14 +412,29 @@ def run_all_checks(db_path=None) -> dict:
     Returns:
         ``{"total_new": int, "by_type": {alert_type: count, ...}}``
     """
-    results = {
-        "stale_actions": check_stale_actions(db_path=db_path),
-        "neglected_dimension": check_neglected_dimensions(db_path=db_path),
-        "engagement_drop": check_engagement_drop(db_path=db_path),
-        "streak_break": check_streak_break(db_path=db_path),
-        "drift": check_drift_alerts(db_path=db_path),
-        "knowledge_gap": check_knowledge_gaps(db_path=db_path),
+    import time
+
+    checkers = {
+        "stale_actions": check_stale_actions,
+        "neglected_dimension": check_neglected_dimensions,
+        "engagement_drop": check_engagement_drop,
+        "streak_break": check_streak_break,
+        "drift": check_drift_alerts,
+        "knowledge_gap": check_knowledge_gaps,
     }
+
+    results = {}
+    for name, checker in checkers.items():
+        t0 = time.monotonic()
+        try:
+            results[name] = checker(db_path=db_path)
+            elapsed = time.monotonic() - t0
+            if elapsed > 1.0:
+                logger.warning("Slow alert check: %s took %.2fs", name, elapsed)
+        except Exception as e:
+            logger.error("Alert check %s failed: %s", name, e)
+            results[name] = 0
+
     return {
         "total_new": sum(results.values()),
         "by_type": results,

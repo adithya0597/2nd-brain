@@ -788,3 +788,84 @@ def format_sync_report(result) -> list[dict]:
 
     blocks.append(_context(f"{status_emoji} Sync completed at {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
     return blocks
+
+
+# ---------------------------------------------------------------------------
+# Engagement Dashboard
+# ---------------------------------------------------------------------------
+
+def format_engagement_report(data: dict) -> list[dict]:
+    """Format engagement report as Slack Block Kit blocks."""
+    blocks = []
+
+    # Header
+    blocks.append(_header("Engagement Dashboard"))
+
+    # Brain Level gauge
+    brain_level = data.get("brain_level", [])
+    if brain_level:
+        bl = brain_level[0] if isinstance(brain_level, list) else brain_level
+        level = bl.get("level", 0) if isinstance(bl, dict) else 0
+        filled = round(level)
+        bar = "\u2588" * filled + "\u2591" * (10 - filled)
+        blocks.append(_section(f"*Brain Level:* `{bar}` *{level}/10*"))
+
+    blocks.append(_divider())
+
+    # Dimension momentum grid
+    signals = data.get("dimension_signals", [])
+    if signals:
+        momentum_map = {"hot": ":fire:", "warm": ":sunny:", "cold": ":snowflake:", "frozen": ":ice_cube:"}
+        trend_map = {"rising": ":chart_with_upwards_trend:", "stable": ":arrow_right:", "declining": ":chart_with_downwards_trend:"}
+        lines = []
+        for s in signals:
+            dim = s.get("dimension", "?")
+            mom = s.get("momentum", "cold")
+            trend = s.get("trend", "stable")
+            tp = s.get("touchpoints", 0)
+            icon = momentum_map.get(mom, ":question:")
+            trend_icon = trend_map.get(trend, ":arrow_right:")
+            lines.append(f"{icon} *{dim}*: {mom} ({tp} touches) {trend_icon}")
+        blocks.append(_section("*Dimension Momentum*\n" + "\n".join(lines)))
+        blocks.append(_divider())
+
+    # 7-day engagement trend
+    engagement = data.get("engagement_7d", [])
+    if engagement:
+        # Reverse to chronological order
+        days = list(reversed(engagement))
+        scores = [d.get("engagement_score", 0) for d in days]
+        dates = [d.get("date", "?")[-5:] for d in days]  # MM-DD
+        # Simple bar chart
+        max_score = max(scores) if scores else 1
+        bars = []
+        for date, score in zip(dates, scores):
+            bar_len = round((score / max(max_score, 1)) * 8)
+            bar = "\u2593" * bar_len + "\u2591" * (8 - bar_len)
+            bars.append(f"`{date}` `{bar}` {score:.1f}")
+        blocks.append(_section("*7-Day Engagement*\n" + "\n".join(bars)))
+        blocks.append(_divider())
+
+    # Active alerts
+    alerts = data.get("active_alerts", [])
+    if alerts:
+        severity_icon = {"critical": ":red_circle:", "warning": ":large_yellow_circle:", "info": ":large_blue_circle:"}
+        alert_lines = []
+        for a in alerts:
+            icon = severity_icon.get(a.get("severity", "info"), ":white_circle:")
+            alert_lines.append(f"{icon} *{a.get('title', 'Alert')}*: {a.get('detail', '')}")
+        blocks.append(_section("*Active Alerts*\n" + "\n".join(alert_lines[:5])))
+        blocks.append(_divider())
+
+    # 30-day averages
+    avg = data.get("engagement_30d_avg", [])
+    if avg:
+        a = avg[0] if isinstance(avg, list) else avg
+        blocks.append(_context(
+            f":bar_chart: 30-day avg: *{a.get('avg_score', 0)}* engagement | "
+            f"*{a.get('avg_journals', 0)}* journals/day | "
+            f"*{a.get('avg_completed', 0)}* actions/day | "
+            f"*{a.get('days_tracked', 0)}* days tracked"
+        ))
+
+    return blocks
