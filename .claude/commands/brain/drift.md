@@ -2,6 +2,10 @@
 
 Compare stated life priorities (ICOR goals) against actual journaling behavior to identify drift — the gap between intentions and actions.
 
+## Pre-Computed Analytics
+
+The Context Data includes a `drift_scores` analytics section with pre-computed per-element drift scores (normalized attention, mention counts, days since mention, and drift status classifications). Use this data directly for Step 4 instead of re-computing from raw SQL. The pre-computed scores already classify each element as "over-indexed", "aligned", or "neglected" with a numeric drift value.
+
 ## Steps
 
 ### 1. Load Stated Priorities

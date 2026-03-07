@@ -4,6 +4,12 @@ Generate an energy-aware weekly schedule by combining pending tasks, Notion dead
 
 **Usage:** `/brain:schedule [target]` — target can be empty (current week), "next week", or a specific date (uses the week containing that date).
 
+## Pre-Computed Analytics
+
+The Context Data includes these pre-computed analytics — use them directly instead of re-querying:
+- **attention_gaps**: ICOR elements ranked by severity (critical/moderate/mild) with days-since-mention. Use for Step 4 (ICOR Dimension Coverage) and to identify "Neglected Recovery" tasks in Step 6.
+- **stale_actions**: Pending action items grouped by ICOR element with age and staleness data. Use for Step 3 (Pending Action Items) — these are already filtered and enriched.
+
 ## Steps
 
 ### 1. Determine Target Week

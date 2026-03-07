@@ -2,6 +2,13 @@
 
 Generate specific, actionable ideas from journal patterns, concept growth, neglected relationships, and attention gaps across your Second Brain.
 
+## Pre-Computed Analytics
+
+The Context Data includes these pre-computed analytics — use them directly instead of re-querying:
+- **stale_actions**: Pending actions grouped by ICOR element with age data. Use for Step 1c (stale pending actions) and "Tools to Build" analysis.
+- **co_occurrences**: ICOR element pairs that frequently appear together in journal entries, with co-occurrence counts. Use for "Converging Interests" in Topics to Investigate and cross-domain "Content to Create" ideas.
+- **attention_gaps**: ICOR elements ranked by severity. Use for Step 1d (attention gaps) and "Quick Experiments" targeting neglected areas.
+
 ## Steps
 
 ### 1. Gather Raw Signals

@@ -2,6 +2,10 @@
 
 Surface unnamed patterns, implicit directions, or conclusions hidden across scattered vault notes.
 
+## Pre-Computed Analytics
+
+The Context Data includes a `co_occurrences` analytics section with ICOR element pairs that frequently co-appear in journal entries. Use this data to accelerate Step 2 — these co-occurrence clusters are strong candidates for "Thematic Clusters" and "Converging Interests" patterns. Elements that co-occur 3+ times without an explicit vault link between them are especially interesting.
+
 ## Steps
 
 ### 1. Gather Raw Material

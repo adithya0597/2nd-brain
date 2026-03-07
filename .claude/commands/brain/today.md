@@ -2,6 +2,13 @@
 
 Start the day with a comprehensive morning briefing and create today's daily note.
 
+## Pre-Computed Analytics
+
+The Context Data includes these pre-computed analytics — use them directly instead of re-querying:
+- **top3_morning**: The 3 highest-priority items for today, scored by age, project linkage, and ICOR importance. Use these as the core of "Suggested Focus Areas."
+- **stuck_item**: The single most stale action item. Highlight this prominently in the briefing as needing attention.
+- **attention_gaps**: ICOR elements with severity ratings (critical/moderate/mild). Use for "Attention Alerts" instead of the raw neglected-elements SQL.
+
 ## Steps
 
 ### 1. Load Context
