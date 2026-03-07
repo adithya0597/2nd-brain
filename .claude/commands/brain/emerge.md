@@ -20,12 +20,12 @@ ORDER BY date DESC;
 ```
 
 b. Scan vault for unconnected notes:
-- Use Glob to find all `.md` files in `vault/Concepts/`, `vault/Inbox/`, `vault/Projects/`
-- Read each file's frontmatter and first 500 characters
+- Review the vault files provided in the Context Data (graph-connected files and identity files)
+- Check their frontmatter and content for themes not yet linked to other notes
 
-c. Check for orphan notes (files not linked from any other file):
-- Use Grep to search for `[[filename]]` patterns across the vault
-- Identify files that are never referenced by other files
+c. Check for orphan notes (files with no incoming links):
+- In the Context Data, vault_index entries include `incoming_links_json`. Files with empty incoming links are orphans.
+- Identify these files as potential hidden patterns worth connecting
 
 ### 2. Analyze for Patterns
 Look for these pattern types:

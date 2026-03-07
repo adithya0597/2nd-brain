@@ -23,13 +23,13 @@ GROUP BY icor_elements
 ORDER BY frequency DESC
 LIMIT 5;
 ```
-c. Search `vault/Concepts/` for evergreen concepts (status = evergreen)
+c. Check the Context Data for evergreen concepts (status = evergreen) from the concepts query
 d. Present the top 5 candidates and ask the user which to challenge
 
 ### 2. Gather the Belief's Foundation
-Search for all supporting evidence in the vault:
-- Use Grep to find mentions of the belief/concept across all vault files
-- Query SQLite for journal entries that affirm or support this belief
+Search for all supporting evidence in the provided Context Data:
+- Look through the vault files and journal entries provided in the context for mentions of the belief/concept
+- Use the journal entries from the Context Data that affirm or support this belief
 - Note the dates and contexts where this belief appears strongest
 
 ### 3. Search for Counter-Evidence

@@ -495,6 +495,17 @@ class NotionSync:
                     goal=goal_name,
                     status=project.get("status"),
                 )
+                # Persist to SQLite for queryable access
+                await db_ops.execute(
+                    "INSERT INTO notion_projects (notion_id, name, status, tag, goal, deadline, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, datetime('now')) "
+                    "ON CONFLICT(notion_id) DO UPDATE SET "
+                    "name=excluded.name, status=excluded.status, tag=excluded.tag, "
+                    "goal=excluded.goal, deadline=excluded.deadline, updated_at=datetime('now')",
+                    (project["notion_id"], project["name"], project.get("status"),
+                     tag_name, goal_name, project.get("deadline")),
+                    db_path=self._db_path,
+                )
                 self._result.projects_pulled += 1
 
             except Exception as e:
@@ -534,6 +545,17 @@ class NotionSync:
                     goal["notion_id"],
                     tag=tag_name,
                     status=goal.get("status"),
+                )
+                # Persist to SQLite for queryable access
+                await db_ops.execute(
+                    "INSERT INTO notion_goals (notion_id, name, status, tag, deadline, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, datetime('now')) "
+                    "ON CONFLICT(notion_id) DO UPDATE SET "
+                    "name=excluded.name, status=excluded.status, tag=excluded.tag, "
+                    "deadline=excluded.deadline, updated_at=datetime('now')",
+                    (goal["notion_id"], goal["name"], goal.get("status"),
+                     tag_name, goal.get("deadline")),
+                    db_path=self._db_path,
                 )
                 self._result.goals_pulled += 1
 
@@ -700,6 +722,22 @@ class NotionSync:
                     birthday=person.get("birthday"),
                     last_checkin=person.get("last_checkin"),
                     tags=tag_names if tag_names else None,
+                )
+                # Persist to SQLite for queryable access
+                await db_ops.execute(
+                    "INSERT INTO notion_people (notion_id, name, relationship, email, phone, "
+                    "company, tags_json, birthday, last_checkin, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) "
+                    "ON CONFLICT(notion_id) DO UPDATE SET "
+                    "name=excluded.name, relationship=excluded.relationship, "
+                    "email=excluded.email, phone=excluded.phone, company=excluded.company, "
+                    "tags_json=excluded.tags_json, birthday=excluded.birthday, "
+                    "last_checkin=excluded.last_checkin, updated_at=datetime('now')",
+                    (person["notion_id"], person["name"], person.get("relationship"),
+                     person.get("email"), person.get("phone"), person.get("company"),
+                     json.dumps(tag_names) if tag_names else "[]",
+                     person.get("birthday"), person.get("last_checkin")),
+                    db_path=self._db_path,
                 )
                 self._result.people_synced += 1
             except Exception as e:

@@ -261,6 +261,59 @@ def migrate(db_path: Path = DB_PATH):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_captures(created_at)")
     print("pending_captures table: created/verified")
 
+    # 16. Create notion_projects table (persist pulled Notion projects)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notion_projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            notion_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT,
+            tag TEXT,
+            goal TEXT,
+            deadline TEXT,
+            archived INTEGER DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_np_status ON notion_projects(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_np_name ON notion_projects(name)")
+    print("notion_projects table: created/verified")
+
+    # 17. Create notion_goals table (persist pulled Notion goals)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notion_goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            notion_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT,
+            tag TEXT,
+            deadline TEXT,
+            archived INTEGER DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ng_status ON notion_goals(status)")
+    print("notion_goals table: created/verified")
+
+    # 18. Create notion_people table (persist pulled Notion people)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notion_people (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            notion_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            relationship TEXT,
+            email TEXT,
+            phone TEXT,
+            company TEXT,
+            tags_json TEXT DEFAULT '[]',
+            birthday TEXT,
+            last_checkin TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_npe_name ON notion_people(name)")
+    print("notion_people table: created/verified")
+
     conn.commit()
     conn.close()
     print(f"Migration complete on {db_path}")

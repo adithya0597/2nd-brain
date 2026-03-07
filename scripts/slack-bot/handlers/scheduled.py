@@ -31,6 +31,7 @@ from core.context_loader import (
     load_system_context,
 )
 from core.db_ops import (
+    compute_attention_scores,
     execute,
     get_attention_scores,
     get_neglected_elements,
@@ -197,9 +198,12 @@ def job_evening_prompt(client: WebClient, channel_ids: dict):
 
 
 def job_dashboard_refresh(client: WebClient, channel_ids: dict):
-    """Twice daily: SQLite dashboard refresh."""
+    """Twice daily: Recompute attention scores + SQLite dashboard refresh."""
     try:
         logger.info("Running dashboard refresh job")
+        # Recompute attention scores from journal data before displaying
+        scored = run_async(compute_attention_scores(days=30))
+        logger.info("Attention scores computed for %d elements", scored)
         pending = run_async(get_pending_actions())
         attention = run_async(get_attention_scores())
         neglected = run_async(get_neglected_elements())
@@ -492,6 +496,39 @@ def job_weekly_review(client: WebClient, channel_ids: dict):
         logger.exception("Weekly review job failed")
 
 
+def job_db_backup(client: WebClient, channel_ids: dict):
+    """Daily 4am: Backup brain.db to data/backups/, keep last 7 copies."""
+    try:
+        import shutil
+        from pathlib import Path
+
+        backup_dir = Path(DB_PATH).parent / "backups"
+        backup_dir.mkdir(exist_ok=True)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        dest = backup_dir / f"brain-{today}.db"
+
+        # Use sqlite3 .backup for a safe online backup (no lock needed)
+        import sqlite3 as _sqlite3
+        src_conn = _sqlite3.connect(str(DB_PATH))
+        dst_conn = _sqlite3.connect(str(dest))
+        src_conn.backup(dst_conn)
+        dst_conn.close()
+        src_conn.close()
+
+        logger.info("DB backup created: %s", dest)
+
+        # Prune old backups (keep last 7)
+        backups = sorted(backup_dir.glob("brain-*.db"))
+        for old in backups[:-7]:
+            old.unlink()
+            logger.info("Pruned old backup: %s", old.name)
+
+        _record_job_run("db_backup")
+    except Exception:
+        logger.exception("DB backup job failed")
+
+
 def job_resolve_pending_captures(client: WebClient, channel_ids: dict):
     """Every 5 min: auto-file pending captures that timed out."""
     try:
@@ -596,6 +633,9 @@ def register_schedules(app):
 
     # Weekly Sunday 2am: Keyword expansion from corrections
     schedule.every().sunday.at("02:00").do(_run_job, job_keyword_expansion, client, channel_ids)
+
+    # Daily 4am: Database backup
+    schedule.every().day.at("04:00").do(_run_job, job_db_backup, client, channel_ids)
 
     # Daily 5am: Vault + journal re-index
     schedule.every().day.at("05:00").do(_run_job, job_vault_reindex, client, channel_ids)

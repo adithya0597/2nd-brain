@@ -287,6 +287,50 @@ CREATE TABLE IF NOT EXISTS pending_captures (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_captures(status);
 CREATE INDEX IF NOT EXISTS idx_pending_created ON pending_captures(created_at);
+
+-- notion_projects (migrate-db.py step 16)
+CREATE TABLE IF NOT EXISTS notion_projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    notion_id TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT,
+    tag TEXT,
+    goal TEXT,
+    deadline TEXT,
+    archived INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_np_status ON notion_projects(status);
+CREATE INDEX IF NOT EXISTS idx_np_name ON notion_projects(name);
+
+-- notion_goals (migrate-db.py step 17)
+CREATE TABLE IF NOT EXISTS notion_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    notion_id TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT,
+    tag TEXT,
+    deadline TEXT,
+    archived INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ng_status ON notion_goals(status);
+
+-- notion_people (migrate-db.py step 18)
+CREATE TABLE IF NOT EXISTS notion_people (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    notion_id TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    relationship TEXT,
+    email TEXT,
+    phone TEXT,
+    company TEXT,
+    tags_json TEXT DEFAULT '[]',
+    birthday TEXT,
+    last_checkin TEXT,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_npe_name ON notion_people(name);
 """
 
 _SEED_SYNC_STATE = """

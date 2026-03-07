@@ -26,11 +26,11 @@ WHERE date >= date('now', '-30 days')
 ORDER BY date DESC;
 ```
 
-d. **Decision History** — Search the vault for past decisions:
-- Use Grep to find entries containing "decided", "chose", "going to", "committed to", "changed my mind"
+d. **Decision History** — Search the Context Data for past decisions:
+- Look through the provided journal entries and vault files for phrases like "decided", "chose", "going to", "committed to", "changed my mind"
 - Note the reasoning patterns behind these decisions
 
-e. **Communication Style** — Analyze journal entries for:
+e. **Communication Style** — Analyze journal entries from the Context Data for:
 - Typical sentence structure and vocabulary
 - Level of optimism vs pragmatism
 - How they weigh pros and cons

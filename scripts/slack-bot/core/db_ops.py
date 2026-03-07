@@ -317,6 +317,107 @@ async def insert_concept_metadata(
     )
 
 
+async def compute_attention_scores(days: int = 30, db_path: Path = None) -> int:
+    """Compute attention scores from journal entries and populate attention_indicators.
+
+    Scans journal_entries for the last N days, counts mentions per ICOR key element,
+    and inserts/replaces rows in attention_indicators. Also updates last_mentioned
+    on icor_hierarchy.
+
+    Returns the number of elements scored.
+    """
+    import json as _json
+    from datetime import date, timedelta
+
+    db_path = db_path or config.DB_PATH
+    today = date.today().isoformat()
+    period_start = (date.today() - timedelta(days=days)).isoformat()
+
+    async with aiosqlite.connect(str(db_path)) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA foreign_keys = ON")
+        db.row_factory = aiosqlite.Row
+
+        # 1. Get all key elements
+        async with db.execute(
+            "SELECT id, name FROM icor_hierarchy WHERE level = 'key_element'"
+        ) as cursor:
+            elements = [dict(r) for r in await cursor.fetchall()]
+
+        if not elements:
+            return 0
+
+        # 2. Get journal entries for the period
+        async with db.execute(
+            "SELECT date, icor_elements FROM journal_entries WHERE date >= ?",
+            (period_start,),
+        ) as cursor:
+            entries = [dict(r) for r in await cursor.fetchall()]
+
+        # 3. Count mentions per element
+        mention_counts: dict[str, int] = {}
+        journal_days: dict[str, set] = {}
+        last_mentioned: dict[str, str] = {}
+
+        for entry in entries:
+            try:
+                icor_els = _json.loads(entry.get("icor_elements") or "[]")
+            except (ValueError, TypeError):
+                icor_els = []
+
+            entry_date = entry.get("date", "")
+            for el_name in icor_els:
+                mention_counts[el_name] = mention_counts.get(el_name, 0) + 1
+                if el_name not in journal_days:
+                    journal_days[el_name] = set()
+                journal_days[el_name].add(entry_date)
+                if entry_date > last_mentioned.get(el_name, ""):
+                    last_mentioned[el_name] = entry_date
+
+        # 4. Compute scores and insert
+        total_days = max(len(entries), 1)
+        scored = 0
+
+        for el in elements:
+            name = el["name"]
+            el_id = el["id"]
+            mentions = mention_counts.get(name, 0)
+            days_active = len(journal_days.get(name, set()))
+
+            # Score: normalized 0-10 based on mention frequency and consistency
+            frequency_score = min(mentions / total_days, 1.0) * 5
+            consistency_score = min(days_active / total_days, 1.0) * 5
+            score = round(frequency_score + consistency_score, 2)
+            flagged = 1 if mentions == 0 else 0
+
+            # Delete existing row for this element+period, then insert
+            await db.execute(
+                "DELETE FROM attention_indicators "
+                "WHERE icor_element_id = ? AND period_start = ? AND period_end = ?",
+                (el_id, period_start, today),
+            )
+            await db.execute(
+                "INSERT INTO attention_indicators "
+                "(icor_element_id, period_start, period_end, mention_count, "
+                "journal_days, attention_score, flagged) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (el_id, period_start, today, mentions, days_active, score, flagged),
+            )
+
+            # Update last_mentioned on icor_hierarchy
+            if name in last_mentioned:
+                await db.execute(
+                    "UPDATE icor_hierarchy SET last_mentioned = ? WHERE id = ? "
+                    "AND (last_mentioned IS NULL OR last_mentioned < ?)",
+                    (last_mentioned[name], el_id, last_mentioned[name]),
+                )
+
+            scored += 1
+
+        await db.commit()
+        return scored
+
+
 async def get_icor_without_notion_id(db_path: Path = None) -> list[dict]:
     """Get ICOR hierarchy entries that don't have a Notion page ID."""
     return await query(
