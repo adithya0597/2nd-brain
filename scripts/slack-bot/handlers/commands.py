@@ -384,7 +384,7 @@ def _run_status_command(client, user_id):
         if neglected:
             neglected_text = "\n".join(
                 f"- *{n['name']}* ({n.get('dimension', 'N/A')}) - "
-                f"{int(n.get('days_since', 0))} days silent"
+                f"{int(n.get('days_since') or 0)} days silent"
                 for n in neglected[:5]
             )
             blocks.insert(

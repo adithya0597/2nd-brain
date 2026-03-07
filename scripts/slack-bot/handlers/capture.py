@@ -194,7 +194,21 @@ def _handle_low_confidence(client, event, channel_ids: dict, result):
             },
         ]
 
-        # Send DM
+        # Store in pending_captures BEFORE sending DM (so capture is never lost)
+        all_scores = json.dumps([
+            {"dimension": m.dimension, "confidence": m.confidence, "method": m.method}
+            for m in result.matches
+        ])
+        run_async(execute(
+            "INSERT INTO pending_captures "
+            "(message_text, message_ts, channel_id, slack_user_id, all_scores_json, "
+            "primary_dimension, primary_confidence, method, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            (text, ts, channel, user, all_scores,
+             dimensions[0] if dimensions else None, confidence, method),
+        ))
+
+        # Send DM (if this fails, capture is still safe in DB for timeout resolution)
         dm = client.conversations_open(users=[user])
         dm_channel = dm["channel"]["id"]
         dm_result = client.chat_postMessage(
@@ -203,19 +217,11 @@ def _handle_low_confidence(client, event, channel_ids: dict, result):
             blocks=blocks,
         )
 
-        # Store in pending_captures
-        all_scores = json.dumps([
-            {"dimension": m.dimension, "confidence": m.confidence, "method": m.method}
-            for m in result.matches
-        ])
+        # Update the DB row with DM details for timeout message updates
         run_async(execute(
-            "INSERT INTO pending_captures "
-            "(message_text, message_ts, channel_id, slack_user_id, all_scores_json, "
-            "primary_dimension, primary_confidence, method, bouncer_dm_ts, bouncer_dm_channel) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (text, ts, channel, user, all_scores,
-             dimensions[0] if dimensions else None, confidence, method,
-             dm_result["ts"], dm_channel),
+            "UPDATE pending_captures SET bouncer_dm_ts = ?, bouncer_dm_channel = ? "
+            "WHERE message_ts = ?",
+            (dm_result["ts"], dm_channel, ts),
         ))
 
         logger.info(

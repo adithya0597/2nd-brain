@@ -441,10 +441,14 @@ def create_web_clip(
         icor_line = f"icor_elements: [{', '.join(elements)}]" if elements else "icor_elements: []"
         tags_line = f"tags: [{', '.join(concepts)}]" if concepts else "tags: []"
 
+        # Escape quotes in YAML values to prevent malformed frontmatter
+        yaml_url = url.replace('"', '\\"')
+        yaml_title = title.replace('"', '\\"')
+
         frontmatter = f"""---
 type: web_clip
-url: "{url}"
-title: "{title}"
+url: "{yaml_url}"
+title: "{yaml_title}"
 date: {date}
 {icor_line}
 {tags_line}

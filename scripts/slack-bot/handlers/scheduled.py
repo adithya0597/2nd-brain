@@ -479,6 +479,19 @@ def job_keyword_expansion(client: WebClient, channel_ids: dict):
 # ---------------------------------------------------------------------------
 
 
+def job_weekly_review(client: WebClient, channel_ids: dict):
+    """Weekly Sunday 7pm: GTD weekly review."""
+    try:
+        logger.info("Running weekly review job")
+        result = _call_claude("weekly-review")
+        ch = channel_ids.get("brain-daily")
+        if ch:
+            _post_text(client, ch, result, header="Weekly Review")
+        _record_job_run("weekly_review")
+    except Exception:
+        logger.exception("Weekly review job failed")
+
+
 def job_resolve_pending_captures(client: WebClient, channel_ids: dict):
     """Every 5 min: auto-file pending captures that timed out."""
     try:
@@ -577,6 +590,9 @@ def register_schedules(app):
 
     # Monthly 1st at 10am: Resource digest (daily check with day-of-month guard)
     schedule.every().day.at("10:00").do(_run_job, job_monthly_resource_digest, client, channel_ids)
+
+    # Weekly Sunday 7pm: GTD weekly review
+    schedule.every().sunday.at("19:00").do(_run_job, job_weekly_review, client, channel_ids)
 
     # Weekly Sunday 2am: Keyword expansion from corrections
     schedule.every().sunday.at("02:00").do(_run_job, job_keyword_expansion, client, channel_ids)
