@@ -1,10 +1,11 @@
-"""Hybrid 4-tier message classification pipeline.
+"""Hybrid 5-tier message classification pipeline.
 
 Tiers:
   0 — Noise filter (greetings, small talk)
   1 — Keyword matching (enhanced, dynamic from DB)
+  1.5 — Zero-shot classification (cosine similarity against ICOR references)
   2 — Embedding similarity (sentence-transformers, lazy-loaded)
-  3 — Claude LLM fallback
+  3 — Claude LLM fallback (Haiku, cost-optimized)
 """
 import json
 import logging
@@ -124,33 +125,39 @@ _DIMENSION_REFERENCES: dict[str, list[str]] = {
 # Embedding cache (lazy-loaded)
 # ---------------------------------------------------------------------------
 
-_embedding_model = None
 _dimension_embeddings: dict[str, list] = {}
 
 
 def _load_embedding_model():
-    """Lazy-load sentence-transformers model on first use."""
-    global _embedding_model, _dimension_embeddings
-    if _embedding_model is not None:
+    """Lazy-load embeddings for dimension references using shared model."""
+    global _dimension_embeddings
+    if _dimension_embeddings:
         return
 
     try:
-        from sentence_transformers import SentenceTransformer
-        logger.info("Loading embedding model all-MiniLM-L6-v2...")
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        from core.embedding_store import _get_model
+        model = _get_model()
+        if model is None:
+            return
 
         # Pre-encode dimension reference texts
         for dim, texts in _DIMENSION_REFERENCES.items():
-            embeddings = _embedding_model.encode(texts)
+            embeddings = model.encode(texts)
             _dimension_embeddings[dim] = embeddings
 
-        logger.info("Embedding model loaded, %d dimensions encoded", len(_dimension_embeddings))
+        logger.info("Dimension embeddings loaded, %d dimensions encoded", len(_dimension_embeddings))
     except ImportError:
-        logger.warning("sentence-transformers not installed — embedding tier disabled")
-        _embedding_model = False  # Sentinel: tried but failed
+        logger.warning("embedding_store not available — falling back to direct model load")
+        try:
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            for dim, texts in _DIMENSION_REFERENCES.items():
+                _dimension_embeddings[dim] = model.encode(texts)
+            logger.info("Fallback embedding model loaded")
+        except ImportError:
+            logger.warning("sentence-transformers not installed — embedding tier disabled")
     except Exception:
         logger.exception("Failed to load embedding model")
-        _embedding_model = False
 
 
 def _cosine_similarity(a, b):
@@ -164,7 +171,7 @@ def _cosine_similarity(a, b):
 # ---------------------------------------------------------------------------
 
 class MessageClassifier:
-    """Hybrid 4-tier classification pipeline."""
+    """Hybrid 5-tier classification pipeline."""
 
     def __init__(self, keywords: dict[str, list[str]] | None = None):
         """Initialize with keyword dictionary.
@@ -197,6 +204,13 @@ class MessageClassifier:
         keyword_scores = self._tier_keywords(text)
         if keyword_scores and keyword_scores[0].confidence >= 0.8:
             result.matches = keyword_scores
+            result.execution_time_ms = (time.monotonic() - start) * 1000
+            return result
+
+        # Tier 1.5: Zero-shot classification
+        zero_shot_scores = self._tier_zero_shot(text)
+        if zero_shot_scores and zero_shot_scores[0].confidence >= 0.75:
+            result.matches = self._merge_scores(keyword_scores, zero_shot_scores)
             result.execution_time_ms = (time.monotonic() - start) * 1000
             return result
 
@@ -262,16 +276,74 @@ class MessageClassifier:
 
         return result
 
-    # -- Tier 2 --
+    # -- Tier 1.5: Zero-shot classification --
 
-    def _tier_embedding(self, text: str) -> list[DimensionScore]:
-        _load_embedding_model()
-        if not _embedding_model or _embedding_model is False:
+    def _tier_zero_shot(self, text: str) -> list[DimensionScore]:
+        """Zero-shot classification using cosine similarity against expanded ICOR references.
+
+        Uses the shared embedding model from embedding_store. Falls back gracefully
+        if unavailable.
+        """
+        try:
+            from core.embedding_store import _get_model
+            model = _get_model()
+            if model is None:
+                return []
+        except ImportError:
             return []
 
         try:
             import numpy as np
-            text_embedding = _embedding_model.encode([text])[0]
+            text_embedding = model.encode([text])[0]
+
+            scores = []
+            for dim, texts in _DIMENSION_REFERENCES.items():
+                # Encode reference texts (cached after first call via _dimension_embeddings)
+                if dim not in _dimension_embeddings:
+                    _dimension_embeddings[dim] = model.encode(texts)
+
+                ref_embeddings = _dimension_embeddings[dim]
+                sims = [_cosine_similarity(text_embedding, ref) for ref in ref_embeddings]
+                max_sim = max(sims)
+                scores.append((dim, max_sim))
+
+            scores.sort(key=lambda x: x[1], reverse=True)
+
+            result = []
+            for i, (dim, sim) in enumerate(scores):
+                if sim < 0.35:
+                    break
+                result.append(DimensionScore(
+                    dimension=dim,
+                    confidence=round(sim, 2),
+                    method="zero_shot",
+                ))
+                # Multi-label: include second dimension if within 0.1 of top
+                if i == 0:
+                    continue
+                if i == 1 and scores[0][1] - sim <= 0.1:
+                    continue  # Keep this one
+                break  # Stop after first significant gap
+
+            return result
+        except Exception:
+            logger.exception("Zero-shot classification failed")
+            return []
+
+    # -- Tier 2 --
+
+    def _tier_embedding(self, text: str) -> list[DimensionScore]:
+        _load_embedding_model()
+        if not _dimension_embeddings:
+            return []
+
+        try:
+            import numpy as np
+            from core.embedding_store import _get_model
+            model = _get_model()
+            if model is None:
+                return []
+            text_embedding = model.encode([text])[0]
 
             scores = []
             for dim, ref_embeddings in _dimension_embeddings.items():
@@ -307,7 +379,7 @@ class MessageClassifier:
         try:
             dimensions = ", ".join(config.DIMENSION_CHANNELS.keys())
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=config.CLASSIFIER_LLM_MODEL,
                 max_tokens=100,
                 system=[
                     {
@@ -333,7 +405,7 @@ class MessageClassifier:
 
             try:
                 from core.token_logger import log_token_usage
-                log_token_usage(response, caller="classifier_tier3", model="claude-haiku-4-5-20251001")
+                log_token_usage(response, caller="classifier_tier3", model=config.CLASSIFIER_LLM_MODEL)
             except Exception:
                 pass
 

@@ -18,6 +18,11 @@ OWNER_SLACK_ID = os.environ.get("OWNER_SLACK_ID", "")  # Only process messages f
 # Anthropic
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+CLASSIFIER_LLM_MODEL = os.environ.get("BRAIN_CLASSIFIER_MODEL", "claude-haiku-4-5-20251001")
+
+# Embedding model
+EMBEDDING_MODEL = os.environ.get("BRAIN_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+EMBEDDING_DIM = 384
 
 # Notion
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
