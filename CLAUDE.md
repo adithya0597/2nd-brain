@@ -107,77 +107,85 @@ tags: [additional tags]
 
 The local SQLite database at `data/brain.db` indexes vault content for fast querying. Use `sqlite3 data/brain.db` to query. Key tables: journal_entries, action_items, concept_metadata, icor_hierarchy, attention_indicators, vault_sync_log, vault_index, classifications, keyword_feedback, sync_state.
 
-## Slack Integration
+## Telegram Integration
 
-A Python Slack bot (`scripts/slack-bot/`) provides an asynchronous remote interface to the Second Brain via Socket Mode (no public endpoint).
+A Python Telegram bot (`scripts/brain-bot/`) provides an asynchronous remote interface to the Second Brain via long-polling (no webhook or public endpoint needed). Built on `python-telegram-bot` (PTB) v21 with async handlers.
 
 ### Setup
-1. Create a Slack app at api.slack.com with Socket Mode enabled
-2. Copy `.env.example` to `.env` and fill in tokens
-3. Run `scripts/setup-slack.sh` to create channels
-4. Run `python scripts/migrate-db.py` to prepare sync tables
-5. Start: `cd scripts/slack-bot && pip install -r requirements.txt && python app.py`
-6. Auto-start: `cp scripts/slack-bot/launchd/com.brain.slack-bot.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.brain.slack-bot.plist`
+1. Create a bot via @BotFather on Telegram, get the bot token
+2. Run `python scripts/setup-telegram.py` — interactive setup that verifies the token, detects your user ID, creates a Forum-enabled group with topics, and writes `.env`
+3. Run `python scripts/migrate-db.py` to prepare database tables
+4. Install deps: `cd scripts/brain-bot && pip install -r requirements.txt`
+5. Start: `python scripts/brain-bot/app.py`
+6. Auto-start: `cp scripts/brain-bot/launchd/com.brain.telegram-bot.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.brain.telegram-bot.plist`
 
-### Slack Channel Architecture
+### Forum Topic Architecture
 
-| Channel | Purpose |
+A single Telegram group with Forum Topics enabled replaces the previous multi-channel architecture. Each topic is a persistent thread within the group:
+
+| Topic | Purpose |
 |---|---|
-| `#brain-inbox` | Drop thoughts here — bot routes to ICOR dimension channels |
-| `#brain-daily` | Morning briefings (7am) and evening reviews (9pm) |
-| `#brain-actions` | Action items with Complete/Snooze/Delegate buttons |
-| `#brain-dashboard` | ICOR heatmap, attention scores, project status (6am/6pm) |
-| `#brain-ideas` | Idea generation reports |
-| `#brain-drift` | Alignment drift reports (weekly Sunday 6pm) |
-| `#brain-insights` | Pattern synthesis, ghost reflections, trace timelines |
-| `#brain-health` | Health & Vitality captures |
-| `#brain-wealth` | Wealth & Finance captures |
-| `#brain-relations` | Relationships captures |
-| `#brain-growth` | Mind & Growth captures |
-| `#brain-purpose` | Purpose & Impact captures |
-| `#brain-systems` | Systems & Environment captures |
-| `#brain-projects` | Active projects, weekly summaries (Mon 9am), cross-posted captures |
-| `#brain-resources` | Resource catalog, monthly digests (1st 10am), cross-posted captures |
+| `brain-inbox` | Drop thoughts here — bot classifies and routes to vault + SQLite |
+| `brain-daily` | Morning briefings (7am) and evening reviews (9pm) |
+| `brain-actions` | Action items with Complete/Snooze/Delegate buttons |
+| `brain-dashboard` | ICOR heatmap, attention scores, project status (6am/6pm) |
+| `brain-ideas` | Idea generation reports |
+| `brain-drift` | Alignment drift reports (weekly Sunday 6pm) |
+| `brain-insights` | Pattern synthesis, ghost reflections, trace timelines |
+| `brain-health` | Health & Vitality captures |
+| `brain-wealth` | Wealth & Finance captures |
+| `brain-relations` | Relationships captures |
+| `brain-growth` | Mind & Growth captures |
+| `brain-purpose` | Purpose & Impact captures |
+| `brain-systems` | Systems & Environment captures |
+| `brain-projects` | Active projects, weekly summaries (Mon 9am), cross-posted captures |
+| `brain-resources` | Resource catalog, monthly digests (1st 10am), cross-posted captures |
 
-### Slack Slash Commands
+### Telegram Bot Commands
 
-| Slack Command | Maps To | Output Channel |
+| Command | Maps To | Output Topic |
 |---|---|---|
-| `/brain-today` | `/brain:today` | #brain-daily |
-| `/brain-close` | `/brain:close-day` | #brain-daily |
-| `/brain-drift` | `/brain:drift` | #brain-drift |
-| `/brain-emerge` | `/brain:emerge` | #brain-insights |
-| `/brain-ideas` | `/brain:ideas` | #brain-ideas |
-| `/brain-schedule` | `/brain:schedule` | #brain-daily |
-| `/brain-ghost` | `/brain:ghost` | #brain-insights |
-| `/brain-status` | Quick SQLite query | #brain-dashboard |
-| `/brain-sync` | `/brain:sync-notion` | DM |
-| `/brain-projects` | `/brain:projects` | #brain-projects |
-| `/brain-resources` | `/brain:resources` | #brain-resources |
-| `/brain-trace` | `/brain:trace` | #brain-insights |
-| `/brain-connect` | `/brain:connect` | #brain-insights |
-| `/brain-challenge` | `/brain:challenge` | #brain-insights |
-| `/brain-graduate` | `/brain:graduate` | #brain-insights |
-| `/brain-context` | `/brain:context-load` | DM |
+| `/today` | `/brain:today` | brain-daily |
+| `/close` | `/brain:close-day` | brain-daily |
+| `/drift` | `/brain:drift` | brain-drift |
+| `/emerge` | `/brain:emerge` | brain-insights |
+| `/ideas` | `/brain:ideas` | brain-ideas |
+| `/schedule` | `/brain:schedule` | brain-daily |
+| `/ghost` | `/brain:ghost` | brain-insights |
+| `/status` | Quick SQLite query | brain-dashboard |
+| `/sync` | `/brain:sync-notion` | DM |
+| `/projects` | `/brain:projects` | brain-projects |
+| `/resources` | `/brain:resources` | brain-resources |
+| `/trace` | `/brain:trace` | brain-insights |
+| `/connect` | `/brain:connect` | brain-insights |
+| `/challenge` | `/brain:challenge` | brain-insights |
+| `/graduate` | `/brain:graduate` | brain-insights |
+| `/context` | `/brain:context-load` | DM |
+| `/find` | Hybrid semantic search | DM |
+| `/help` | Command listing | DM |
+| `/engage` | Engagement analysis | brain-insights |
+| `/dashboard` | Full ICOR dashboard | brain-dashboard |
 
 ### Scheduled Automations
 
-| Job | Channel | Schedule |
+| Job | Topic | Schedule |
 |---|---|---|
-| Morning Briefing | #brain-daily | Daily 7am |
-| Evening Prompt | #brain-daily | Daily 9pm |
-| Dashboard Refresh | #brain-dashboard | Daily 6am, 6pm |
-| Notion Sync | (silent) | Daily 10pm |
-| Drift Report | #brain-drift | Weekly Sunday 6pm |
-| Pattern Synthesis | #brain-insights | Bi-weekly Wed 2pm |
-| Project Summary | #brain-projects | Weekly Monday 9am |
-| Resource Digest | #brain-resources | Monthly 1st 10am |
-| Vault + Journal Reindex | (silent) | Daily 5am |
-| Keyword Expansion | (silent) | Weekly Sunday 2am |
+| Morning Briefing | brain-daily | Daily 7am CST |
+| Evening Prompt | brain-daily | Daily 9pm CST |
+| Dashboard Refresh | brain-dashboard | Daily 6am, 6pm CST |
+| Notion Sync | (silent) | Daily 10pm CST |
+| Drift Report | brain-drift | Weekly Sunday 6pm CST |
+| Pattern Synthesis | brain-insights | Bi-weekly Wed 2pm CST |
+| Project Summary | brain-projects | Weekly Monday 9am CST |
+| Resource Digest | brain-resources | Monthly 1st 10am CST |
+| Vault + Journal Reindex | (silent) | Daily 5am CST |
+| Keyword Expansion | (silent) | Weekly Sunday 2am CST |
+
+All jobs use PTB's `JobQueue` (`run_daily()`, `run_repeating()`). No external scheduler needed.
 
 ### Notion Sync Engine
 
-The Notion sync is powered by a Python-native pipeline (`scripts/slack-bot/core/notion_sync.py`) using the `notion-client` SDK. This replaces the previous Claude API approach which lacked MCP tool access.
+The Notion sync is powered by a Python-native pipeline (`scripts/brain-bot/core/notion_sync.py`) using the `notion-client` SDK.
 
 **Requirements:** `NOTION_TOKEN` environment variable (Notion internal integration token). Run `python scripts/migrate-db.py` once to create the `sync_state` table.
 
@@ -190,7 +198,7 @@ The Notion sync is powered by a Python-native pipeline (`scripts/slack-bot/core/
 
 **Hybrid AI:** Optional `ai_client` parameter enables Claude-assisted classification, conflict resolution, and project-goal inference. Falls back to heuristics when unset.
 
-### Slack Bot Architecture
+### Bot Architecture
 
 | Module | Description |
 |---|---|
@@ -198,19 +206,24 @@ The Notion sync is powered by a Python-native pipeline (`scripts/slack-bot/core/
 | `core/context_loader.py` | Command-specific SQLite queries + vault file loading + graph traversal + Notion context injection |
 | `core/vault_indexer.py` | Vault file scanner, wikilink graph builder, populates `vault_index` table in SQLite |
 | `core/journal_indexer.py` | Daily note parser with mood/energy/ICOR detection, populates `journal_entries` table |
-| `core/formatter.py` | Slack Block Kit message builders for dashboards, reports, sync results, errors |
+| `core/formatter.py` | Telegram HTML message builders for dashboards, reports, sync results, errors |
+| `core/message_utils.py` | Message splitting (4096-char limit), HTML-safe send helpers |
+| `core/dashboard_builder.py` | ICOR dashboard with heatmaps, attention scores, and quick-action inline buttons |
+| `core/search.py` | Hybrid search combining FTS5, vector similarity, and graph traversal |
+| `core/embedding_store.py` | sqlite-vec backed vector store for vault file embeddings |
+| `core/async_utils.py` | Thread pool executor for offloading sync/CPU-bound work |
 | `handlers/feedback.py` | Classification correction handlers + keyword learning loop (updates `keyword_feedback` table) |
 
 ### Vault Write-Back Loop
 
-Commands auto-save outputs to the vault so results enrich the knowledge base, not just Slack. Managed by `_write_command_output_to_vault()` in `handlers/commands.py`:
+Commands auto-save outputs to the vault so results enrich the knowledge base, not just Telegram. Managed by `_write_command_output_to_vault()` in `handlers/commands.py`:
 
 - **`today`** — Appends "Morning Plan" section to the daily note (`vault/Daily Notes/YYYY-MM-DD.md`)
-- **`close-day`** — Appends "Evening Review" section to the daily note, then re-indexes via `journal_indexer`
+- **`close`** — Appends "Evening Review" section to the daily note, then re-indexes via `journal_indexer`
 - **`schedule`** — Creates a weekly plan file via `create_weekly_plan()`
 - **`graduate`** — Saves report + creates individual concept stub files
 - **Report commands** (`drift`, `emerge`, `ideas`, `ghost`, `challenge`, `trace`, `connect`) — Auto-saved via `create_report_file()` to `vault/Reports/`. These are defined in the `_AUTO_VAULT_WRITE_COMMANDS` set.
-- **`projects`, `resources`** — Not auto-saved; a "Save to Vault" button is added to the Slack message instead.
+- **`projects`, `resources`** — Not auto-saved; a "Save to Vault" button is added to the message instead.
 
 ### Graph Context Loading
 
@@ -226,23 +239,12 @@ The context loader (`core/context_loader.py`) enriches commands with graph-conne
 | `ghost` | `identity` | 2 | Seeds from ICOR + Values identity files |
 | `challenge` | `identity` | 1 | Seeds from ICOR + Values identity files |
 
-Commands in `_NOTION_CONTEXT_COMMANDS` (`today`, `schedule`, `ideas`, `projects`, `close-day`, `context-load`, `drift`, `resources`) also receive cached Notion data (projects, goals, dimensions) from `data/notion-registry.json`.
+Commands in `_NOTION_CONTEXT_COMMANDS` (`today`, `schedule`, `ideas`, `projects`, `close`, `context`, `drift`, `resources`) also receive cached Notion data (projects, goals, dimensions) from `data/notion-registry.json`.
 
-## Known Issues (from 8-perspective audit, 2026-03-03)
+## Known Issues
 
-See `AUDIT-REPORT.md` for full details. Critical items:
-
-| Priority | Issue | Fix |
+| Priority | Issue | Status |
 |---|---|---|
 | P0 | `.env` with live credentials may be in git history | Rotate tokens, add to `.gitignore`, `git rm --cached .env` |
-| P0 | SQLite has no WAL mode — DB locks under thread contention | Add `PRAGMA journal_mode=WAL` at startup |
-| P0 | Vault reindex wipes table without transaction | Wrap DELETE+INSERT in BEGIN...COMMIT |
-| P1 | Unbounded thread spawning per Slack event | Replace with `ThreadPoolExecutor(max_workers=8)` |
-| P1 | No prompt caching — 60-80% API cost savings available | Add `cache_control: {"type": "ephemeral"}` to system prompt |
-| P1 | Tier 3 classifier uses Sonnet instead of Haiku | Route to `claude-haiku-4-5` for 95% cost reduction |
 | P1 | Notion push TOCTOU race creates duplicate tasks | Add `push_attempted_at` idempotency column |
-| P1 | No progress feedback after slash command ack | Add `chat_postEphemeral` "result ready" notification |
-| P2 | Zero automated tests | Add pytest suite for classifier, vault_ops, journal_indexer |
-| P2 | Prompt files reference MCP tools unavailable in Slack context | Create Slack-specific prompt versions |
-| P2 | No `/brain-help` command for 14 slash commands | Register help command with command table |
-| P2 | No `/brain:find` semantic search command | Highest-value missing feature |
+| P2 | Prompt files reference MCP tools unavailable in bot context | Create bot-specific prompt versions |

@@ -2,11 +2,11 @@
 
 ## Purpose
 
-18 markdown prompt files that define the instructions for each `/brain:*` command. These are loaded as the system prompt suffix when the Slack bot (or Claude Code directly) executes a command.
+18+ markdown prompt files that define the instructions for each `/brain:*` command. These are loaded as the system prompt suffix when the Telegram bot (or Claude Code directly) executes a command.
 
 ## How Prompts Are Loaded
 
-1. User invokes a command (e.g., `/brain-today` in Slack or `/brain:today` in Claude Code)
+1. User invokes a command (e.g., `/today` in Telegram or `/brain:today` in Claude Code)
 2. `context_loader.py:load_command_prompt(command_name)` reads `.claude/commands/brain/{command_name}.md`
 3. `context_loader.py:load_system_context()` reads the root `CLAUDE.md` as the base system prompt
 4. The full system prompt is: `{CLAUDE.md}\n\n---\n\n{command_prompt.md}`
@@ -35,6 +35,8 @@
 | `process-meeting.md` | `/brain:process-meeting` | Parse meeting transcript, extract actions | SQL |
 | `refresh-dashboard.md` | `/brain:refresh-dashboard` | Recalculate attention scores | SQL |
 | `sync-notion.md` | `/brain:sync-notion` | Bidirectional Notion sync instructions | SQL + Notion |
+| `find.md` | `/brain:find` | Semantic vault search | SQL + FTS5 + vector |
+| `engage.md` | `/brain:engage` | Engagement analysis | SQL + vault |
 
 ## Prompt Structure Pattern
 
@@ -56,7 +58,7 @@ Context sources by command are defined in `context_loader.py`:
 
 ## Gotchas
 
-- **Prompts reference Notion MCP tools**: Several prompts (today, ideas, schedule, projects) instruct Claude to "Use Notion MCP tools." This works in Claude Code sessions but **not** in the Slack bot path, which uses the Anthropic API without MCP. The context loader pre-gathers Notion data as a workaround.
+- **Prompts reference Notion MCP tools**: Several prompts (today, ideas, schedule, projects) instruct Claude to "Use Notion MCP tools." This works in Claude Code sessions but **not** in the Telegram bot path, which uses the Anthropic API without MCP. The context loader pre-gathers Notion data as a workaround.
 - **SQL in prompts is documentation**: The SQL queries embedded in prompt files describe the *intent*. The actual executed queries live in `context_loader.py:_COMMAND_QUERIES` and may differ.
 - **Prompt filenames must match command names**: `load_command_prompt()` resolves `{command_name}.md`. A filename mismatch causes a `FileNotFoundError`.
 - **No prompt variables**: Prompts are static markdown. User input and context data are injected via the messages array, not via template substitution in the prompt.

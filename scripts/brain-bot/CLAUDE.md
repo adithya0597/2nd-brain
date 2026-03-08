@@ -1,42 +1,51 @@
-# scripts/slack-bot/ — Second Brain Slack Bot
+# scripts/brain-bot/ — Second Brain Telegram Bot
 
 ## Purpose
 
-A Python Slack bot using Bolt + Socket Mode that bridges Slack with the Obsidian vault, SQLite database, Anthropic API, and Notion. No public endpoint needed — all communication via WebSocket.
+A Python Telegram bot using `python-telegram-bot` (PTB) v21 that bridges Telegram with the Obsidian vault, SQLite database, Anthropic API, and Notion. Uses long-polling (no webhook/public endpoint needed). A single Forum-enabled Telegram group replaces the previous Slack channel architecture.
 
 ## Boot Sequence
 
 1. `config.py` loads `.env`, resolves all paths relative to project root (`../../` from this dir)
-2. `app.py` creates `slack_bolt.App`, registers owner-only middleware
-3. `register_handlers()` imports and registers all handler modules
-4. Dynamic keywords loaded from `keyword_feedback` DB table into classifier
-5. `start_scheduler()` registers cron-like jobs, starts scheduler daemon thread
-6. Vault + journal indexers run on startup (populates `vault_index` and `journal_entries`)
-7. `SocketModeHandler.start()` connects to Slack via WebSocket
+2. `app.py` creates `Application` via `ApplicationBuilder` with `concurrent_updates(8)`
+3. `post_init()` callback runs after the Application is initialized:
+   a. Registers bot commands with Telegram via `set_my_commands()`
+   b. `register_all()` imports and registers all handler modules
+   c. Dynamic keywords loaded from `keyword_feedback` DB table into classifier
+   d. Vault + journal indexers run on startup (populates `vault_index` and `journal_entries`)
+   e. FTS5 index populated
+   f. Vector embeddings populated
+   g. Graph schema + ICOR affinity + community detection initialized
+   h. Scheduled jobs registered with PTB's `JobQueue`
+   i. Health check runs (database, vault, API key, topics, owner)
+4. `application.run_polling()` starts the event loop
 
 ## Key Patterns
 
-- **Owner-only middleware**: All events filtered by `OWNER_SLACK_ID` (single-user bot)
-- **Background processing**: All AI commands `ack()` immediately, then spawn a `threading.Thread` for the actual work
-- **Scheduler**: Uses `schedule` library in a daemon thread (30s poll interval)
-- **Graceful shutdown**: SIGINT/SIGTERM handlers for clean exit
-- **Lazy channel resolution**: Channel name-to-ID mapping cached on first command use
+- **Owner-only filter**: Custom `OwnerFilter(filters.MessageFilter)` checks `user.id == OWNER_TELEGRAM_ID` (single-user bot)
+- **Edit-in-place progress**: AI commands send an initial "Processing..." message, then `edit_message_text()` to replace it with the final result (no separate ack mechanism needed)
+- **Forum Topics**: The group chat uses Forum mode — each topic replaces a Slack channel. Topic thread IDs stored in `config.TOPICS` dict
+- **JobQueue scheduling**: PTB's built-in `JobQueue` replaces the `schedule` library. Jobs registered via `run_daily()`, `run_repeating()`, etc.
+- **Async-native**: PTB v21 is fully async. Handler coroutines use `async/await` directly. Background CPU-bound work offloaded via `core/async_utils.py` thread pool executor
+- **Graceful shutdown**: `post_shutdown()` callback cleans up executor pool
+- **Concurrent updates**: `ApplicationBuilder().concurrent_updates(8)` allows up to 8 handlers to run concurrently (replaces manual thread spawning)
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `SLACK_BOT_TOKEN` | Yes | `xoxb-` bot token |
-| `SLACK_APP_TOKEN` | Yes | `xapp-` token for Socket Mode |
-| `SLACK_SIGNING_SECRET` | No | Request signing (not needed for Socket Mode) |
-| `OWNER_SLACK_ID` | No | Restrict bot to single user. Empty = no restriction |
+| `TELEGRAM_BOT_TOKEN` | Yes | Bot token from @BotFather |
+| `OWNER_TELEGRAM_ID` | No | Restrict bot to single user (integer). Empty = no restriction |
+| `GROUP_CHAT_ID` | No | Forum-enabled group chat ID (negative integer) |
 | `ANTHROPIC_API_KEY` | No | Required for AI commands. Bot starts without it |
 | `ANTHROPIC_MODEL` | No | Default: `claude-sonnet-4-5-20250929` |
-| `NOTION_TOKEN` | No | Required for `/brain-sync`. Notion internal integration token |
+| `CLASSIFIER_LLM_MODEL` | No | Default: `claude-haiku-4-5-20251001` |
+| `NOTION_TOKEN` | No | Required for `/sync`. Notion internal integration token |
+| `TOPIC_BRAIN_*` | No | Forum topic thread IDs (e.g., `TOPIC_BRAIN_INBOX=123`) |
 
 ## Path Resolution
 
-All paths resolved from `PROJECT_ROOT = Path(__file__).parent.parent.parent` (two levels up from `slack-bot/`):
+All paths resolved from `PROJECT_ROOT = Path(__file__).parent.parent.parent` (two levels up from `brain-bot/`):
 
 | Config Var | Resolves To |
 |---|---|
@@ -49,19 +58,23 @@ All paths resolved from `PROJECT_ROOT = Path(__file__).parent.parent.parent` (tw
 ## Directory Structure
 
 ```
-slack-bot/
-  app.py            # Entry point, boot sequence
-  config.py         # Env vars, paths, keyword dicts, Notion collection IDs
+brain-bot/
+  app.py            # Entry point, boot sequence, owner filter
+  config.py         # Env vars, paths, keyword dicts, topic mappings
   core/             # Business logic modules (see core/CLAUDE.md)
-  handlers/         # Slack event/command/action handlers (see handlers/CLAUDE.md)
+  handlers/         # Telegram command/message/callback handlers (see handlers/CLAUDE.md)
   requirements.txt  # pip dependencies
   launchd/          # macOS LaunchAgent plist for auto-start
+  logs/             # Rotating log files (created at startup)
+  .env.example      # Template for environment variables
 ```
 
 ## Gotchas
 
-- **Run from any directory**: The bot resolves all paths from `config.py`'s `__file__` location, so `python scripts/slack-bot/app.py` works from anywhere.
-- **No async event loop**: Despite using `aiosqlite` and async Notion client, the bot runs sync Bolt. Background threads create their own `asyncio.new_event_loop()` per task.
-- **ANTHROPIC_API_KEY optional**: The bot starts and handles captures/status without it. Only AI-powered slash commands fail.
+- **Run from any directory**: The bot resolves all paths from `config.py`'s `__file__` location, so `python scripts/brain-bot/app.py` works from anywhere.
+- **Fully async**: PTB v21 is async-native. All handlers are coroutines. Sync DB operations use `core/async_utils.py` to run in a thread pool.
+- **ANTHROPIC_API_KEY optional**: The bot starts and handles captures/status without it. Only AI-powered commands fail.
 - **Keyword learning**: `config.py` has seed keywords; `load_dynamic_keywords()` merges in learned keywords from the DB. The classifier is updated at startup.
-- **Socket Mode only**: No HTTP server. The `SLACK_SIGNING_SECRET` is unused in this mode.
+- **Topic IDs**: Forum topic thread IDs can be set via `TOPIC_BRAIN_*` env vars or populated at runtime. Missing topic IDs cause messages to fall back to the general group thread.
+- **No webhook**: Uses `run_polling()` — no public endpoint or SSL certificate needed.
+- **Health check on startup**: Verifies database, vault, API key, topic IDs, and owner configuration. Warnings logged for missing optional components.
