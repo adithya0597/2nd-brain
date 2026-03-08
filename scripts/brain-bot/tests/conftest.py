@@ -1,20 +1,28 @@
-"""Shared fixtures for Second Brain Slack bot tests."""
+"""Shared fixtures for Second Brain Telegram bot tests."""
 import os
 import sqlite3
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # ---------------------------------------------------------------------------
-# Path setup: add the slack-bot directory to sys.path so we can import config,
+# Path setup: add the brain-bot directory to sys.path so we can import config,
 # core.*, etc. as the bot itself does.
 # ---------------------------------------------------------------------------
-SLACK_BOT_DIR = Path(__file__).parent.parent
-if str(SLACK_BOT_DIR) not in sys.path:
-    sys.path.insert(0, str(SLACK_BOT_DIR))
+BRAIN_BOT_DIR = Path(__file__).parent.parent
+if str(BRAIN_BOT_DIR) not in sys.path:
+    sys.path.insert(0, str(BRAIN_BOT_DIR))
+
+# ---------------------------------------------------------------------------
+# Mock telegram package before any project imports (tests don't need real PTB)
+# ---------------------------------------------------------------------------
+_tg_mock = MagicMock()
+_tg_ext_mock = MagicMock()
+sys.modules.setdefault("telegram", _tg_mock)
+sys.modules.setdefault("telegram.ext", _tg_ext_mock)
 
 # ---------------------------------------------------------------------------
 # Ensure config mock has required real attributes.
@@ -22,7 +30,7 @@ if str(SLACK_BOT_DIR) not in sys.path:
 # The first test file alphabetically wins, and others get auto-attributes.
 # Fix: set critical attributes on whatever config mock exists.
 # ---------------------------------------------------------------------------
-_REQUIRED_DIMENSION_CHANNELS = {
+_REQUIRED_DIMENSION_TOPICS = {
     "Health & Vitality": "brain-health",
     "Wealth & Finance": "brain-wealth",
     "Relationships": "brain-relations",
@@ -62,11 +70,10 @@ def _ensure_config_defaults():
         "CLAUDE_MD_PATH": Path("/dev/null"),
         "NOTION_REGISTRY_PATH": Path("/dev/null"),
         "PROJECT_ROOT": Path("/tmp"),
-        # Slack tokens
-        "SLACK_BOT_TOKEN": "xoxb-test",
-        "SLACK_APP_TOKEN": "xapp-test",
-        "SLACK_SIGNING_SECRET": "",
-        "OWNER_SLACK_ID": "",
+        # Telegram
+        "TELEGRAM_BOT_TOKEN": "test-bot-token",
+        "OWNER_TELEGRAM_ID": 12345,
+        "GROUP_CHAT_ID": -100123,
         # Anthropic
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_MODEL": "claude-sonnet-4-5-20250929",
@@ -77,14 +84,14 @@ def _ensure_config_defaults():
         # Notion
         "NOTION_TOKEN": "",
         "NOTION_COLLECTIONS": {},
-        # Channels
-        "CHANNELS": {
-            "brain-inbox": "Raw capture and routing",
-            "brain-daily": "Morning briefings, evening reviews, actions, projects, resources",
-            "brain-insights": "Drift analysis, idea generation, pattern synthesis, and reflections",
-            "brain-dashboard": "ICOR heatmap, project status, and cost tracking",
+        # Topics (Telegram forum topics replace Slack channels)
+        "TOPICS": {
+            "brain-inbox": 1,
+            "brain-daily": 2,
+            "brain-insights": 3,
+            "brain-dashboard": 4,
         },
-        "DIMENSION_CHANNELS": _REQUIRED_DIMENSION_CHANNELS,
+        "DIMENSION_TOPICS": _REQUIRED_DIMENSION_TOPICS,
         "DIMENSION_KEYWORDS": _REQUIRED_DIMENSION_KEYWORDS,
         # Keywords
         "PROJECT_KEYWORDS": ["project", "milestone"],
@@ -667,3 +674,54 @@ def vault_graph_db(test_db):
     conn.commit()
     conn.close()
     return test_db
+
+
+# ---------------------------------------------------------------------------
+# Telegram mock fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def mock_bot():
+    """Mock telegram.Bot instance."""
+    bot = MagicMock()
+    bot.send_message = AsyncMock(return_value=MagicMock(message_id=42))
+    bot.edit_message_text = AsyncMock()
+    bot.pin_chat_message = AsyncMock()
+    return bot
+
+
+@pytest.fixture()
+def mock_update():
+    """Mock telegram.Update for command/message handlers."""
+    update = MagicMock()
+    update.effective_chat.id = -100123
+    update.effective_user.id = 12345
+    update.message.message_thread_id = None
+    update.message.reply_text = AsyncMock()
+    update.message.text = ""
+    return update
+
+
+@pytest.fixture()
+def mock_context(mock_bot):
+    """Mock ContextTypes.DEFAULT_TYPE context."""
+    context = MagicMock()
+    context.bot = mock_bot
+    context.args = []
+    return context
+
+
+@pytest.fixture()
+def mock_callback_query():
+    """Mock telegram.CallbackQuery instance."""
+    cq = MagicMock()
+    cq.answer = AsyncMock()
+    cq.edit_message_text = AsyncMock()
+    cq.edit_message_reply_markup = AsyncMock()
+    cq.data = "{}"
+    cq.message.chat_id = -100123
+    cq.message.message_thread_id = None
+    cq.message.text_html = "<b>Test</b>"
+    cq.message.text = "Test"
+    return cq

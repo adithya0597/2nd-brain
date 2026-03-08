@@ -1,4 +1,4 @@
-"""Live E2E integration tests for Second Brain Slack bot.
+"""Live E2E integration tests for Second Brain Telegram bot.
 
 Tests run against the REAL database and vault for read-only verification,
 and use the test_db fixture from conftest.py for any write operations.
@@ -29,6 +29,8 @@ e2e = pytest.mark.skipif(
 
 # Mock config before importing any bot modules (conftest sets all defaults)
 sys.modules.setdefault("config", MagicMock())
+sys.modules.setdefault("telegram", MagicMock())
+sys.modules.setdefault("telegram.ext", MagicMock())
 import config  # noqa: E402 — conftest populates all attributes
 
 from core.db_ops import get_cost_summary, get_icor_hierarchy, query
@@ -285,7 +287,7 @@ class TestCostSummaryQuery:
 
 class TestCostReportFormatting:
 
-    def test_block_kit_structure(self):
+    def test_html_structure(self):
         data = {
             "daily": [
                 {"date": "2026-03-06", "calls": 5, "daily_cost": 0.05,
@@ -300,15 +302,10 @@ class TestCostReportFormatting:
             ],
         }
 
-        blocks = format_cost_report(data, days=30)
-        assert isinstance(blocks, list)
-        assert blocks[0]["type"] == "header"
-        assert "30" in blocks[0]["text"]["text"]
-
-        block_types = {b["type"] for b in blocks}
-        assert "section" in block_types
-        assert "divider" in block_types
-        assert "context" in block_types
+        html, keyboard = format_cost_report(data, days=30)
+        assert isinstance(html, str)
+        assert "30" in html
+        assert keyboard is None
 
     def test_daily_breakdown_section(self):
         data = {
@@ -320,20 +317,14 @@ class TestCostReportFormatting:
             "by_model": [],
         }
 
-        blocks = format_cost_report(data, days=7)
-        section_texts = [
-            b["text"]["text"] for b in blocks if b["type"] == "section"
-        ]
-        assert any("Daily Breakdown" in t for t in section_texts)
-        assert any("2026-03-06" in t for t in section_texts)
+        html, keyboard = format_cost_report(data, days=7)
+        assert "Daily Breakdown" in html
+        assert "2026-03-06" in html
 
     def test_empty_data_shows_no_calls_message(self):
         data = {"daily": [], "by_caller": [], "by_model": []}
-        blocks = format_cost_report(data, days=7)
-        section_texts = [
-            b["text"]["text"] for b in blocks if b["type"] == "section"
-        ]
-        assert any("No API calls" in t for t in section_texts)
+        html, keyboard = format_cost_report(data, days=7)
+        assert "No API calls" in html
 
 
 # ===========================================================================
@@ -410,8 +401,8 @@ class TestCommandHandlerDrift:
         """The drift command should be registered in _COMMAND_MAP."""
         from handlers.commands import _COMMAND_MAP
 
-        assert "/brain-drift" in _COMMAND_MAP
-        brain_cmd, output_ch = _COMMAND_MAP["/brain-drift"]
+        assert "drift" in _COMMAND_MAP
+        brain_cmd, output_ch = _COMMAND_MAP["drift"]
         assert brain_cmd == "drift"
         assert output_ch == "brain-insights"
 
@@ -427,8 +418,8 @@ class TestCommandHandlerEmerge:
         """The emerge command should be registered in _COMMAND_MAP."""
         from handlers.commands import _COMMAND_MAP
 
-        assert "/brain-emerge" in _COMMAND_MAP
-        brain_cmd, output_ch = _COMMAND_MAP["/brain-emerge"]
+        assert "emerge" in _COMMAND_MAP
+        brain_cmd, output_ch = _COMMAND_MAP["emerge"]
         assert brain_cmd == "emerge"
         assert output_ch == "brain-insights"
 
@@ -554,22 +545,12 @@ class TestFormatterHelpIncludesCost:
 
     def test_help_lists_brain_cost(self):
         """format_help() should include the /brain-cost command."""
-        blocks = format_help()
-        all_text = " ".join(
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section" and "text" in b.get("text", {})
-        )
-        assert "/brain-cost" in all_text
+        html, keyboard = format_help()
+        assert "/brain-cost" in html
 
     def test_help_lists_all_core_commands(self):
         """format_help() should list key commands."""
-        blocks = format_help()
-        all_text = " ".join(
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section" and "text" in b.get("text", {})
-        )
+        html, keyboard = format_help()
         for cmd in ("/brain-today", "/brain-close", "/brain-drift",
                      "/brain-status", "/brain-sync", "/brain-help"):
-            assert cmd in all_text, f"{cmd} missing from help output"
+            assert cmd in html, f"{cmd} missing from help output"

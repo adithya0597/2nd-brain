@@ -1,34 +1,28 @@
-"""Tests for App Home engagement sections: brain level, dimension momentum, alerts, engagement trend."""
+"""Tests for dashboard engagement sections: brain level, dimension momentum, alerts, engagement trend."""
 
-import json
 import sqlite3
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-# Ensure slack-bot dir on path and mocks in place
-SLACK_BOT_DIR = Path(__file__).parent.parent
-if str(SLACK_BOT_DIR) not in sys.path:
-    sys.path.insert(0, str(SLACK_BOT_DIR))
+# Ensure brain-bot dir on path and mocks in place
+BRAIN_BOT_DIR = Path(__file__).parent.parent
+if str(BRAIN_BOT_DIR) not in sys.path:
+    sys.path.insert(0, str(BRAIN_BOT_DIR))
 
-sys.modules.setdefault("slack_sdk", MagicMock())
-sys.modules.setdefault("slack_bolt", MagicMock())
+sys.modules.setdefault("config", MagicMock())
+sys.modules.setdefault("telegram", MagicMock())
+sys.modules.setdefault("telegram.ext", MagicMock())
 sys.modules.setdefault("anthropic", MagicMock())
-sys.modules.setdefault("schedule", MagicMock())
 sys.modules.setdefault("aiosqlite", MagicMock())
 sys.modules.setdefault("sentence_transformers", MagicMock())
 sys.modules.setdefault("sqlite_vec", MagicMock())
 
-# Mock missing core modules that core/__init__.py tries to import
-sys.modules.setdefault("core.context_loader", MagicMock())
-sys.modules.setdefault("core.vault_ops", MagicMock())
-sys.modules.setdefault("core.formatter", MagicMock())
-
-from core.app_home_builder import (
-    build_app_home_view,
+from core.dashboard_builder import (
+    build_dashboard_view,
     _build_brain_level_section,
     _build_dimension_momentum_section,
     _build_active_alerts_section,
@@ -37,36 +31,13 @@ from core.app_home_builder import (
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _all_text(blocks: list[dict]) -> str:
-    """Extract all visible text from a list of Block Kit blocks."""
-    parts = []
-    for b in blocks:
-        if b.get("type") == "section":
-            parts.append(b["text"]["text"])
-        elif b.get("type") == "header":
-            parts.append(b["text"]["text"])
-        elif b.get("type") == "context":
-            for el in b.get("elements", []):
-                parts.append(el.get("text", ""))
-    return "\n".join(parts)
-
-
-def _find_header_order(blocks: list[dict]) -> list[str]:
-    """Return list of header texts in order."""
-    return [b["text"]["text"] for b in blocks if b.get("type") == "header"]
-
-
-# ---------------------------------------------------------------------------
 # Tests: Brain Level Section
 # ---------------------------------------------------------------------------
 
 class TestBrainLevelSection:
     def test_brain_level_no_data(self, test_db):
-        blocks = _build_brain_level_section(db_path=test_db)
-        text = _all_text(blocks)
+        text = _build_brain_level_section(db_path=test_db)
+        assert isinstance(text, str)
         assert "Computing..." in text
 
     def test_brain_level_with_data(self, test_db):
@@ -82,8 +53,7 @@ class TestBrainLevelSection:
         conn.commit()
         conn.close()
 
-        blocks = _build_brain_level_section(db_path=test_db)
-        text = _all_text(blocks)
+        text = _build_brain_level_section(db_path=test_db)
 
         # Check level bar: 7 filled blocks and 3 empty
         assert "Level 7/10" in text
@@ -108,8 +78,8 @@ class TestBrainLevelSection:
 
 class TestDimensionMomentumSection:
     def test_dimension_momentum_no_data(self, test_db):
-        blocks = _build_dimension_momentum_section(db_path=test_db)
-        text = _all_text(blocks)
+        text = _build_dimension_momentum_section(db_path=test_db)
+        assert isinstance(text, str)
         assert "Computing..." in text
 
     def test_dimension_momentum_with_data(self, test_db):
@@ -133,8 +103,7 @@ class TestDimensionMomentumSection:
         conn.commit()
         conn.close()
 
-        blocks = _build_dimension_momentum_section(db_path=test_db)
-        text = _all_text(blocks)
+        text = _build_dimension_momentum_section(db_path=test_db)
 
         # All 6 short dimension names should appear
         for short_name in ["Health", "Wealth", "Relationships", "Mind", "Purpose", "Systems"]:
@@ -158,9 +127,9 @@ class TestDimensionMomentumSection:
 
 class TestActiveAlertsSection:
     def test_alerts_no_data(self, test_db):
-        blocks = _build_active_alerts_section(db_path=test_db)
-        # Implementation returns empty list when no active alerts
-        assert blocks == []
+        html, keyboard_rows = _build_active_alerts_section(db_path=test_db)
+        assert html == ""
+        assert keyboard_rows == []
 
     def test_alerts_with_data(self, test_db):
         conn = sqlite3.connect(str(test_db))
@@ -179,29 +148,17 @@ class TestActiveAlertsSection:
         conn.commit()
         conn.close()
 
-        blocks = _build_active_alerts_section(db_path=test_db)
-        text = _all_text(blocks)
+        html, keyboard_rows = _build_active_alerts_section(db_path=test_db)
 
-        # Critical should appear first
-        section_texts = [
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section"
-        ]
-        # First section text (after any "No active alerts") should be critical
-        assert "[!!]" in section_texts[0]
-        assert "Health dimension neglected" in section_texts[0]
+        # HTML should contain alert titles
+        assert "Health dimension neglected" in html
+        assert "Engagement dropped" in html
 
-        # Info alert with [i] should also appear
-        assert "[i]" in text
-        assert "Engagement dropped" in text
+        # Should have ALERTS header
+        assert "ALERTS" in html
 
-        # Dismiss buttons should be present
-        action_blocks = [b for b in blocks if b.get("type") == "actions"]
-        assert len(action_blocks) == 2
-        for ab in action_blocks:
-            elements = ab["elements"]
-            assert any(e["action_id"] == "app_home_dismiss_alert" for e in elements)
+        # Keyboard rows should have dismiss buttons (one per alert)
+        assert len(keyboard_rows) == 2
 
     def test_alerts_dismissed_not_shown(self, test_db):
         conn = sqlite3.connect(str(test_db))
@@ -214,12 +171,11 @@ class TestActiveAlertsSection:
         conn.commit()
         conn.close()
 
-        blocks = _build_active_alerts_section(db_path=test_db)
-        text = _all_text(blocks)
+        html, keyboard_rows = _build_active_alerts_section(db_path=test_db)
 
-        assert "Old dismissed alert" not in text
-        # Only dismissed alerts exist, so no active alerts — empty list returned
-        assert blocks == []
+        # Only dismissed alerts exist, so no active alerts
+        assert html == ""
+        assert keyboard_rows == []
 
 
 # ---------------------------------------------------------------------------
@@ -228,8 +184,8 @@ class TestActiveAlertsSection:
 
 class TestEngagementTrendSection:
     def test_engagement_trend_no_data(self, test_db):
-        blocks = _build_engagement_trend_section(db_path=test_db)
-        text = _all_text(blocks)
+        text = _build_engagement_trend_section(db_path=test_db)
+        assert isinstance(text, str)
         assert "Computing..." in text
 
     def test_engagement_trend_with_data(self, test_db):
@@ -245,8 +201,7 @@ class TestEngagementTrendSection:
         conn.commit()
         conn.close()
 
-        blocks = _build_engagement_trend_section(db_path=test_db)
-        text = _all_text(blocks)
+        text = _build_engagement_trend_section(db_path=test_db)
 
         # Should have day abbreviations
         assert "Mon" in text
@@ -273,8 +228,7 @@ class TestEngagementTrendSection:
         conn.commit()
         conn.close()
 
-        blocks = _build_engagement_trend_section(db_path=test_db)
-        text = _all_text(blocks)
+        text = _build_engagement_trend_section(db_path=test_db)
 
         expected_avg = sum(scores) / len(scores)  # 6.0
         assert f"Avg: {expected_avg:.1f}/10" in text
@@ -285,27 +239,14 @@ class TestEngagementTrendSection:
 # ---------------------------------------------------------------------------
 
 class TestFullViewIntegration:
-    def test_full_view_section_order(self, test_db):
-        view = build_app_home_view("U123", db_path=test_db)
-        headers = _find_header_order(view["blocks"])
+    def test_full_view_returns_html_and_keyboard(self, test_db):
+        html, keyboard = build_dashboard_view(db_path=test_db)
 
-        # With empty data, ALERTS section returns [] (no header).
-        # Only sections that always produce headers are expected.
-        expected_order = [
-            "BRAIN LEVEL",
-            "DIMENSION MOMENTUM",
-            "SECOND BRAIN DASHBOARD",
-            "7-DAY ENGAGEMENT",
-        ]
-        # Verify the headers appear in the expected order
-        assert headers == expected_order
+        # html should be a plain string
+        assert isinstance(html, str)
 
-    def test_full_view_block_count(self, test_db):
-        view = build_app_home_view("U123", db_path=test_db)
-        # Slack limit is 100 blocks per view
-        assert len(view["blocks"]) < 100
-
-    def test_full_view_type(self, test_db):
-        view = build_app_home_view("U123", db_path=test_db)
-        assert view["type"] == "home"
-        assert isinstance(view["blocks"], list)
+        # Should contain all major section headers
+        assert "BRAIN LEVEL" in html
+        assert "DIMENSION MOMENTUM" in html
+        assert "SECOND BRAIN DASHBOARD" in html
+        assert "7-DAY ENGAGEMENT" in html

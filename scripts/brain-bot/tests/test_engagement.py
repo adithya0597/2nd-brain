@@ -16,8 +16,8 @@ SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
 
-sys.modules.setdefault("slack_sdk", MagicMock())
-sys.modules.setdefault("slack_bolt", MagicMock())
+sys.modules.setdefault("telegram", MagicMock())
+sys.modules.setdefault("telegram.ext", MagicMock())
 sys.modules.setdefault("anthropic", MagicMock())
 sys.modules.setdefault("schedule", MagicMock())
 sys.modules.setdefault("aiosqlite", MagicMock())

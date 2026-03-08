@@ -3,6 +3,8 @@ import sys
 from unittest.mock import MagicMock
 
 sys.modules.setdefault("config", MagicMock())
+sys.modules.setdefault("telegram", MagicMock())
+sys.modules.setdefault("telegram.ext", MagicMock())
 
 import pytest
 from core.formatter import format_engagement_report
@@ -28,23 +30,21 @@ class TestFormatEngagementReport:
             "engagement_30d_avg": [{"avg_score": 6.5, "avg_journals": 1.2,
                                      "avg_completed": 3.4, "days_tracked": 28}],
         }
-        blocks = format_engagement_report(data)
-        assert len(blocks) > 5
-        assert blocks[0]["type"] == "header"
-        # Check brain level bar is present
-        text_blocks = [b for b in blocks if b.get("type") == "section"]
-        assert any("Brain Level" in str(b) for b in text_blocks)
+        html, keyboard = format_engagement_report(data)
+        assert isinstance(html, str)
+        assert len(html) > 100  # substantial output
+        assert "Brain Level" in html
+        assert keyboard is None
 
     def test_empty_data(self):
-        blocks = format_engagement_report({})
-        # Should have at least header + divider
-        assert len(blocks) >= 2
-        assert blocks[0]["type"] == "header"
+        html, keyboard = format_engagement_report({})
+        assert isinstance(html, str)
+        assert "Engagement" in html
 
     def test_engage_in_command_map(self):
         from handlers.commands import _COMMAND_MAP, _AUTO_VAULT_WRITE_COMMANDS
-        assert "/brain-engage" in _COMMAND_MAP
-        assert _COMMAND_MAP["/brain-engage"][0] == "engage"
+        assert "engage" in _COMMAND_MAP
+        assert _COMMAND_MAP["engage"][0] == "engage"
         assert "engage" in _AUTO_VAULT_WRITE_COMMANDS
 
     def test_engage_in_context_loader(self):

@@ -1,24 +1,82 @@
-"""Tests for the confidence bouncer feature.
+"""Tests for the confidence bouncer feature (Telegram).
 
 Tests cover:
-1. Low confidence triggers bouncer (DM sent to user)
+1. Low confidence triggers bouncer (DM sent to user via context.bot)
 2. High confidence bypasses bouncer (normal routing)
-3. Bouncer resolution routes to correct channel
+3. Bouncer resolution routes to correct dimension
 4. Pending capture inserted into DB
-5. Timeout auto-files correctly
+5. Bouncer action handler (feedback.py handle_bouncer_select)
+6. Timeout auto-files correctly (scheduled.py job_resolve_pending_captures)
 """
 import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-SLACK_BOT_DIR = Path(__file__).parent.parent
-if str(SLACK_BOT_DIR) not in sys.path:
-    sys.path.insert(0, str(SLACK_BOT_DIR))
+BRAIN_BOT_DIR = Path(__file__).parent.parent
+if str(BRAIN_BOT_DIR) not in sys.path:
+    sys.path.insert(0, str(BRAIN_BOT_DIR))
+
+sys.modules.setdefault("config", MagicMock())
 
 from core.classifier import ClassificationResult, DimensionScore
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_REAL_DIMENSION_TOPICS = {
+    "Health & Vitality": "brain-health",
+    "Wealth & Finance": "brain-wealth",
+    "Relationships": "brain-relations",
+    "Mind & Growth": "brain-growth",
+    "Purpose & Impact": "brain-purpose",
+    "Systems & Environment": "brain-systems",
+}
+
+
+def _make_update(text="test message", user_id=12345, chat_id=-100123, msg_id=1234):
+    """Build a mock Telegram Update for capture handler."""
+    update = MagicMock()
+    update.message.text = text
+    update.message.message_id = msg_id
+    update.message.message_thread_id = 1  # inbox topic
+    update.message.reply_text = AsyncMock()
+    update.effective_user.id = user_id
+    update.effective_chat.id = chat_id
+    return update
+
+
+def _make_context():
+    """Build a mock Telegram context."""
+    context = MagicMock()
+    context.bot = MagicMock()
+    context.bot.send_message = AsyncMock(return_value=MagicMock(message_id=99))
+    context.bot.edit_message_text = AsyncMock()
+    context.args = []
+    context.application.create_task = MagicMock()
+    return context
+
+
+def _make_low_result(confidence=0.45):
+    return ClassificationResult(
+        matches=[
+            DimensionScore(dimension="Health & Vitality", confidence=confidence, method="embedding"),
+            DimensionScore(dimension="Mind & Growth", confidence=0.30, method="embedding"),
+        ],
+        is_actionable=False,
+    )
+
+
+def _make_high_result(confidence=0.85):
+    return ClassificationResult(
+        matches=[DimensionScore(dimension="Health & Vitality", confidence=confidence, method="keyword")],
+        is_noise=False,
+        is_actionable=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -27,92 +85,75 @@ from core.classifier import ClassificationResult, DimensionScore
 
 class TestLowConfidenceTriggersBouncer:
 
-    @patch("handlers.capture.run_async")
-    @patch("handlers.capture.create_inbox_entry")
-    @patch("handlers.capture.append_to_daily_note")
-    @patch("handlers.capture.format_capture_line", return_value="- test capture")
-    @patch("handlers.capture._log_classification")
-    def test_low_confidence_sends_dm(
-        self, mock_log, mock_format, mock_append, mock_inbox, mock_run_async
-    ):
-        """When confidence < threshold, a DM is sent to the user."""
+    @pytest.mark.asyncio
+    async def test_low_confidence_sends_dm(self):
+        """When confidence < threshold, a DM is sent to the user via context.bot."""
         from handlers.capture import _handle_low_confidence
 
-        client = MagicMock()
-        client.conversations_open.return_value = {"channel": {"id": "DM_CH"}}
-        client.chat_postMessage.return_value = {"ts": "dm_ts_123"}
+        update = _make_update(text="maybe something about health")
+        context = _make_context()
+        result = _make_low_result()
 
-        event = {"text": "maybe something about health", "user": "U123", "channel": "C_INBOX", "ts": "1234.5678"}
-        channel_ids = {"brain-inbox": "C_INBOX"}
+        with patch("handlers.capture.run_in_executor", new=AsyncMock(side_effect=lambda fn, *a, **kw: fn(*a, **kw))), \
+             patch("handlers.capture.append_to_daily_note"), \
+             patch("handlers.capture.create_inbox_entry"), \
+             patch("handlers.capture.format_capture_line", return_value="- test capture"), \
+             patch("handlers.capture._log_classification", new_callable=AsyncMock), \
+             patch("handlers.capture.execute", new_callable=AsyncMock), \
+             patch("handlers.capture.DIMENSION_TOPICS", _REAL_DIMENSION_TOPICS):
+            await _handle_low_confidence(update, context, result)
 
-        result = ClassificationResult(
-            matches=[
-                DimensionScore(dimension="Health & Vitality", confidence=0.45, method="embedding"),
-                DimensionScore(dimension="Mind & Growth", confidence=0.30, method="embedding"),
-            ],
-            is_actionable=False,
-        )
+        # Verify DM was sent to the user
+        context.bot.send_message.assert_called_once()
+        call_kwargs = context.bot.send_message.call_args[1]
+        assert call_kwargs["chat_id"] == 12345  # user_id
+        assert "Unsure where this goes" in call_kwargs["text"]
 
-        _handle_low_confidence(client, event, channel_ids, result)
-
-        # Verify DM was opened with the user
-        client.conversations_open.assert_called_once_with(users=["U123"])
-
-        # Verify message was sent to DM channel
-        client.chat_postMessage.assert_called_once()
-        call_kwargs = client.chat_postMessage.call_args[1]
-        assert call_kwargs["channel"] == "DM_CH"
-        assert "bouncer_select_dimension" in json.dumps(call_kwargs["blocks"])
-
-    @patch("handlers.capture.run_async")
-    @patch("handlers.capture.create_inbox_entry")
-    @patch("handlers.capture.append_to_daily_note")
-    @patch("handlers.capture.format_capture_line", return_value="- test")
-    @patch("handlers.capture._log_classification")
-    def test_low_confidence_still_saves_to_vault(
-        self, mock_log, mock_format, mock_append, mock_inbox, mock_run_async
-    ):
+    @pytest.mark.asyncio
+    async def test_low_confidence_still_saves_to_vault(self):
         """Low-confidence captures are still saved to daily note and inbox."""
         from handlers.capture import _handle_low_confidence
 
-        client = MagicMock()
-        client.conversations_open.return_value = {"channel": {"id": "DM_CH"}}
-        client.chat_postMessage.return_value = {"ts": "dm_ts_123"}
+        update = _make_update(text="something vague")
+        context = _make_context()
+        result = _make_low_result()
 
-        event = {"text": "something vague", "user": "U123", "channel": "C_INBOX", "ts": "1234.5678"}
-        channel_ids = {}
+        mock_append = MagicMock()
+        mock_inbox = MagicMock()
 
-        result = ClassificationResult(
-            matches=[DimensionScore(dimension="Health & Vitality", confidence=0.40, method="keyword")],
-            is_actionable=False,
-        )
-
-        _handle_low_confidence(client, event, channel_ids, result)
+        with patch("handlers.capture.run_in_executor", new=AsyncMock(side_effect=lambda fn, *a, **kw: fn(*a, **kw))), \
+             patch("handlers.capture.append_to_daily_note", mock_append), \
+             patch("handlers.capture.create_inbox_entry", mock_inbox), \
+             patch("handlers.capture.format_capture_line", return_value="- test"), \
+             patch("handlers.capture._log_classification", new_callable=AsyncMock), \
+             patch("handlers.capture.execute", new_callable=AsyncMock), \
+             patch("handlers.capture.DIMENSION_TOPICS", _REAL_DIMENSION_TOPICS):
+            await _handle_low_confidence(update, context, result)
 
         mock_append.assert_called_once()
         mock_inbox.assert_called_once()
 
-    @patch("handlers.capture.run_async")
-    @patch("handlers.capture.create_inbox_entry")
-    @patch("handlers.capture.append_to_daily_note")
-    @patch("handlers.capture.format_capture_line", return_value="- test")
-    @patch("handlers.capture._log_classification")
-    def test_empty_user_returns_early(
-        self, mock_log, mock_format, mock_append, mock_inbox, mock_run_async
-    ):
-        """If user or text is empty, _handle_low_confidence returns without action."""
+    @pytest.mark.asyncio
+    async def test_empty_user_returns_early(self):
+        """If text or user triggers an exception, low confidence handler catches it."""
         from handlers.capture import _handle_low_confidence
 
-        client = MagicMock()
-        event = {"text": "test", "user": "", "channel": "C_INBOX", "ts": "1234.5678"}
-        result = ClassificationResult(
-            matches=[DimensionScore(dimension="Health & Vitality", confidence=0.40, method="keyword")],
-        )
+        # Create update where message.text will raise AttributeError
+        update = MagicMock()
+        update.message.text = None
+        update.message.message_id = 123
 
-        _handle_low_confidence(client, event, {}, result)
+        context = _make_context()
+        result = _make_low_result()
 
-        client.conversations_open.assert_not_called()
-        mock_append.assert_not_called()
+        # Should not raise (handler has try/except)
+        with patch("handlers.capture.run_in_executor", new=AsyncMock()), \
+             patch("handlers.capture.execute", new_callable=AsyncMock), \
+             patch("handlers.capture.DIMENSION_TOPICS", _REAL_DIMENSION_TOPICS):
+            await _handle_low_confidence(update, context, result)
+
+        # No DM should be sent since text is None
+        context.bot.send_message.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -121,97 +162,102 @@ class TestLowConfidenceTriggersBouncer:
 
 class TestHighConfidenceBypassesBouncer:
 
-    @patch("handlers.capture._handle_low_confidence")
-    @patch("handlers.capture._classifier")
-    @patch("handlers.capture.run_async")
-    @patch("handlers.capture.create_inbox_entry")
-    @patch("handlers.capture.append_to_daily_note")
-    @patch("handlers.capture.format_capture_line", return_value="- gym workout")
-    @patch("handlers.capture._log_classification")
-    @patch("handlers.capture.format_capture_confirmation", return_value=[])
-    @patch("handlers.capture._build_feedback_buttons", return_value=[])
-    def test_high_confidence_does_not_trigger_bouncer(
-        self, mock_buttons, mock_confirm, mock_log, mock_format,
-        mock_append, mock_inbox, mock_run_async, mock_classifier, mock_bouncer
-    ):
+    @pytest.mark.asyncio
+    async def test_high_confidence_does_not_trigger_bouncer(self):
         """Messages with confidence >= threshold should NOT trigger bouncer."""
-        from handlers.capture import _process_capture
+        from handlers.capture import handle_capture
 
-        mock_classifier.classify.return_value = ClassificationResult(
-            matches=[DimensionScore(dimension="Health & Vitality", confidence=0.85, method="keyword")],
-            is_noise=False,
-            is_actionable=False,
-        )
+        mock_classifier = MagicMock()
+        mock_classifier.classify.return_value = _make_high_result()
 
-        client = MagicMock()
-        event = {"text": "going to the gym", "user": "U123", "channel": "C_INBOX", "ts": "ts_high"}
-        channel_ids = {"brain-inbox": "C_INBOX", "brain-health": "C_HEALTH"}
+        update = _make_update(text="going to the gym")
+        context = _make_context()
 
-        _process_capture(client, event, channel_ids)
+        with patch("handlers.capture._classifier", mock_classifier), \
+             patch("handlers.capture.run_in_executor", new=AsyncMock(side_effect=lambda fn, *a, **kw: fn(*a, **kw))), \
+             patch("handlers.capture.append_to_daily_note"), \
+             patch("handlers.capture.create_inbox_entry"), \
+             patch("handlers.capture.format_capture_line", return_value="- gym"), \
+             patch("handlers.capture.format_capture_confirmation", return_value=("confirmed", None)), \
+             patch("handlers.capture._log_classification", new_callable=AsyncMock), \
+             patch("handlers.capture.insert_action_item", new_callable=AsyncMock), \
+             patch("handlers.capture.execute", new_callable=AsyncMock), \
+             patch("handlers.capture.TOPICS", {"brain-inbox": 1}), \
+             patch("handlers.capture.OWNER_TELEGRAM_ID", 12345), \
+             patch("handlers.capture.GROUP_CHAT_ID", -100123), \
+             patch("handlers.capture.config") as mock_cfg, \
+             patch("handlers.capture._handle_low_confidence", new_callable=AsyncMock) as mock_bouncer:
+            mock_cfg.CONFIDENCE_THRESHOLD = 0.60
+            await handle_capture(update, context)
 
         mock_bouncer.assert_not_called()
 
-    @patch("handlers.capture._handle_low_confidence")
-    @patch("handlers.capture._classifier")
-    def test_noise_does_not_trigger_bouncer(self, mock_classifier, mock_bouncer):
+    @pytest.mark.asyncio
+    async def test_noise_does_not_trigger_bouncer(self):
         """Noise messages should be filtered before bouncer is checked."""
-        from handlers.capture import _process_capture
+        from handlers.capture import handle_capture
 
-        mock_classifier.classify.return_value = ClassificationResult(
-            is_noise=True,
-        )
+        mock_classifier = MagicMock()
+        mock_classifier.classify.return_value = ClassificationResult(is_noise=True)
 
-        client = MagicMock()
-        event = {"text": "hello", "user": "U123", "channel": "C_INBOX", "ts": "ts_noise"}
-        channel_ids = {"brain-inbox": "C_INBOX"}
+        update = _make_update(text="hello")
+        context = _make_context()
 
-        _process_capture(client, event, channel_ids)
+        with patch("handlers.capture._classifier", mock_classifier), \
+             patch("handlers.capture.run_in_executor", new=AsyncMock(side_effect=lambda fn, *a, **kw: fn(*a, **kw))), \
+             patch("handlers.capture.TOPICS", {"brain-inbox": 1}), \
+             patch("handlers.capture.OWNER_TELEGRAM_ID", 12345), \
+             patch("handlers.capture.GROUP_CHAT_ID", -100123), \
+             patch("handlers.capture._handle_low_confidence", new_callable=AsyncMock) as mock_bouncer:
+            await handle_capture(update, context)
 
         mock_bouncer.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# Test: Bouncer resolution routes to correct channel
+# Test: Bouncer resolution routes to correct dimension
 # ---------------------------------------------------------------------------
 
 class TestBouncerResolution:
 
-    @patch("handlers.capture.run_async")
-    def test_logs_to_captures_log_and_replies_in_inbox(self, mock_run_async):
-        """_process_bouncer_resolution logs to captures_log and replies in inbox thread."""
-        from handlers.capture import _process_bouncer_resolution
+    @pytest.mark.asyncio
+    async def test_logs_to_captures_log(self):
+        """process_bouncer_resolution logs to captures_log."""
+        from handlers.capture import process_bouncer_resolution
 
-        client = MagicMock()
+        mock_execute = AsyncMock()
 
-        _process_bouncer_resolution(
-            client, "My gym session notes", "ts_123",
-            "Health & Vitality", "C_INBOX",
-        )
+        with patch("handlers.capture.execute", mock_execute):
+            await process_bouncer_resolution(
+                "My gym session notes", 12345,
+                "Health & Vitality", None,
+            )
 
-        # Should reply in inbox thread
-        assert client.chat_postMessage.call_count >= 1, (
-            f"Expected at least 1 call, got {client.chat_postMessage.call_count}"
-        )
+        # Should have called execute for captures_log insert
+        insert_calls = [
+            c for c in mock_execute.call_args_list
+            if "captures_log" in str(c)
+        ]
+        assert len(insert_calls) >= 1
 
-        first_call = client.chat_postMessage.call_args_list[0]
-        assert first_call[1]["channel"] == "C_INBOX"
-        assert first_call[1]["thread_ts"] == "ts_123"
-        assert "user-clarified" in first_call[1]["text"]
-
-        # Should have called run_async twice: captures_log insert + classifications update
-        assert mock_run_async.call_count == 2
-
-    @patch("handlers.capture.run_async")
-    def test_updates_classification_record(self, mock_run_async):
+    @pytest.mark.asyncio
+    async def test_updates_classification_record(self):
         """Resolution updates the classifications table."""
-        from handlers.capture import _process_bouncer_resolution
+        from handlers.capture import process_bouncer_resolution
 
-        _process_bouncer_resolution(
-            client=MagicMock(), text="test text", ts="ts_456",
-            dimension="Mind & Growth", inbox_channel="",
-        )
-        # Should have called run_async twice: captures_log insert + classifications update
-        assert mock_run_async.call_count == 2
+        mock_execute = AsyncMock()
+
+        with patch("handlers.capture.execute", mock_execute):
+            await process_bouncer_resolution(
+                "test text", 456, "Mind & Growth", None,
+            )
+
+        # Should have called execute for classifications update
+        classification_calls = [
+            c for c in mock_execute.call_args_list
+            if "classifications" in str(c)
+        ]
+        assert len(classification_calls) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -220,130 +266,92 @@ class TestBouncerResolution:
 
 class TestPendingCaptureDbInsertion:
 
-    @patch("handlers.capture.run_async")
-    @patch("handlers.capture.create_inbox_entry")
-    @patch("handlers.capture.append_to_daily_note")
-    @patch("handlers.capture.format_capture_line", return_value="- test")
-    @patch("handlers.capture._log_classification")
-    def test_inserts_pending_capture_into_db(
-        self, mock_log, mock_format, mock_append, mock_inbox, mock_run_async
-    ):
+    @pytest.mark.asyncio
+    async def test_inserts_pending_capture_into_db(self):
         """_handle_low_confidence inserts a row into pending_captures."""
         from handlers.capture import _handle_low_confidence
 
-        client = MagicMock()
-        client.conversations_open.return_value = {"channel": {"id": "DM_CH"}}
-        client.chat_postMessage.return_value = {"ts": "dm_ts_999"}
+        update = _make_update(text="ambiguous text")
+        context = _make_context()
+        result = _make_low_result()
 
-        event = {"text": "ambiguous text", "user": "U123", "channel": "C_INBOX", "ts": "ts_abc"}
-        channel_ids = {}
+        mock_execute = AsyncMock()
 
-        result = ClassificationResult(
-            matches=[
-                DimensionScore(dimension="Health & Vitality", confidence=0.45, method="embedding"),
-            ],
-            is_actionable=False,
-        )
+        with patch("handlers.capture.run_in_executor", new=AsyncMock(side_effect=lambda fn, *a, **kw: fn(*a, **kw))), \
+             patch("handlers.capture.append_to_daily_note"), \
+             patch("handlers.capture.create_inbox_entry"), \
+             patch("handlers.capture.format_capture_line", return_value="- test"), \
+             patch("handlers.capture._log_classification", new_callable=AsyncMock), \
+             patch("handlers.capture.execute", mock_execute), \
+             patch("handlers.capture.DIMENSION_TOPICS", _REAL_DIMENSION_TOPICS):
+            await _handle_low_confidence(update, context, result)
 
-        _handle_low_confidence(client, event, channel_ids, result)
-
-        # run_async should be called: once for the DB insert
-        assert mock_run_async.call_count >= 1
-
-        # Inspect the last run_async call (the DB insert)
-        last_call = mock_run_async.call_args_list[-1]
-        # The argument is a coroutine for execute()
-        # We can verify it was called by checking the mock was invoked
+        # Should have inserted into pending_captures
+        pending_calls = [
+            c for c in mock_execute.call_args_list
+            if "pending_captures" in str(c) and "INSERT" in str(c)
+        ]
+        assert len(pending_calls) >= 1
 
 
 # ---------------------------------------------------------------------------
-# Test: Bouncer action handler in feedback.py
+# Test: Bouncer action handler (feedback.py)
 # ---------------------------------------------------------------------------
 
 class TestBouncerActionHandler:
-    """Test the bouncer_select_dimension action handler.
 
-    We capture the handler by registering feedback handlers with a fresh mock app.
-    To avoid polluting the module state for other test files, we use a local capture
-    that does NOT modify the module-level handler references.
-    """
-
-    @staticmethod
-    def _get_bouncer_handler():
-        """Register feedback handlers and return the bouncer handler."""
-        import handlers.feedback as fb_mod
-
-        registered = {}
-
-        def capture_action(action_id):
-            def decorator(fn):
-                registered[action_id] = fn
-                return fn
-            return decorator
-
-        mock_app = MagicMock()
-        mock_app.action = capture_action
-        fb_mod.register(mock_app)
-
-        return registered.get("bouncer_select_dimension"), fb_mod
-
-    def test_bouncer_select_updates_dm_and_routes(self):
+    @pytest.mark.asyncio
+    async def test_bouncer_select_updates_dm_and_routes(self):
         """Selecting a dimension from bouncer DM resolves and routes."""
-        handler, fb_mod = self._get_bouncer_handler()
-        assert handler is not None, "bouncer_select_dimension handler should be registered"
+        import handlers.feedback as fb_mod
+        fb_mod.DIMENSION_TOPICS = _REAL_DIMENSION_TOPICS
 
-        ack = MagicMock()
-        client = MagicMock()
+        update = MagicMock()
+        cb_query = MagicMock()
+        cb_query.answer = AsyncMock()
+        cb_query.edit_message_text = AsyncMock()
+        cb_query.data = json.dumps({"a": "bnc", "m": 123, "d": 0}, separators=(",", ":"))
+        update.callback_query = cb_query
 
-        selected_value = json.dumps({
-            "ts": "ts_bounce_1",
-            "dimension": "Health & Vitality",
-            "text": "some health text",
-            "channel": "C_INBOX",
-        })
+        context = _make_context()
 
-        body = {
-            "actions": [{"selected_option": {"value": selected_value}}],
-            "channel": {"id": "DM_CH"},
-            "message": {"ts": "dm_msg_ts"},
-        }
+        mock_execute = AsyncMock()
+        mock_query = AsyncMock(return_value=[{"message_text": "health stuff"}])
 
-        with patch.object(fb_mod, "run_async") as mock_run_async, \
-             patch("handlers.capture._process_bouncer_resolution") as mock_resolve:
-            handler(ack, body, client)
+        with patch.object(fb_mod, "execute", mock_execute), \
+             patch.object(fb_mod, "query", mock_query), \
+             patch("handlers.capture.process_bouncer_resolution", new_callable=AsyncMock):
+            await fb_mod.handle_bouncer_select(update, context)
 
-        ack.assert_called_once()
-        # Should update DM message
-        client.chat_update.assert_called_once()
-        update_kwargs = client.chat_update.call_args[1]
-        assert "Filed to Health & Vitality" in update_kwargs["text"]
+        cb_query.answer.assert_called_once()
+        # Should update DM message with confirmation
+        cb_query.edit_message_text.assert_called_once()
+        call_args = cb_query.edit_message_text.call_args
+        text = call_args[0][0] if call_args[0] else call_args[1].get("text", "")
+        assert "Filed" in text
 
-    def test_bouncer_select_missing_ts_returns_early(self):
-        """If message_ts is empty, handler returns without action."""
-        handler, fb_mod = self._get_bouncer_handler()
+    @pytest.mark.asyncio
+    async def test_bouncer_select_missing_dim_returns_early(self):
+        """If dim_idx is out of range, handler returns without action."""
+        import handlers.feedback as fb_mod
+        fb_mod.DIMENSION_TOPICS = _REAL_DIMENSION_TOPICS
 
-        ack = MagicMock()
-        client = MagicMock()
+        update = MagicMock()
+        cb_query = MagicMock()
+        cb_query.answer = AsyncMock()
+        cb_query.edit_message_text = AsyncMock()
+        # d=99 is out of range (only 6 dimensions)
+        cb_query.data = json.dumps({"a": "bnc", "m": 123, "d": 99}, separators=(",", ":"))
+        update.callback_query = cb_query
 
-        selected_value = json.dumps({
-            "ts": "",
-            "dimension": "Health & Vitality",
-            "text": "test",
-            "channel": "C_INBOX",
-        })
+        context = _make_context()
 
-        body = {
-            "actions": [{"selected_option": {"value": selected_value}}],
-            "channel": {"id": "DM_CH"},
-            "message": {"ts": "dm_msg_ts"},
-        }
+        with patch.object(fb_mod, "execute", new_callable=AsyncMock) as mock_execute:
+            await fb_mod.handle_bouncer_select(update, context)
 
-        with patch.object(fb_mod, "run_async") as mock_run_async:
-            handler(ack, body, client)
-
-        ack.assert_called_once()
-        mock_run_async.assert_not_called()
-        client.chat_update.assert_not_called()
+        cb_query.answer.assert_called_once()
+        mock_execute.assert_not_called()
+        cb_query.edit_message_text.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -352,100 +360,93 @@ class TestBouncerActionHandler:
 
 class TestTimeoutAutoFiles:
 
-    @patch("handlers.scheduled.run_async")
-    def test_resolves_timed_out_captures(self, mock_run_async):
+    @pytest.mark.asyncio
+    async def test_resolves_timed_out_captures(self):
         """job_resolve_pending_captures processes expired pending captures."""
         from handlers.scheduled import job_resolve_pending_captures
 
-        # First call returns pending rows, second call is the execute for update
         pending_rows = [
             {
                 "id": 1,
                 "message_text": "ambiguous text",
-                "message_ts": "ts_timeout_1",
+                "message_ts": "12345",
                 "primary_dimension": "Health & Vitality",
-                "channel_id": "C_INBOX",
+                "channel_id": "-100123",
                 "bouncer_dm_ts": "dm_ts_1",
                 "bouncer_dm_channel": "DM_CH_1",
             }
         ]
 
-        # run_async is called for query (returns rows) and execute (returns None)
-        call_count = [0]
+        mock_query = AsyncMock(return_value=pending_rows)
+        mock_execute = AsyncMock()
 
-        def side_effect(coro):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return pending_rows  # query result
-            return None  # execute result
+        mock_context = MagicMock()
+        mock_context.bot = MagicMock()
+        mock_context.bot.edit_message_text = AsyncMock()
 
-        mock_run_async.side_effect = side_effect
+        with patch("handlers.scheduled.query", mock_query), \
+             patch("handlers.scheduled.execute", mock_execute), \
+             patch("handlers.capture.process_bouncer_resolution", new_callable=AsyncMock) as mock_resolve, \
+             patch("config.BOUNCER_TIMEOUT_MINUTES", 15):
+            await job_resolve_pending_captures(mock_context)
 
-        client = MagicMock()
-        channel_ids = {}
+        # Should have called query for pending captures
+        mock_query.assert_called_once()
 
-        with patch("config.BOUNCER_TIMEOUT_MINUTES", 15), \
-             patch("handlers.capture._process_bouncer_resolution") as mock_resolve:
-            job_resolve_pending_captures(client, channel_ids)
+        # Should have called execute to update status
+        status_calls = [
+            c for c in mock_execute.call_args_list
+            if "pending_captures" in str(c) and "timeout" in str(c)
+        ]
+        assert len(status_calls) >= 1
 
-        # Should have called run_async at least twice (query + execute)
-        assert mock_run_async.call_count >= 2
-
-        # Should update DM message
-        client.chat_update.assert_called_once()
-        update_kwargs = client.chat_update.call_args[1]
-        assert update_kwargs["channel"] == "DM_CH_1"
-        assert "Auto-filed" in update_kwargs["text"]
-
-    @patch("handlers.scheduled.run_async")
-    def test_no_pending_captures_is_noop(self, mock_run_async):
+    @pytest.mark.asyncio
+    async def test_no_pending_captures_is_noop(self):
         """When no captures are pending, the job does nothing."""
         from handlers.scheduled import job_resolve_pending_captures
 
-        mock_run_async.return_value = []
+        mock_query = AsyncMock(return_value=[])
+        mock_execute = AsyncMock()
 
-        client = MagicMock()
-        channel_ids = {}
+        mock_context = MagicMock()
+        mock_context.bot = MagicMock()
 
-        with patch("config.BOUNCER_TIMEOUT_MINUTES", 15):
-            job_resolve_pending_captures(client, channel_ids)
+        with patch("handlers.scheduled.query", mock_query), \
+             patch("handlers.scheduled.execute", mock_execute), \
+             patch("config.BOUNCER_TIMEOUT_MINUTES", 15):
+            await job_resolve_pending_captures(mock_context)
 
-        # Only one call for the query
-        assert mock_run_async.call_count == 1
-        client.chat_update.assert_not_called()
+        mock_query.assert_called_once()
+        mock_execute.assert_not_called()
 
-    @patch("handlers.scheduled.run_async")
-    def test_missing_dm_info_skips_dm_update(self, mock_run_async):
-        """If bouncer_dm_ts is missing, DM update is skipped."""
+    @pytest.mark.asyncio
+    async def test_missing_dm_info_still_resolves(self):
+        """If bouncer_dm_ts is missing, routing still happens."""
         from handlers.scheduled import job_resolve_pending_captures
 
         pending_rows = [
             {
                 "id": 2,
                 "message_text": "another text",
-                "message_ts": "ts_timeout_2",
+                "message_ts": "67890",
                 "primary_dimension": "Mind & Growth",
-                "channel_id": "C_INBOX",
+                "channel_id": "-100123",
                 "bouncer_dm_ts": None,
                 "bouncer_dm_channel": None,
             }
         ]
 
-        call_count = [0]
+        mock_query = AsyncMock(return_value=pending_rows)
+        mock_execute = AsyncMock()
 
-        def side_effect(coro):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return pending_rows
-            return None
+        mock_context = MagicMock()
+        mock_context.bot = MagicMock()
 
-        mock_run_async.side_effect = side_effect
+        with patch("handlers.scheduled.query", mock_query), \
+             patch("handlers.scheduled.execute", mock_execute), \
+             patch("handlers.capture.process_bouncer_resolution", new_callable=AsyncMock) as mock_resolve, \
+             patch("config.BOUNCER_TIMEOUT_MINUTES", 15):
+            await job_resolve_pending_captures(mock_context)
 
-        client = MagicMock()
-        channel_ids = {}
-
-        with patch("config.BOUNCER_TIMEOUT_MINUTES", 15), \
-             patch("handlers.capture._process_bouncer_resolution"):
-            job_resolve_pending_captures(client, channel_ids)
-
-        client.chat_update.assert_not_called()
+        # Should still route via process_bouncer_resolution
+        mock_resolve.assert_called_once()

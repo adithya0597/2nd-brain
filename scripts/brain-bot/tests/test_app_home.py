@@ -1,27 +1,28 @@
-"""Tests for App Home tab builder and event handler."""
+"""Tests for Telegram dashboard builder (replaces Slack app_home_builder)."""
 
 import json
 import sqlite3
 import sys
-import time
+from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-# Ensure slack-bot dir on path and config mock in place
-SLACK_BOT_DIR = Path(__file__).parent.parent
-if str(SLACK_BOT_DIR) not in sys.path:
-    sys.path.insert(0, str(SLACK_BOT_DIR))
+# Ensure brain-bot dir on path and mock external deps
+BRAIN_BOT_DIR = Path(__file__).parent.parent
+if str(BRAIN_BOT_DIR) not in sys.path:
+    sys.path.insert(0, str(BRAIN_BOT_DIR))
 
 sys.modules.setdefault("config", MagicMock())
+sys.modules.setdefault("telegram", MagicMock())
+sys.modules.setdefault("telegram.ext", MagicMock())
 sys.modules.setdefault("anthropic", MagicMock())
 sys.modules.setdefault("aiosqlite", MagicMock())
 
-from core.app_home_builder import (
-    build_app_home_view,
+from core.dashboard_builder import (
+    build_dashboard_view,
     _build_dashboard_summary,
-    _build_quick_actions,
     _build_recent_captures,
     _build_pending_actions,
     _relative_time,
@@ -57,25 +58,27 @@ def _insert_actions(db_path, actions):
 
 
 # ---------------------------------------------------------------------------
-# Tests: build_app_home_view
+# Tests: build_dashboard_view
 # ---------------------------------------------------------------------------
 
-class TestBuildAppHomeView:
-    def test_returns_valid_block_kit_structure(self, test_db):
-        view = build_app_home_view("U123", db_path=test_db)
-        assert view["type"] == "home"
-        assert isinstance(view["blocks"], list)
-        assert len(view["blocks"]) > 0
+class TestBuildDashboardView:
+    def test_returns_html_and_keyboard(self, test_db):
+        html, keyboard = build_dashboard_view(db_path=test_db)
+        assert isinstance(html, str)
+        assert len(html) > 0
+        # keyboard is InlineKeyboardMarkup (mocked), just verify it was returned
+        assert keyboard is not None
 
-    def test_contains_all_sections(self, test_db):
-        view = build_app_home_view("U123", db_path=test_db)
-        blocks = view["blocks"]
-        # Should have header, sections, dividers, context
-        block_types = [b["type"] for b in blocks]
-        assert "header" in block_types
-        assert "section" in block_types
-        assert "divider" in block_types
-        assert "actions" in block_types  # Quick action buttons
+    def test_html_contains_dashboard_sections(self, test_db):
+        html, _keyboard = build_dashboard_view(db_path=test_db)
+        # Should contain the dashboard summary section
+        assert "SECOND BRAIN DASHBOARD" in html
+        # Should contain brain level section
+        assert "BRAIN LEVEL" in html
+        # Should contain engagement section
+        assert "7-DAY ENGAGEMENT" in html
+        # Should contain the updated timestamp
+        assert "Updated:" in html
 
 
 # ---------------------------------------------------------------------------
@@ -84,73 +87,43 @@ class TestBuildAppHomeView:
 
 class TestDashboardSummary:
     def test_shows_six_icor_dimensions(self, test_db):
-        blocks = _build_dashboard_summary(db_path=test_db)
-        # Find the section block with the heatmap
-        section_texts = [
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section"
-        ]
-        assert len(section_texts) > 0
-        heatmap = section_texts[0]
+        html = _build_dashboard_summary(db_path=test_db)
+        assert isinstance(html, str)
         # All 6 short dimension names should appear
         for short_name in ["Health", "Wealth", "Relationships", "Mind", "Purpose", "Systems"]:
-            assert short_name in heatmap
+            assert short_name in html
 
     def test_shows_pending_count(self, test_db):
         _insert_actions(test_db, [
             ("Task A", "pending", "Fitness"),
             ("Task B", "pending", None),
         ])
-        blocks = _build_dashboard_summary(db_path=test_db)
-        section_texts = [
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section"
-        ]
-        heatmap = section_texts[0]
-        assert "Pending: 2" in heatmap
+        html = _build_dashboard_summary(db_path=test_db)
+        assert "Pending: 2" in html
 
     def test_shows_journaled_no_by_default(self, test_db):
-        blocks = _build_dashboard_summary(db_path=test_db)
-        section_texts = [
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section"
-        ]
-        heatmap = section_texts[0]
-        assert "Journaled: No" in heatmap
+        html = _build_dashboard_summary(db_path=test_db)
+        assert "Journaled:" in html
+        assert "No" in html
 
+    def test_shows_journaled_yes_when_entry_exists(self, test_db):
+        today = datetime.now().strftime("%Y-%m-%d")
+        conn = sqlite3.connect(str(test_db))
+        conn.execute(
+            "INSERT INTO journal_entries (date, content) VALUES (?, ?)",
+            (today, "Today was a good day."),
+        )
+        conn.commit()
+        conn.close()
+        html = _build_dashboard_summary(db_path=test_db)
+        assert "Journaled:" in html
+        assert "Yes" in html
 
-# ---------------------------------------------------------------------------
-# Tests: Quick Actions
-# ---------------------------------------------------------------------------
-
-class TestQuickActions:
-    def test_has_six_buttons(self):
-        blocks = _build_quick_actions()
-        buttons = []
-        for b in blocks:
-            if b.get("type") == "actions":
-                buttons.extend(b.get("elements", []))
-        assert len(buttons) == 6
-
-    def test_button_action_ids(self):
-        blocks = _build_quick_actions()
-        action_ids = []
-        for b in blocks:
-            if b.get("type") == "actions":
-                for elem in b.get("elements", []):
-                    action_ids.append(elem.get("action_id"))
-        expected = {
-            "app_home_morning_briefing",
-            "app_home_evening_review",
-            "app_home_search_vault",
-            "app_home_sync_notion",
-            "app_home_weekly_review",
-            "app_home_brain_status",
-        }
-        assert set(action_ids) == expected
+    def test_returns_string_not_list(self, test_db):
+        result = _build_dashboard_summary(db_path=test_db)
+        assert isinstance(result, str)
+        # Must NOT be a list of dicts (old Block Kit format)
+        assert not isinstance(result, list)
 
 
 # ---------------------------------------------------------------------------
@@ -159,9 +132,9 @@ class TestQuickActions:
 
 class TestRecentCaptures:
     def test_handles_empty_captures_log(self, test_db):
-        blocks = _build_recent_captures(db_path=test_db)
-        # Implementation returns empty list when no captures exist
-        assert blocks == []
+        result = _build_recent_captures(db_path=test_db)
+        # Returns empty string when no captures exist
+        assert result == ""
 
     def test_shows_captures_grouped_by_dimension(self, test_db):
         _insert_captures(test_db, [
@@ -169,35 +142,37 @@ class TestRecentCaptures:
             ("Read chapter 5 of Deep Work", ["Mind & Growth"], "2026-03-07 09:00:00"),
             ("Ate a healthy meal", ["Health & Vitality"], "2026-03-07 08:00:00"),
         ])
-        blocks = _build_recent_captures(db_path=test_db)
-        section_texts = [
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section" and "RECENT" not in b["text"]["text"]
-        ]
-        # Should have sections for Health & Vitality and Mind & Growth
-        all_text = "\n".join(section_texts)
-        assert "Health & Vitality" in all_text
-        assert "Mind & Growth" in all_text
-        assert "running program" in all_text
+        html = _build_recent_captures(db_path=test_db)
+        assert isinstance(html, str)
+        # Dimension names are HTML-escaped (& -> &amp;)
+        assert "Health &amp; Vitality" in html
+        assert "Mind &amp; Growth" in html
+        assert "running program" in html
 
     def test_limits_per_dimension(self, test_db):
         captures = [
-            (f"Capture {i}", ["Health & Vitality"], f"2026-03-07 {10-i}:00:00")
+            (f"Capture {i}", ["Health & Vitality"], f"2026-03-07 {10-i:02d}:00:00")
             for i in range(5)
         ]
         _insert_captures(test_db, captures)
-        blocks = _build_recent_captures(limit_per_dim=2, db_path=test_db)
-        section_texts = [
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section" and "Health & Vitality" in b["text"]["text"]
-        ]
-        # Should show at most 2 captures for Health & Vitality
-        assert len(section_texts) == 1
-        text = section_texts[0]
-        # Count the bullet points (middle dot)
-        assert text.count("\u00b7") <= 2
+        html = _build_recent_captures(limit_per_dim=2, db_path=test_db)
+        # Should show at most 2 captures for Health & Vitality (2 middle dots)
+        assert html.count("\u00b7") <= 2
+
+    def test_returns_string_not_list(self, test_db):
+        _insert_captures(test_db, [
+            ("Test capture", ["Health & Vitality"], "2026-03-07 10:00:00"),
+        ])
+        result = _build_recent_captures(db_path=test_db)
+        assert isinstance(result, str)
+        assert not isinstance(result, list)
+
+    def test_contains_recent_captures_header(self, test_db):
+        _insert_captures(test_db, [
+            ("Some thought", ["Mind & Growth"], "2026-03-07 10:00:00"),
+        ])
+        html = _build_recent_captures(db_path=test_db)
+        assert "RECENT CAPTURES" in html
 
 
 # ---------------------------------------------------------------------------
@@ -206,9 +181,10 @@ class TestRecentCaptures:
 
 class TestPendingActions:
     def test_handles_empty_action_items(self, test_db):
-        blocks = _build_pending_actions(db_path=test_db)
-        # Implementation returns empty list when no pending actions
-        assert blocks == []
+        html, keyboard_rows = _build_pending_actions(db_path=test_db)
+        # Returns empty string and empty list when no pending actions
+        assert html == ""
+        assert keyboard_rows == []
 
     def test_shows_pending_actions(self, test_db):
         _insert_actions(test_db, [
@@ -216,115 +192,43 @@ class TestPendingActions:
             ("Buy groceries", "pending", "Health"),
             ("Done task", "completed", None),
         ])
-        blocks = _build_pending_actions(db_path=test_db)
-        section_texts = [
-            b["text"]["text"]
-            for b in blocks
-            if b.get("type") == "section" and "PENDING" not in b["text"]["text"]
-        ]
-        # Should show 2 pending actions (not the completed one)
-        assert len(section_texts) == 2
-        all_text = "\n".join(section_texts)
-        assert "Submit quarterly review" in all_text
-        assert "Buy groceries" in all_text
-        assert "Done task" not in all_text
+        html, keyboard_rows = _build_pending_actions(db_path=test_db)
+        assert isinstance(html, str)
+        assert "Submit quarterly review" in html
+        assert "Buy groceries" in html
+        # Completed task should NOT appear
+        assert "Done task" not in html
 
-    def test_action_buttons_present(self, test_db):
-        _insert_actions(test_db, [("Test task", "pending", None)])
-        blocks = _build_pending_actions(db_path=test_db)
-        action_blocks = [b for b in blocks if b.get("type") == "actions"]
-        assert len(action_blocks) >= 1
-        elements = action_blocks[0]["elements"]
-        action_ids = [e["action_id"] for e in elements]
-        assert "app_home_complete" in action_ids
-        assert "app_home_snooze" in action_ids
+    def test_returns_keyboard_rows_for_pending(self, test_db):
+        _insert_actions(test_db, [
+            ("Test task 1", "pending", None),
+            ("Test task 2", "pending", None),
+        ])
+        html, keyboard_rows = _build_pending_actions(db_path=test_db)
+        assert isinstance(keyboard_rows, list)
+        # Should have one row of buttons per pending action
+        assert len(keyboard_rows) == 2
+        # Each row should have 2 buttons (Complete + Snooze)
+        for row in keyboard_rows:
+            assert len(row) == 2
 
+    def test_shows_icor_element_when_present(self, test_db):
+        _insert_actions(test_db, [
+            ("Morning jog", "pending", "Fitness"),
+        ])
+        html, _keyboard_rows = _build_pending_actions(db_path=test_db)
+        assert "Morning jog" in html
+        assert "Fitness" in html
 
-# ---------------------------------------------------------------------------
-# Tests: View Cache
-# ---------------------------------------------------------------------------
+    def test_pending_actions_header(self, test_db):
+        _insert_actions(test_db, [("Task", "pending", None)])
+        html, _keyboard_rows = _build_pending_actions(db_path=test_db)
+        assert "PENDING ACTIONS" in html
 
-class TestViewCache:
-    def test_cache_hit_within_ttl(self, test_db):
-        from handlers.app_home import _get_cached_view, _view_cache, _CACHE_TTL
-        _view_cache.clear()
-
-        # First call populates cache
-        view1 = _get_cached_view("U_CACHE_TEST", db_path=test_db)
-        assert "U_CACHE_TEST" in _view_cache
-
-        # Second call should return cached (same object)
-        view2 = _get_cached_view("U_CACHE_TEST", db_path=test_db)
-        assert view1 is view2
-
-    def test_cache_miss_expired_ttl(self, test_db):
-        from handlers.app_home import _get_cached_view, _view_cache, _CACHE_TTL
-        _view_cache.clear()
-
-        # First call
-        view1 = _get_cached_view("U_EXPIRE_TEST", db_path=test_db)
-        assert "U_EXPIRE_TEST" in _view_cache
-
-        # Manually expire the cache entry
-        ts, payload = _view_cache["U_EXPIRE_TEST"]
-        _view_cache["U_EXPIRE_TEST"] = (ts - _CACHE_TTL - 1, payload)
-
-        # Next call should rebuild (different object)
-        view2 = _get_cached_view("U_EXPIRE_TEST", db_path=test_db)
-        assert view2 is not view1
-
-
-# ---------------------------------------------------------------------------
-# Tests: App Home Event Handler
-# ---------------------------------------------------------------------------
-
-class TestAppHomeEventHandler:
-    def test_app_home_opened_calls_views_publish(self, test_db):
-        from handlers.app_home import _view_cache
-        _view_cache.clear()
-
-        mock_app = MagicMock()
-        registered_handlers = {}
-
-        def capture_event(event_name):
-            def decorator(func):
-                registered_handlers[event_name] = func
-                return func
-            return decorator
-
-        def capture_action(action_id):
-            def decorator(func):
-                registered_handlers[f"action:{action_id}"] = func
-                return func
-            return decorator
-
-        def capture_view(callback_id):
-            def decorator(func):
-                registered_handlers[f"view:{callback_id}"] = func
-                return func
-            return decorator
-
-        mock_app.event = capture_event
-        mock_app.action = capture_action
-        mock_app.view = capture_view
-
-        from handlers.app_home import register
-        register(mock_app)
-
-        # Simulate app_home_opened event
-        handler = registered_handlers["app_home_opened"]
-        mock_client = MagicMock()
-
-        with patch("handlers.app_home.build_app_home_view") as mock_build:
-            mock_build.return_value = {"type": "home", "blocks": []}
-            handler(
-                event={"user": "U123"},
-                client=mock_client,
-            )
-
-        mock_client.views_publish.assert_called_once()
-        call_kwargs = mock_client.views_publish.call_args
-        assert call_kwargs[1]["user_id"] == "U123"
+    def test_returns_tuple_not_list(self, test_db):
+        result = _build_pending_actions(db_path=test_db)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -337,15 +241,25 @@ class TestRelativeTime:
         assert _relative_time(None) == "?"
 
     def test_recent_time(self):
-        from datetime import datetime, timedelta
         now = datetime.now()
         two_hours_ago = (now - timedelta(hours=2)).isoformat()
         result = _relative_time(two_hours_ago)
         assert result == "2h"
 
     def test_days_ago(self):
-        from datetime import datetime, timedelta
         now = datetime.now()
         three_days_ago = (now - timedelta(days=3)).isoformat()
         result = _relative_time(three_days_ago)
         assert result == "3d"
+
+    def test_minutes_ago(self):
+        now = datetime.now()
+        thirty_min_ago = (now - timedelta(minutes=30)).isoformat()
+        result = _relative_time(thirty_min_ago)
+        assert result == "30m"
+
+    def test_seconds_ago(self):
+        now = datetime.now()
+        ten_sec_ago = (now - timedelta(seconds=10)).isoformat()
+        result = _relative_time(ten_sec_ago)
+        assert result == "10s"

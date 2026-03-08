@@ -1,4 +1,4 @@
-"""Tests for /brain-cost command — DB query, formatter, and handler."""
+"""Tests for /brain-cost command -- DB query, formatter, and handler."""
 import sqlite3
 import sys
 from pathlib import Path
@@ -6,12 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-SLACK_BOT_DIR = Path(__file__).parent.parent
-if str(SLACK_BOT_DIR) not in sys.path:
-    sys.path.insert(0, str(SLACK_BOT_DIR))
+BRAIN_BOT_DIR = Path(__file__).parent.parent
+if str(BRAIN_BOT_DIR) not in sys.path:
+    sys.path.insert(0, str(BRAIN_BOT_DIR))
 
-# Mock config before importing modules (conftest sets all defaults)
+# Mock config and telegram before importing modules (conftest sets all defaults)
 sys.modules.setdefault("config", MagicMock())
+sys.modules.setdefault("telegram", MagicMock())
+sys.modules.setdefault("telegram.ext", MagicMock())
 
 from core.db_ops import get_cost_summary, execute
 from core.formatter import format_cost_report
@@ -125,7 +127,7 @@ class TestGetCostSummary:
 
 class TestFormatCostReport:
 
-    def test_returns_valid_block_kit_structure(self):
+    def test_returns_valid_html_tuple(self):
         data = {
             "daily": [
                 {"date": "2026-03-06", "calls": 5, "daily_cost": 0.05, "input_tokens": 5000, "output_tokens": 2000},
@@ -138,36 +140,21 @@ class TestFormatCostReport:
             ],
         }
 
-        blocks = format_cost_report(data, days=30)
+        html, keyboard = format_cost_report(data, days=30)
 
-        assert isinstance(blocks, list)
-        assert len(blocks) > 0
-
-        # First block should be a header
-        assert blocks[0]["type"] == "header"
-        assert "30" in blocks[0]["text"]["text"]
-
-        # Should contain section and divider blocks
-        types = {b["type"] for b in blocks}
-        assert "section" in types
-        assert "divider" in types
-        assert "context" in types
+        assert isinstance(html, str)
+        assert keyboard is None
+        assert "30" in html
+        assert "<b>" in html  # HTML formatting present
 
     def test_handles_empty_data_gracefully(self):
         data = {"daily": [], "by_caller": [], "by_model": []}
 
-        blocks = format_cost_report(data, days=7)
+        html, keyboard = format_cost_report(data, days=7)
 
-        assert isinstance(blocks, list)
-        assert len(blocks) > 0
-        assert blocks[0]["type"] == "header"
-        assert "7" in blocks[0]["text"]["text"]
-
-        # Should have the "No API calls" message
-        section_texts = [
-            b["text"]["text"] for b in blocks if b["type"] == "section"
-        ]
-        assert any("No API calls" in t for t in section_texts)
+        assert isinstance(html, str)
+        assert "7" in html
+        assert "No API calls" in html
 
     def test_summary_stats_correct(self):
         data = {
@@ -179,13 +166,10 @@ class TestFormatCostReport:
             "by_model": [],
         }
 
-        blocks = format_cost_report(data, days=30)
+        html, keyboard = format_cost_report(data, days=30)
 
-        # Find the summary section (second block, after header)
-        summary = blocks[1]
-        assert summary["type"] == "section"
-        assert "$0.0500" in summary["text"]["text"]
-        assert "5" in summary["text"]["text"]  # total calls
+        assert "$0.0500" in html
+        assert "5" in html  # total calls
 
 
 # ---------------------------------------------------------------------------
@@ -194,13 +178,11 @@ class TestFormatCostReport:
 
 class TestCostCommandHandler:
 
-    def test_handler_parses_days_parameter(self):
-        """Verify the handler would parse days from command text."""
-        from handlers.commands import _run_cost_command
+    def test_handler_has_telegram_signature(self):
+        """Verify the handler accepts Telegram (update, context) args."""
+        from handlers.commands import _handle_cost
 
-        # We test the parsing logic by checking _run_cost_command exists
-        # and accepts the expected args (client, user_id, user_input)
         import inspect
-        sig = inspect.signature(_run_cost_command)
+        sig = inspect.signature(_handle_cost)
         params = list(sig.parameters.keys())
-        assert params == ["client", "user_id", "user_input"]
+        assert params == ["update", "context"]
