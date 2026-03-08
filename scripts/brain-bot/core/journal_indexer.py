@@ -30,7 +30,7 @@ ENERGY_PATTERNS = {
 }
 
 # ICOR dimension names for detecting mentions
-ICOR_DIMENSIONS = list(config.DIMENSION_CHANNELS.keys())
+ICOR_DIMENSIONS = list(config.DIMENSION_TOPICS.keys())
 
 # Keywords that map to ICOR dimensions (broader than routing keywords)
 ICOR_KEYWORDS = {

@@ -439,7 +439,7 @@ def ensure_dimension_pages():
     dimensions_dir = config.VAULT_PATH / "Dimensions"
     dimensions_dir.mkdir(parents=True, exist_ok=True)
 
-    for dim_name in config.DIMENSION_CHANNELS:
+    for dim_name in config.DIMENSION_TOPICS:
         path = dimensions_dir / f"{dim_name}.md"
         if path.exists():
             continue

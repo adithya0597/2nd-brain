@@ -377,7 +377,7 @@ class MessageClassifier:
             return []
 
         try:
-            dimensions = ", ".join(config.DIMENSION_CHANNELS.keys())
+            dimensions = ", ".join(config.DIMENSION_TOPICS.keys())
             response = client.messages.create(
                 model=config.CLASSIFIER_LLM_MODEL,
                 max_tokens=100,
@@ -421,7 +421,7 @@ class MessageClassifier:
                         dim_name = item.get("dimension", "")
                         conf = float(item.get("confidence", 0.5))
                         # Validate dimension name
-                        for known_dim in config.DIMENSION_CHANNELS:
+                        for known_dim in config.DIMENSION_TOPICS:
                             if known_dim.lower() in dim_name.lower():
                                 result.append(DimensionScore(
                                     dimension=known_dim,
@@ -434,7 +434,7 @@ class MessageClassifier:
                 pass
 
             # Fallback: try to match dimension name from raw text
-            for dim in config.DIMENSION_CHANNELS:
+            for dim in config.DIMENSION_TOPICS:
                 if dim.lower() in raw.lower():
                     return [DimensionScore(dimension=dim, confidence=0.6, method="llm")]
 
