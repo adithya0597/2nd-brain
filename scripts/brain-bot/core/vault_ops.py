@@ -190,7 +190,7 @@ def format_capture_line(
 
     lines = []
     # Main capture line
-    lines.append(f"- **[Slack Capture]** {text} _(routed to {dim_links})_ #capture")
+    lines.append(f"- **[Capture]** {text} _(routed to {dim_links})_ #capture")
 
     # Action item checkbox if applicable
     if is_action:

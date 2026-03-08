@@ -555,7 +555,7 @@ async def job_resolve_pending_captures(context: CallbackContext):
         from config import BOUNCER_TIMEOUT_MINUTES
 
         rows = await query(
-            "SELECT id, message_text, message_ts, primary_dimension, channel_id, "
+            "SELECT id, message_text, message_ts, primary_dimension, chat_id, "
             "bouncer_dm_ts, bouncer_dm_channel "
             "FROM pending_captures WHERE status = 'pending' "
             "AND created_at < datetime('now', ?)",
@@ -582,7 +582,7 @@ async def job_resolve_pending_captures(context: CallbackContext):
                     row["message_text"],
                     row["message_ts"],
                     row["primary_dimension"] or "Systems & Environment",
-                    row["channel_id"],
+                    row["chat_id"],
                 )
             except Exception:
                 logger.exception("Failed to resolve pending capture id=%d", row["id"])

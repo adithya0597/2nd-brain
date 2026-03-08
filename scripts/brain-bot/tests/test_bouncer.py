@@ -371,7 +371,7 @@ class TestTimeoutAutoFiles:
                 "message_text": "ambiguous text",
                 "message_ts": "12345",
                 "primary_dimension": "Health & Vitality",
-                "channel_id": "-100123",
+                "chat_id": "-100123",
                 "bouncer_dm_ts": "dm_ts_1",
                 "bouncer_dm_channel": "DM_CH_1",
             }
@@ -430,7 +430,7 @@ class TestTimeoutAutoFiles:
                 "message_text": "another text",
                 "message_ts": "67890",
                 "primary_dimension": "Mind & Growth",
-                "channel_id": "-100123",
+                "chat_id": "-100123",
                 "bouncer_dm_ts": None,
                 "bouncer_dm_channel": None,
             }

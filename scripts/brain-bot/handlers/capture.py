@@ -136,7 +136,7 @@ async def _handle_low_confidence(
         ])
         await execute(
             "INSERT INTO pending_captures "
-            "(message_text, message_ts, channel_id, slack_user_id, all_scores_json, "
+            "(message_text, message_ts, chat_id, user_id, all_scores_json, "
             "primary_dimension, primary_confidence, method, status) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
             (text, str(msg_id), str(update.effective_chat.id),

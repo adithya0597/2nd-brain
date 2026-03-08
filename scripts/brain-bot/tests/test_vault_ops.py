@@ -320,7 +320,7 @@ class TestFormatCaptureLine:
 
     def test_basic_capture(self):
         line = vault_ops.format_capture_line("Test message", ["Health & Vitality"])
-        assert "**[Slack Capture]**" in line
+        assert "**[Capture]**" in line
         assert "Test message" in line
         assert "[[Health & Vitality]]" in line
         assert "#capture" in line
