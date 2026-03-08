@@ -67,6 +67,21 @@ def _get_model():
             return None
 
 
+def _truncate_vector(vector, dim: int = None):
+    """Truncate and L2-normalize a vector for Matryoshka embeddings.
+
+    nomic-embed-text-v1.5 outputs 768-dim but supports Matryoshka truncation
+    to any lower dimension (512, 256, 128, 64). Truncate then re-normalize.
+    """
+    import math
+    dim = dim or config.EMBEDDING_DIM
+    v = vector[:dim]
+    norm = math.sqrt(sum(x * x for x in v))
+    if norm > 0:
+        v = [x / norm for x in v]
+    return v
+
+
 def _serialize_f32(vector) -> bytes:
     """Pack a float vector into bytes for sqlite-vec storage."""
     return struct.pack(f"{len(vector)}f", *vector)
@@ -158,8 +173,8 @@ def embed_single_file(file_path: Path, vault_path: Path = None, db_path: Path = 
         # Truncate to ~512 tokens worth of text for embedding quality
         embed_text = body[:2000]
 
-        # Generate embedding
-        vector = model.encode([embed_text])[0]
+        # Generate embedding (truncate to config.EMBEDDING_DIM for Matryoshka)
+        vector = _truncate_vector(model.encode([embed_text])[0])
         vec_bytes = _serialize_f32(vector)
 
         # Delete old entry if exists
@@ -256,9 +271,10 @@ def embed_all_files(vault_path: Path = None, db_path: Path = None, force: bool =
             conn.commit()
             return 0
 
-        # Batch encode for efficiency
+        # Batch encode for efficiency (truncate to config.EMBEDDING_DIM for Matryoshka)
         texts = [f["body"] for f in files_to_embed]
-        vectors = model.encode(texts, show_progress_bar=False, batch_size=64)
+        raw_vectors = model.encode(texts, show_progress_bar=False, batch_size=64)
+        vectors = [_truncate_vector(v) for v in raw_vectors]
 
         if force:
             conn.execute("DELETE FROM vec_vault")
@@ -318,8 +334,9 @@ def seed_icor_embeddings(db_path: Path = None) -> int:
 
         count = 0
         for dimension, ref_texts in _DIMENSION_REFERENCES.items():
-            vectors = model.encode(ref_texts, show_progress_bar=False)
-            for text, vector in zip(ref_texts, vectors):
+            raw_vectors = model.encode(ref_texts, show_progress_bar=False)
+            for text, raw_vec in zip(ref_texts, raw_vectors):
+                vector = _truncate_vector(raw_vec)
                 vec_bytes = _serialize_f32(vector)
                 conn.execute(
                     "INSERT INTO vec_icor (embedding, dimension, reference_text) VALUES (?, ?, ?)",
@@ -361,7 +378,7 @@ def search_similar(query_text: str, limit: int = 10, db_path: Path = None,
         return []
 
     try:
-        query_vector = model.encode([query_text])[0]
+        query_vector = _truncate_vector(model.encode([query_text])[0])
         vec_bytes = _serialize_f32(query_vector)
 
         # Attempt filtered search when metadata_filters are provided

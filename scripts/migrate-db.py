@@ -816,14 +816,14 @@ def migrate(db_path: Path = DB_PATH):
     except Exception as e:
         print(f"Step 23 vec0 upgrade failed (non-critical): {e}")
 
-    # 24. Section-level chunking tables (vault_chunks + vec_vault_chunks)
+    # 24. Section-level chunking tables (vault_chunks + vec_chunks)
     cursor.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='vault_chunks'"
     )
     if cursor.fetchone():
         print("vault_chunks table already exists — skipping Step 24")
     else:
-        print("Step 24: Creating vault_chunks + vec_vault_chunks chunking schema...")
+        print("Step 24: Creating vault_chunks + vec_chunks chunking schema...")
 
         # 24a. vault_chunks — section-level chunks of vault files
         cursor.execute("""
@@ -859,7 +859,9 @@ def migrate(db_path: Path = DB_PATH):
         )
         print("  vault_chunks indexes: created")
 
-        # 24c. vec_vault_chunks — vector embeddings for chunks (sqlite-vec)
+        # 24c. vec_chunks — vector embeddings for chunks (sqlite-vec)
+        # NOTE: Cannot use "vec_chunks" because sqlite-vec reserves
+        # "{table}_chunks" as an internal backing table for vec_vault.
         try:
             import sqlite_vec  # noqa: F811
 
@@ -868,18 +870,18 @@ def migrate(db_path: Path = DB_PATH):
             conn.enable_load_extension(False)
 
             cursor.execute("""
-                CREATE VIRTUAL TABLE vec_vault_chunks USING vec0(
+                CREATE VIRTUAL TABLE vec_chunks USING vec0(
                     embedding float[512]
                 )
             """)
-            print("  vec_vault_chunks virtual table: created (512-dim)")
+            print("  vec_chunks virtual table: created (512-dim)")
         except ImportError:
-            print("  sqlite-vec not installed — skipping vec_vault_chunks (non-critical)")
+            print("  sqlite-vec not installed — skipping vec_chunks (non-critical)")
         except Exception as e:
-            print(f"  vec_vault_chunks creation failed (non-critical): {e}")
+            print(f"  vec_chunks creation failed (non-critical): {e}")
 
         conn.commit()
-        print("Step 24 complete: vault_chunks + vec_vault_chunks chunking schema ready")
+        print("Step 24 complete: vault_chunks + vec_chunks chunking schema ready")
 
     # 25. Metadata filtering indexes on vault_nodes
     cursor.execute(
@@ -914,7 +916,7 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - sync_outbox + captures_log tables: created/verified")
     print(f"  - engagement + signals + brain_level + alerts: created/verified")
     print(f"  - vec0 tables: upgraded to 512 dimensions (if sqlite-vec available)")
-    print(f"  - vault_chunks + vec_vault_chunks: section-level chunking created/verified")
+    print(f"  - vault_chunks + vec_chunks: section-level chunking created/verified")
     print(f"  - metadata filtering indexes: last_modified + type_nonempty created/verified")
 
 

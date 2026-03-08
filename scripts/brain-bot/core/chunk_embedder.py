@@ -1,7 +1,7 @@
 """Chunk-level embedding pipeline.
 
 Splits vault files into semantic chunks, embeds each chunk,
-and stores in vault_chunks + vec_vault_chunks tables.
+and stores in vault_chunks + vec_chunks tables.
 Uses content hashing to skip unchanged chunks.
 """
 import hashlib
@@ -27,7 +27,7 @@ def rechunk_and_embed_file(file_path: Path, vault_path: Path = None, db_path: Pa
     2. chunk_file() to split into chunks
     3. Compare chunk hashes with DB (skip unchanged)
     4. Batch-encode new/changed chunks
-    5. Upsert vault_chunks + vec_vault_chunks
+    5. Upsert vault_chunks + vec_chunks
 
     Returns: Number of chunks embedded (new or updated).
     """
@@ -75,13 +75,14 @@ def rechunk_and_embed_file(file_path: Path, vault_path: Path = None, db_path: Pa
         return 0
 
     # Embed changed chunks
-    from core.embedding_store import _get_model, _serialize_f32
+    from core.embedding_store import _get_model, _serialize_f32, _truncate_vector
     model = _get_model()
     if model is None:
         return 0
 
     texts = [c.content for c, _ in new_chunks]
-    vectors = model.encode(texts, batch_size=32)
+    raw_vectors = model.encode(texts, batch_size=32)
+    vectors = [_truncate_vector(v) for v in raw_vectors]
 
     # Upsert to DB
     from core.embedding_store import _get_vec_connection
@@ -117,7 +118,7 @@ def rechunk_and_embed_file(file_path: Path, vault_path: Path = None, db_path: Pa
 
         # Delete old vectors and insert new ones
         for chunk_id in chunk_ids:
-            vec_conn.execute("DELETE FROM vec_vault_chunks WHERE rowid = ?", (chunk_id,))
+            vec_conn.execute("DELETE FROM vec_chunks WHERE rowid = ?", (chunk_id,))
 
         for (chunk, h), vector in zip(new_chunks, vectors):
             # Find the chunk_id for this chunk_index
@@ -130,7 +131,7 @@ def rechunk_and_embed_file(file_path: Path, vault_path: Path = None, db_path: Pa
                     chunk_id = row[0]
                     vec_bytes = _serialize_f32(vector)
                     vec_conn.execute(
-                        "INSERT INTO vec_vault_chunks (rowid, embedding) VALUES (?, ?)",
+                        "INSERT INTO vec_chunks (rowid, embedding) VALUES (?, ?)",
                         (chunk_id, vec_bytes)
                     )
 
@@ -178,7 +179,8 @@ def search_chunks(query_text: str, limit: int = 10, db_path: Path = None) -> lis
 
     db_path = db_path or config.DB_PATH
 
-    query_vector = model.encode([query_text])[0]
+    from core.embedding_store import _truncate_vector
+    query_vector = _truncate_vector(model.encode([query_text])[0])
     vec_bytes = _serialize_f32(query_vector)
 
     conn = _get_vec_connection(db_path)
@@ -187,7 +189,7 @@ def search_chunks(query_text: str, limit: int = 10, db_path: Path = None) -> lis
 
     try:
         rows = conn.execute(
-            "SELECT rowid, distance FROM vec_vault_chunks "
+            "SELECT rowid, distance FROM vec_chunks "
             "WHERE embedding MATCH ? AND k = ? ORDER BY distance",
             (vec_bytes, limit)
         ).fetchall()

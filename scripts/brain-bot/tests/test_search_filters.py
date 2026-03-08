@@ -352,8 +352,8 @@ class TestBuildFilteredVecQuery:
 
     def test_custom_vec_table(self):
         f = MetadataFilters()
-        sql, _ = build_filtered_vec_query("vec_vault_chunks", f)
-        assert "vec_vault_chunks" in sql
+        sql, _ = build_filtered_vec_query("vec_chunks", f)
+        assert "vec_chunks" in sql
 
     def test_inner_join_on_filtered_docs(self):
         f = MetadataFilters()

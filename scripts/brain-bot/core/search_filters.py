@@ -129,7 +129,7 @@ def build_filtered_vec_query(
     """Build complete filtered vector search query.
 
     Args:
-        vec_table: "vec_vault" or "vec_vault_chunks"
+        vec_table: "vec_vault" or "vec_chunks"
         filters: MetadataFilters to apply
         k: Number of KNN results
 

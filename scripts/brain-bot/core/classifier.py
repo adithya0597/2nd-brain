@@ -138,15 +138,15 @@ def _load_embedding_model():
         return
 
     try:
-        from core.embedding_store import _get_model
+        from core.embedding_store import _get_model, _truncate_vector
         model = _get_model()
         if model is None:
             return
 
-        # Pre-encode dimension reference texts
+        # Pre-encode dimension reference texts (truncate for Matryoshka)
         for dim, texts in _DIMENSION_REFERENCES.items():
-            embeddings = model.encode(texts)
-            _dimension_embeddings[dim] = embeddings
+            raw = model.encode(texts)
+            _dimension_embeddings[dim] = [_truncate_vector(v) for v in raw]
 
         logger.info("Dimension embeddings loaded, %d dimensions encoded", len(_dimension_embeddings))
     except ImportError:
@@ -155,8 +155,10 @@ def _load_embedding_model():
             from sentence_transformers import SentenceTransformer
             model_name = getattr(config, "EMBEDDING_MODEL", "all-MiniLM-L6-v2")
             model = SentenceTransformer(model_name, trust_remote_code=True)
+            from core.embedding_store import _truncate_vector
             for dim, texts in _DIMENSION_REFERENCES.items():
-                _dimension_embeddings[dim] = model.encode(texts)
+                raw = model.encode(texts)
+                _dimension_embeddings[dim] = [_truncate_vector(v) for v in raw]
             logger.info("Fallback embedding model loaded: %s", model_name)
         except ImportError:
             logger.warning("sentence-transformers not installed — embedding tier disabled")
@@ -298,13 +300,15 @@ class MessageClassifier:
 
         try:
             import numpy as np
-            text_embedding = model.encode([text])[0]
+            from core.embedding_store import _truncate_vector
+            text_embedding = _truncate_vector(model.encode([text])[0])
 
             scores = []
             for dim, texts in _DIMENSION_REFERENCES.items():
                 # Encode reference texts (cached after first call via _dimension_embeddings)
                 if dim not in _dimension_embeddings:
-                    _dimension_embeddings[dim] = model.encode(texts)
+                    raw = model.encode(texts)
+                    _dimension_embeddings[dim] = [_truncate_vector(v) for v in raw]
 
                 ref_embeddings = _dimension_embeddings[dim]
                 sims = [_cosine_similarity(text_embedding, ref) for ref in ref_embeddings]
@@ -343,11 +347,11 @@ class MessageClassifier:
 
         try:
             import numpy as np
-            from core.embedding_store import _get_model
+            from core.embedding_store import _get_model, _truncate_vector
             model = _get_model()
             if model is None:
                 return []
-            text_embedding = model.encode([text])[0]
+            text_embedding = _truncate_vector(model.encode([text])[0])
 
             scores = []
             for dim, ref_embeddings in _dimension_embeddings.items():
