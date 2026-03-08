@@ -25,3 +25,4 @@ scripts/slack-bot/logs/
 
 # OS files
 .DS_Store
+.worktrees/

@@ -1,0 +1,34 @@
+2026-03-06 14:49:57,337 [INFO] brain-bot: All handlers registered
+2026-03-06 14:49:57,535 [INFO] brain-bot: Resolved 15 channel IDs at startup
+2026-03-06 14:49:57,538 [INFO] config: Dynamic keywords loaded: {'Health & Vitality': 19, 'Wealth & Finance': 18, 'Relationships': 15, 'Mind & Growth': 16, 'Purpose & Impact': 14, 'Systems & Environment': 17}
+2026-03-06 14:49:57,538 [INFO] brain-bot: Classifier loaded with dynamic keywords
+2026-03-06 14:49:57,737 [INFO] handlers.scheduled: Registered 11 scheduled jobs, channel_ids resolved: 18
+2026-03-06 14:49:57,737 [INFO] brain-bot: Scheduled jobs registered
+2026-03-06 14:49:57,737 [INFO] brain-bot: Scheduler thread started
+2026-03-06 14:49:57,819 [INFO] core.vault_indexer: Indexed 22 vault files to /Users/adithya/Documents/2nd-brain/data/brain.db
+2026-03-06 14:49:57,826 [INFO] core.journal_indexer: Indexed 5 journal entries to /Users/adithya/Documents/2nd-brain/data/brain.db
+2026-03-06 14:49:57,826 [INFO] brain-bot: Startup index: 22 vault files, 5 journal entries
+2026-03-06 14:49:58,024 [INFO] brain-bot: Resolved 15 channel IDs at startup
+2026-03-06 14:49:58,031 [INFO] brain-bot: Health check [database]: OK (29 ICOR nodes)
+2026-03-06 14:49:58,031 [INFO] brain-bot: Health check [vault]: OK
+2026-03-06 14:49:58,031 [INFO] brain-bot: Health check [anthropic_api]: OK
+2026-03-06 14:49:58,031 [INFO] brain-bot: Health check [channels]: OK (15 resolved)
+2026-03-06 14:49:58,633 [INFO] brain-bot: Starting Second Brain bot in Socket Mode...
+2026-03-06 14:49:59,585 [INFO] slack_bolt.App: A new session has been established (session id: 3ba507ef-f8ef-4cdc-9e1f-b5093428f54a)
+2026-03-06 14:49:59,585 [INFO] slack_bolt.App: ⚡️ Bolt app is running!
+2026-03-06 14:49:59,668 [INFO] slack_bolt.App: Starting to receive messages from a new connection (session id: 3ba507ef-f8ef-4cdc-9e1f-b5093428f54a)
+2026-03-06 14:49:59,794 [INFO] slack_bolt.App: Connecting to a new endpoint...
+2026-03-06 14:50:02,802 [INFO] slack_bolt.App: The connection has been closed (session id: 3ba507ef-f8ef-4cdc-9e1f-b5093428f54a)
+2026-03-06 14:50:02,803 [INFO] slack_bolt.App: A new session has been established (session id: 073d908b-c0d3-4849-9156-4a8071be0341)
+2026-03-06 14:50:02,803 [INFO] slack_bolt.App: Connected to a new endpoint...
+2026-03-06 14:50:02,809 [INFO] slack_bolt.App: Stopped receiving messages from a connection (session id: 3ba507ef-f8ef-4cdc-9e1f-b5093428f54a)
+2026-03-06 14:50:02,914 [INFO] slack_bolt.App: Starting to receive messages from a new connection (session id: 073d908b-c0d3-4849-9156-4a8071be0341)
+2026-03-06 14:52:04,173 [ERROR] handlers.commands: Error running status command
+Traceback (most recent call last):
+  File "/Users/adithya/Documents/2nd-brain/scripts/slack-bot/handlers/commands.py", line 350, in _run_status_command
+    neglected_text = "\n".join(
+                     ^^^^^^^^^^
+  File "/Users/adithya/Documents/2nd-brain/scripts/slack-bot/handlers/commands.py", line 352, in <genexpr>
+    f"{int(n.get('days_since', 0))} days silent"
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
