@@ -74,49 +74,52 @@ _ACTION_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-# Reference texts per dimension for embedding similarity
+# Reference texts per dimension for embedding similarity.
+# Each dimension has 5 descriptive reference texts (20-30 words each)
+# designed for maximum discrimination between dimensions.
+# Embedding model is configurable via config.EMBEDDING_MODEL (shared with embedding_store).
 _DIMENSION_REFERENCES: dict[str, list[str]] = {
     "Health & Vitality": [
-        "exercise workout gym fitness running yoga meditation",
-        "diet nutrition calories healthy eating meal prep",
-        "sleep recovery rest energy mental health wellbeing",
-        "doctor appointment medical checkup physical therapy",
-        "gonna hit the gym lifting weights cardio stretching",
+        "Going to the gym for a full body workout with deadlifts squats and bench press followed by stretching and foam rolling",
+        "Tracking my daily calorie intake and meal prepping chicken rice and vegetables for the whole week to stay on my nutrition plan",
+        "Struggling with insomnia lately need to improve my sleep hygiene by cutting screen time and maintaining a consistent bedtime routine",
+        "Booked a doctor appointment for my annual physical checkup including blood work and dental cleaning this month",
+        "Morning meditation and yoga session for twenty minutes focusing on breathwork and mindfulness to reduce stress and anxiety",
     ],
     "Wealth & Finance": [
-        "money finance investing portfolio stocks crypto",
-        "budget savings income expense debt payments",
-        "salary raise promotion side hustle freelance",
-        "real estate property mortgage rent housing",
-        "tax return credit card bank account net worth",
+        "Reviewing my investment portfolio rebalancing between index funds bonds and crypto allocations to optimize for long term growth",
+        "Setting up a monthly budget tracking income expenses savings rate and working toward eliminating credit card debt completely",
+        "Exploring side hustle opportunities like freelancing consulting or building a SaaS product to create additional income streams",
+        "Researching real estate investment properties analyzing cap rates rental yields and mortgage rates in target neighborhoods",
+        "Tax planning season organizing receipts maximizing deductions and contributing to retirement accounts before the deadline",
     ],
     "Relationships": [
-        "friend family relationship partner dating love",
-        "social network community mentor colleague",
-        "hang out catch up get together dinner plans",
-        "birthday anniversary celebration gathering",
-        "communication trust boundaries support emotional",
+        "Planning a dinner date with my partner this weekend trying that new Italian restaurant downtown for our anniversary celebration",
+        "Need to catch up with old college friends organizing a group hangout or video call to maintain those important friendships",
+        "Family gathering this holiday coordinating travel plans gifts and making sure to spend quality time with parents and siblings",
+        "Working on communication skills with my partner setting healthy boundaries and practicing active listening in conversations",
+        "Meeting a new mentor for coffee this week to discuss career growth and build my professional network connections",
     ],
     "Mind & Growth": [
-        "learn read book course study knowledge research",
-        "skill development education training certification",
-        "mindset philosophy psychology self improvement",
-        "personal growth mindfulness awareness reflection",
-        "podcast lecture tutorial online course writing",
+        "Reading a new book on cognitive psychology taking detailed notes and connecting ideas to my existing mental models knowledge base",
+        "Enrolled in an online course on machine learning spending two hours daily on lectures practice problems and project work",
+        "Deep personal reflection journaling about my values beliefs and life philosophy questioning assumptions and seeking deeper understanding",
+        "Listening to podcasts about stoicism productivity and self improvement applying key takeaways to daily habits and routines",
+        "Writing a detailed article synthesizing research from multiple sources developing critical thinking and improving communication skills",
     ],
     "Purpose & Impact": [
-        "career mission purpose impact contribute legacy",
-        "volunteer leadership giving back service community",
-        "meaning values passion calling vocation",
-        "side project open source creative work portfolio",
-        "mentoring teaching coaching inspiring influence",
+        "Working on my career mission statement clarifying what legacy I want to leave and how my work contributes to society",
+        "Volunteering at the local community center teaching coding workshops to underprivileged youth making a positive social impact",
+        "Building my portfolio project that solves a real problem for people combining technical skills with meaningful purpose and mission",
+        "Mentoring junior developers at work sharing knowledge and experience to help them grow while strengthening my own leadership skills",
+        "Brainstorming creative side projects that align with my passions and values exploring ways to turn purpose into sustainable work",
     ],
     "Systems & Environment": [
-        "system automate tool setup organize workflow",
-        "home workspace clean declutter environment",
-        "routine habit process productivity time management",
-        "technology software hardware infrastructure",
-        "maintenance repair upgrade optimize efficiency",
+        "Setting up automated workflows with scripts and tools to streamline repetitive tasks and improve daily productivity systems",
+        "Decluttering and reorganizing my home workspace optimizing desk layout lighting and ergonomics for better focus and comfort",
+        "Building a morning routine habit stack with specific triggers and rewards tracking consistency in my habit tracker app",
+        "Upgrading my tech setup installing new software configuring development environment and maintaining hardware infrastructure",
+        "Optimizing my time management system reviewing weekly planning process adjusting priorities and eliminating efficiency bottlenecks",
     ],
 }
 
@@ -150,10 +153,11 @@ def _load_embedding_model():
         logger.warning("embedding_store not available — falling back to direct model load")
         try:
             from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer("all-MiniLM-L6-v2")
+            model_name = getattr(config, "EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+            model = SentenceTransformer(model_name, trust_remote_code=True)
             for dim, texts in _DIMENSION_REFERENCES.items():
                 _dimension_embeddings[dim] = model.encode(texts)
-            logger.info("Fallback embedding model loaded")
+            logger.info("Fallback embedding model loaded: %s", model_name)
         except ImportError:
             logger.warning("sentence-transformers not installed — embedding tier disabled")
     except Exception:
@@ -311,7 +315,7 @@ class MessageClassifier:
 
             result = []
             for i, (dim, sim) in enumerate(scores):
-                if sim < 0.35:
+                if sim < 0.32:
                     break
                 result.append(DimensionScore(
                     dimension=dim,
@@ -356,7 +360,7 @@ class MessageClassifier:
 
             result = []
             for dim, sim in scores:
-                if sim < 0.3:
+                if sim < 0.28:
                     break
                 result.append(DimensionScore(
                     dimension=dim,

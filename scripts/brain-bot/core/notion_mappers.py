@@ -315,16 +315,14 @@ def journal_to_notion_note(entry: dict, registry: dict) -> dict:
     if not date_str:
         props.pop("Note Date", None)
 
-    # Build description with metadata
-    desc_parts = []
-    if summary:
-        desc_parts.append(summary)
+    # Append metadata to title (Notes DB has no Description property)
+    meta_parts = []
     if mood:
-        desc_parts.append(f"Mood: {mood}")
+        meta_parts.append(mood)
     if energy:
-        desc_parts.append(f"Energy: {energy}")
-    if desc_parts:
-        props["Description"] = build_rich_text_property(" | ".join(desc_parts))
+        meta_parts.append(energy)
+    if meta_parts:
+        props["Name"] = build_title_property(f"{title} ({' / '.join(meta_parts)})")
 
     # Link to ICOR tags via relation
     if icor_elements_str:
@@ -372,15 +370,14 @@ def concept_to_notion_note(concept: dict, registry: dict) -> dict:
         "Type": build_select_property(note_type),
     }
 
-    # Add description with concept metadata
-    desc_parts = [f"Status: {status}"]
+    # Append metadata to title (Notes DB has no Description property)
     mention_count = concept.get("mention_count", 0)
-    if mention_count:
-        desc_parts.append(f"Mentions: {mention_count}")
     last_mentioned = concept.get("last_mentioned", "")
-    if last_mentioned:
-        desc_parts.append(f"Last mentioned: {last_mentioned}")
-    props["Description"] = build_rich_text_property(" | ".join(desc_parts))
+    meta_parts = [status]
+    if mention_count:
+        meta_parts.append(f"{mention_count} mentions")
+    if meta_parts:
+        props["Name"] = build_title_property(f"{name} ({', '.join(meta_parts)})")
 
     # Set note date to last_mentioned
     if last_mentioned:

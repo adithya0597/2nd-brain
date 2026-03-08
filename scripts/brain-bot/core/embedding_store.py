@@ -1,8 +1,8 @@
 """Persistent vector embedding store using sqlite-vec.
 
-Provides embed/search operations backed by bge-small-en-v1.5 (384-dim)
-and sqlite-vec virtual tables. Gracefully degrades if sqlite-vec is
-not installed.
+Provides embed/search operations backed by config.EMBEDDING_MODEL
+(config.EMBEDDING_DIM dimensions) and sqlite-vec virtual tables.
+Gracefully degrades if sqlite-vec is not installed.
 """
 import hashlib
 import logging
@@ -40,7 +40,7 @@ def _get_model():
     """Thread-safe lazy singleton for the embedding model.
 
     Returns the SentenceTransformer model or None if unavailable.
-    Uses BAAI/bge-small-en-v1.5 (384 dimensions).
+    Uses config.EMBEDDING_MODEL (config.EMBEDDING_DIM dimensions).
     """
     global _embedding_model
     if _embedding_model is not None:
@@ -54,7 +54,7 @@ def _get_model():
         try:
             from sentence_transformers import SentenceTransformer
             logger.info("Loading embedding model %s...", config.EMBEDDING_MODEL)
-            _embedding_model = SentenceTransformer(config.EMBEDDING_MODEL)
+            _embedding_model = SentenceTransformer(config.EMBEDDING_MODEL, trust_remote_code=True)
             logger.info("Embedding model loaded (dim=%d)", config.EMBEDDING_DIM)
             return _embedding_model
         except ImportError:
@@ -72,7 +72,7 @@ def _serialize_f32(vector) -> bytes:
     return struct.pack(f"{len(vector)}f", *vector)
 
 
-def _deserialize_f32(data: bytes, dim: int = None) -> list[float]:
+def _deserialize_f32(data: bytes, dim: int = 0) -> list[float]:
     """Unpack bytes back into a float vector."""
     dim = dim or (len(data) // 4)
     return list(struct.unpack(f"{dim}f", data))
@@ -337,11 +337,19 @@ def seed_icor_embeddings(db_path: Path = None) -> int:
         conn.close()
 
 
-def search_similar(query_text: str, limit: int = 10, db_path: Path = None) -> list[dict]:
+def search_similar(query_text: str, limit: int = 10, db_path: Path = None,
+                   metadata_filters=None) -> list[dict]:
     """Search for vault files similar to query text using vector similarity.
 
-    Returns list of dicts: [{file_path, title, distance, rowid}]
-    sorted by distance (closest first). Returns [] if unavailable.
+    Args:
+        query_text: Text to search for.
+        limit: Max results to return.
+        db_path: Database path.
+        metadata_filters: Optional MetadataFilters for pre-filtering.
+
+    Returns:
+        List of dicts ``[{file_path, title, distance, rowid}]``
+        sorted by distance (closest first). Returns ``[]`` if unavailable.
     """
     model = _get_model()
     if model is None:
@@ -356,6 +364,36 @@ def search_similar(query_text: str, limit: int = 10, db_path: Path = None) -> li
         query_vector = model.encode([query_text])[0]
         vec_bytes = _serialize_f32(query_vector)
 
+        # Attempt filtered search when metadata_filters are provided
+        if metadata_filters is not None:
+            try:
+                from core.search_filters import is_selective, build_filter_cte
+                if is_selective(metadata_filters):
+                    cte_sql, cte_params = build_filter_cte(metadata_filters)
+                    sql = f"""{cte_sql}
+                        SELECT vec_vault.rowid, vec_vault.distance,
+                               vec_vault.file_path, vec_vault.title
+                        FROM vec_vault
+                        INNER JOIN filtered_docs
+                            ON vec_vault.file_path = filtered_docs.file_path
+                        WHERE vec_vault.embedding MATCH ? AND k = ?
+                        ORDER BY vec_vault.distance"""
+                    rows = conn.execute(
+                        sql, (*cte_params, vec_bytes, limit)
+                    ).fetchall()
+                    return [
+                        {
+                            "file_path": r["file_path"],
+                            "title": r["title"],
+                            "distance": r["distance"],
+                            "rowid": r["rowid"],
+                        }
+                        for r in rows
+                    ]
+            except ImportError:
+                pass  # Fall through to unfiltered search
+
+        # Unfiltered search (default / fallback)
         rows = conn.execute(
             "SELECT rowid, distance, file_path, title "
             "FROM vec_vault WHERE embedding MATCH ? AND k = ? "
@@ -387,8 +425,9 @@ def get_file_embedding(file_path: str, db_path: Path = None) -> bytes | None:
         db_path: Optional override for the database path.
 
     Returns:
-        The serialized ``float[384]`` bytes, or ``None`` if not found or
-        if sqlite-vec is unavailable.
+        The serialized float vector bytes (dimension determined by
+        config.EMBEDDING_DIM), or ``None`` if not found or if sqlite-vec
+        is unavailable.
     """
     conn = _get_vec_connection(db_path)
     if conn is None:
@@ -411,9 +450,9 @@ def get_icor_embeddings(db_path: Path = None) -> dict[str, list[bytes]]:
 
     Returns:
         ``{dimension_name: [embedding_bytes, ...]}`` where each
-        ``embedding_bytes`` is a serialized ``float[384]`` vector.
-        Returns ``{}`` if sqlite-vec is unavailable or no ICOR
-        embeddings have been seeded.
+        ``embedding_bytes`` is a serialized float vector (dimension
+        determined by config.EMBEDDING_DIM). Returns ``{}`` if
+        sqlite-vec is unavailable or no ICOR embeddings have been seeded.
     """
     conn = _get_vec_connection(db_path)
     if conn is None:

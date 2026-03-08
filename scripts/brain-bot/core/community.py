@@ -31,6 +31,12 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 
+# Edge types that carry meaningful document-to-document relationships.
+# icor_affinity is excluded because it connects docs to ICOR dimensions,
+# not to other documents, which inflates community detection.
+_COMMUNITY_EDGE_TYPES = ["wikilink", "tag_shared", "semantic_similarity"]
+
+
 def detect_communities(
     min_weight: float = 0.1,
     edge_types: list[str] | None = None,
@@ -38,12 +44,17 @@ def detect_communities(
 ) -> dict[int, int]:
     """Run Louvain community detection on the vault graph.
 
-    Loads nodes and edges from ``vault_nodes`` / ``vault_edges``, builds a
-    networkx weighted undirected graph, and runs the Louvain algorithm.
+    Loads document nodes and edges from ``vault_nodes`` / ``vault_edges``,
+    builds a networkx weighted undirected graph, and runs the Louvain algorithm.
+
+    By default, only uses document-to-document edge types (wikilink, tag_shared,
+    semantic_similarity). icor_affinity edges are excluded because they connect
+    documents to ICOR dimension nodes, which inflates community detection.
 
     Args:
         min_weight: Ignore edges with weight below this value.
         edge_types: If provided, only include edges of these types.
+            Defaults to ``_COMMUNITY_EDGE_TYPES``.
         db_path: Optional override for the database path.
 
     Returns:
@@ -53,9 +64,15 @@ def detect_communities(
     if not _NX_AVAILABLE:
         return {}
 
+    # Default to document-to-document edge types only
+    if edge_types is None:
+        edge_types = _COMMUNITY_EDGE_TYPES
+
     with get_connection(db_path, row_factory=sqlite3.Row) as conn:
         # Load all node IDs
-        node_rows = conn.execute("SELECT id FROM vault_nodes").fetchall()
+        node_rows = conn.execute(
+            "SELECT id FROM vault_nodes WHERE node_type = 'document'"
+        ).fetchall()
         if not node_rows:
             return {}
 
@@ -119,6 +136,76 @@ def detect_communities(
     return mapping
 
 
+def _assign_isolates_by_icor(
+    mapping: dict[int, int],
+    db_path: Path | None = None,
+) -> dict[int, int]:
+    """Assign isolate document nodes to communities via their ICOR affinity.
+
+    Nodes not in the mapping (isolates with no doc-to-doc edges) are assigned
+    to the community that has the most members sharing the same top ICOR dimension.
+
+    Args:
+        mapping: Existing {node_id: community_id} from Louvain.
+        db_path: Optional override for the database path.
+
+    Returns:
+        Updated mapping with isolates assigned.
+    """
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        # Get all document nodes
+        all_docs = conn.execute(
+            "SELECT id FROM vault_nodes WHERE node_type = 'document'"
+        ).fetchall()
+        all_doc_ids = {row["id"] for row in all_docs}
+
+        # Find isolates (not yet assigned)
+        isolates = all_doc_ids - set(mapping.keys())
+        if not isolates:
+            return mapping
+
+        # For each isolate, find its top ICOR dimension via icor_affinity edges
+        for iso_id in isolates:
+            row = conn.execute(
+                "SELECT e.target_node_id, e.weight, n.title "
+                "FROM vault_edges e "
+                "JOIN vault_nodes n ON e.target_node_id = n.id "
+                "WHERE e.source_node_id = ? AND e.edge_type = 'icor_affinity' "
+                "ORDER BY e.weight DESC LIMIT 1",
+                (iso_id,),
+            ).fetchone()
+
+            if not row:
+                continue
+
+            # Find which community has the most members with the same top ICOR dimension
+            dim_node_id = row["target_node_id"]
+            community_counts: dict[int, int] = {}
+            for nid, cid in mapping.items():
+                # Check if this node also has the same top ICOR dimension
+                has_same = conn.execute(
+                    "SELECT 1 FROM vault_edges "
+                    "WHERE source_node_id = ? AND target_node_id = ? "
+                    "AND edge_type = 'icor_affinity' LIMIT 1",
+                    (nid, dim_node_id),
+                ).fetchone()
+                if has_same:
+                    community_counts[cid] = community_counts.get(cid, 0) + 1
+
+            if community_counts:
+                best_community = max(community_counts, key=community_counts.get)
+                mapping[iso_id] = best_community
+
+    assigned = len(all_doc_ids - set(mapping.keys()))
+    if isolates:
+        logger.info(
+            "ICOR fallback: assigned %d of %d isolates to communities",
+            len(isolates) - assigned, len(isolates),
+        )
+
+    return mapping
+
+
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
@@ -136,6 +223,8 @@ def update_community_ids(db_path: Path | None = None) -> int:
     mapping = detect_communities(db_path=db_path)
     if not mapping:
         return 0
+    # Assign isolates using ICOR affinity as fallback
+    mapping = _assign_isolates_by_icor(mapping, db_path=db_path)
 
     with get_connection(db_path) as conn:
         # Reset all community IDs first

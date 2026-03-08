@@ -239,7 +239,19 @@ def _gather_hybrid_context(command_name: str, user_input: str, db_path: Path = N
 
     try:
         from core.search import hybrid_search
-        response = hybrid_search(user_input, limit=search_config["limit"], db_path=db_path)
+
+        try:
+            from core.search_filters import filters_for_command
+            metadata_filters = filters_for_command(command_name)
+        except ImportError:
+            metadata_filters = None
+
+        response = hybrid_search(
+            user_input,
+            limit=search_config["limit"],
+            db_path=db_path,
+            metadata_filters=metadata_filters,
+        )
 
         result = {}
         for sr in response.results[:15]:

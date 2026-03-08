@@ -18,9 +18,9 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 CLASSIFIER_LLM_MODEL = os.environ.get("CLASSIFIER_LLM_MODEL", "claude-haiku-4-5-20251001")
 
-# Embedding model
-EMBEDDING_MODEL = os.environ.get("BRAIN_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-EMBEDDING_DIM = 384
+# Embedding model — nomic-embed-text-v1.5 supports Matryoshka dimensions (64, 128, 256, 512, 768)
+EMBEDDING_MODEL = os.environ.get("BRAIN_EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
+EMBEDDING_DIM = 512
 
 # Notion
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")

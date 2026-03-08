@@ -121,7 +121,17 @@ async def post_init(application: Application) -> None:
     except Exception:
         logger.info("Dynamic keywords unavailable — using seed keywords")
 
-    # 4. Run vault + journal indexers
+    # 4a. Evict stale/excluded nodes before reindexing
+    try:
+        from core.vault_indexer import evict_deleted_nodes, evict_excluded_nodes, index_missing_files
+        evicted_del = evict_deleted_nodes()
+        evicted_excl = evict_excluded_nodes()
+        if evicted_del or evicted_excl:
+            logger.info("Evicted %d deleted + %d excluded nodes", evicted_del, evicted_excl)
+    except Exception:
+        logger.warning("Node eviction failed (non-critical)")
+
+    # 4b. Run vault + journal indexers
     try:
         from core.vault_indexer import run_full_index as index_vault
         from core.journal_indexer import run_full_index as index_journal
@@ -130,6 +140,14 @@ async def post_init(application: Application) -> None:
         logger.info("Startup index: %d vault files, %d journal entries", vault_count, journal_count)
     except Exception:
         logger.warning("Startup vault/journal indexing failed")
+
+    # 4c. Index files that exist on disk but aren't in the graph
+    try:
+        missing_count = index_missing_files()
+        if missing_count:
+            logger.info("Indexed %d previously missing files", missing_count)
+    except Exception:
+        logger.warning("Missing file indexing failed (non-critical)")
 
     # 5. Populate FTS5 index
     try:
@@ -149,17 +167,32 @@ async def post_init(application: Application) -> None:
     except Exception as e:
         logger.warning("Vector embedding failed (non-critical): %s", e)
 
-    # 7. Graph schema + ICOR affinity + community detection
+    # 6b. Populate chunk embeddings
     try:
-        from core.graph_ops import ensure_icor_nodes
+        from core.chunk_embedder import embed_all_chunks
+        chunk_count = embed_all_chunks()
+        logger.info("Chunk embedding: %d chunks", chunk_count)
+    except Exception:
+        logger.warning("Chunk embedding failed during boot", exc_info=True)
+
+    # 7. Graph schema + ICOR affinity + tag_shared + semantic + community detection
+    try:
+        from core.graph_ops import (
+            ensure_icor_nodes,
+            rebuild_tag_shared_edges,
+            rebuild_semantic_similarity_edges,
+        )
         from core.icor_affinity import rebuild_all_icor_edges
         from core.community import update_community_ids
         ensure_icor_nodes()
         affinity_count = rebuild_all_icor_edges()
+        tag_shared_count = rebuild_tag_shared_edges()
+        semantic_count = rebuild_semantic_similarity_edges()
         community_count = update_community_ids()
         logger.info(
-            "Graph: ICOR nodes ensured, %d affinity edges, %d communities assigned",
-            affinity_count, community_count,
+            "Graph: ICOR nodes ensured, %d affinity edges, %d tag_shared, "
+            "%d semantic, %d communities assigned",
+            affinity_count, tag_shared_count, semantic_count, community_count,
         )
     except Exception as e:
         logger.warning("Graph/community setup failed (non-critical): %s", e)

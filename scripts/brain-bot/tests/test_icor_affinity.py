@@ -80,7 +80,7 @@ def _conn(db_path):
     return c
 
 
-def _make_embedding(*values, dim=384):
+def _make_embedding(*values, dim=512):
     """Create embedding bytes. Specified values fill from index 0, rest padded with 0."""
     padded = list(values) + [0.0] * (dim - len(values))
     return struct.pack(f"{dim}f", *padded[:dim])
@@ -159,7 +159,10 @@ class TestComputeFileIcorAffinity:
             assert isinstance(score, float)
 
     def test_affinity_threshold_filtering(self, test_db):
-        """Scores below ICOR_AFFINITY_THRESHOLD (0.3) should be excluded."""
+        """Scores below ICOR_AFFINITY_THRESHOLD (0.52) should be excluded.
+
+        Also tests Top-K limiting (ICOR_AFFINITY_TOP_K = 2).
+        """
         _setup_icor_nodes(test_db)
         _setup_doc_node(test_db)
 
@@ -167,9 +170,9 @@ class TestComputeFileIcorAffinity:
         icor_embs = {
             "Health & Vitality": [_make_embedding(0.9, 0.436)],     # cos ≈ 0.9 ✓
             "Wealth & Finance": [_make_embedding(0.2, 0.980)],      # cos ≈ 0.2 ✗
-            "Relationships": [_make_embedding(0.35, 0.937)],        # cos ≈ 0.35 ✓
+            "Relationships": [_make_embedding(0.6, 0.8)],           # cos ≈ 0.6 ✓
             "Mind & Growth": [_make_embedding(0.1, 0.995)],         # cos ≈ 0.1 ✗
-            "Purpose & Impact": [_make_embedding(0.5, 0.866)],      # cos ≈ 0.5 ✓
+            "Purpose & Impact": [_make_embedding(0.7, 0.714)],      # cos ≈ 0.7 ✓
             "Systems & Environment": [_make_embedding(0.05, 0.999)], # cos ≈ 0.05 ✗
         }
 
@@ -184,11 +187,10 @@ class TestComputeFileIcorAffinity:
         )
 
         dims_returned = {s[0] for s in scores}
-        # Above threshold (0.3)
-        assert "Health & Vitality" in dims_returned
-        assert "Relationships" in dims_returned
-        assert "Purpose & Impact" in dims_returned
-        # Below threshold
+        # Top-K=2: only the two highest above threshold (0.52) are kept
+        assert len(scores) <= 2
+        assert "Health & Vitality" in dims_returned  # cos ≈ 0.9 (highest)
+        # Below threshold (0.52)
         assert "Wealth & Finance" not in dims_returned
         assert "Mind & Growth" not in dims_returned
         assert "Systems & Environment" not in dims_returned
@@ -216,7 +218,11 @@ class TestUpdateIcorEdges:
     """Test creating and updating ICOR affinity edges in vault_edges."""
 
     def test_update_icor_edges_for_file(self, test_db):
-        """Verify edges created in vault_edges with type='icor_affinity'."""
+        """Verify edges created in vault_edges with type='icor_affinity'.
+
+        With threshold=0.52 and Top-K=2, only the top 2 dimensions above
+        the threshold should get edges.
+        """
         _setup_icor_nodes(test_db)
         doc_id = _setup_doc_node(test_db)
 
@@ -224,9 +230,9 @@ class TestUpdateIcorEdges:
         icor_embs = {
             "Health & Vitality": [_make_embedding(0.9, 0.436)],     # cos ≈ 0.9 ✓
             "Wealth & Finance": [_make_embedding(0.2, 0.980)],      # cos ≈ 0.2 ✗
-            "Relationships": [_make_embedding(0.35, 0.937)],        # cos ≈ 0.35 ✓
+            "Relationships": [_make_embedding(0.7, 0.714)],         # cos ≈ 0.7 ✓
             "Mind & Growth": [_make_embedding(0.1, 0.995)],         # cos ≈ 0.1 ✗
-            "Purpose & Impact": [_make_embedding(0.5, 0.866)],      # cos ≈ 0.5 ✓
+            "Purpose & Impact": [_make_embedding(0.6, 0.8)],        # cos ≈ 0.6 ✓
             "Systems & Environment": [_make_embedding(0.05, 0.999)], # cos ≈ 0.05 ✗
         }
 
@@ -247,9 +253,9 @@ class TestUpdateIcorEdges:
         ).fetchall()
         conn.close()
 
-        # 3 dimensions above threshold: Health, Relationships, Purpose
-        assert count == 3
-        assert len(edges) == 3
+        # Top-K=2: Health (0.9) + Relationships (0.7) above threshold (0.52)
+        assert count == 2
+        assert len(edges) == 2
 
     def test_update_icor_edges_replaces_old(self, test_db):
         """Old affinity edges should be deleted before inserting new ones."""
@@ -258,12 +264,12 @@ class TestUpdateIcorEdges:
 
         from core import icor_affinity
 
-        # First pass: Health and Wealth above threshold
+        # First pass: Health and Wealth above threshold (0.52)
         file_emb = _make_embedding(1.0, 0.0)
         _mock_get_file_embedding.return_value = file_emb
         _mock_get_icor_embeddings.return_value = {
-            "Health & Vitality": [_make_embedding(0.9, 0.436)],     # ✓
-            "Wealth & Finance": [_make_embedding(0.5, 0.866)],      # ✓
+            "Health & Vitality": [_make_embedding(0.9, 0.436)],     # cos ≈ 0.9 ✓
+            "Wealth & Finance": [_make_embedding(0.7, 0.714)],      # cos ≈ 0.7 ✓
             "Relationships": [_make_embedding(0.1, 0.995)],         # ✗
             "Mind & Growth": [_make_embedding(0.1, 0.995)],         # ✗
             "Purpose & Impact": [_make_embedding(0.1, 0.995)],      # ✗
@@ -282,13 +288,13 @@ class TestUpdateIcorEdges:
         conn.close()
         assert first_pass_count == 2
 
-        # Second pass: different affinities (Relationships, Mind, Purpose above)
+        # Second pass: different affinities (Relationships, Purpose above 0.52)
         _mock_get_icor_embeddings.return_value = {
             "Health & Vitality": [_make_embedding(0.1, 0.995)],     # ✗
             "Wealth & Finance": [_make_embedding(0.1, 0.995)],      # ✗
-            "Relationships": [_make_embedding(0.5, 0.866)],         # ✓
-            "Mind & Growth": [_make_embedding(0.4, 0.917)],         # ✓
-            "Purpose & Impact": [_make_embedding(0.35, 0.937)],     # ✓
+            "Relationships": [_make_embedding(0.8, 0.6)],           # cos ≈ 0.8 ✓
+            "Mind & Growth": [_make_embedding(0.1, 0.995)],         # ✗
+            "Purpose & Impact": [_make_embedding(0.7, 0.714)],      # cos ≈ 0.7 ✓
             "Systems & Environment": [_make_embedding(0.05, 0.999)], # ✗
         }
 
@@ -303,8 +309,8 @@ class TestUpdateIcorEdges:
         ).fetchall()
         conn.close()
 
-        # Should have 3 new edges
-        assert len(second_pass_edges) == 3
+        # Should have 2 new edges (Top-K=2)
+        assert len(second_pass_edges) == 2
 
         # Verify old Health & Vitality edge is gone
         conn = _conn(test_db)

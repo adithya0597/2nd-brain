@@ -20,6 +20,11 @@ ICOR_DIMENSIONS = [
 ]
 
 
+def _normalize_title(title: str) -> str:
+    """Normalize a title for case/hyphen-insensitive matching."""
+    return title.lower().replace("-", " ").replace("_", " ").strip()
+
+
 # ---------------------------------------------------------------------------
 # Node CRUD
 # ---------------------------------------------------------------------------
@@ -465,19 +470,15 @@ def rebuild_wikilink_edges_for_node(
             conn.commit()
             return 0
 
-        # Build title -> id lookup (only for the titles we need)
-        placeholders = ",".join("?" for _ in outgoing_links)
-        cursor.execute(
-            f"SELECT id, title FROM vault_nodes WHERE title IN ({placeholders})",
-            outgoing_links,
-        )
+        # Build normalized title -> id lookup for case/hyphen-insensitive matching
+        cursor.execute("SELECT id, title FROM vault_nodes")
         title_to_id: dict[str, int] = {}
         for row in cursor.fetchall():
-            title_to_id[row["title"]] = row["id"]
+            title_to_id[_normalize_title(row["title"])] = row["id"]
 
         edge_count = 0
         for link_title in outgoing_links:
-            target_id = title_to_id.get(link_title)
+            target_id = title_to_id.get(_normalize_title(link_title))
             if target_id and target_id != node_id:
                 cursor.execute(
                     """INSERT OR IGNORE INTO vault_edges
@@ -494,6 +495,272 @@ def rebuild_wikilink_edges_for_node(
         "Rebuilt %d wikilink edges for node %d (%d link targets)",
         edge_count, node_id, len(outgoing_links),
     )
+    return edge_count
+
+
+# ---------------------------------------------------------------------------
+# Tag-shared edge builders
+# ---------------------------------------------------------------------------
+
+
+def rebuild_tag_shared_edges(db_path: Path | None = None) -> int:
+    """Rebuild ALL tag_shared edges from scratch.
+
+    Two document nodes get a tag_shared edge if they share at least one
+    tag in their tags_json array. Edge weight = number of shared tags.
+
+    Deletes all existing tag_shared edges first.
+
+    Returns:
+        Number of tag_shared edges created.
+    """
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        cursor = conn.cursor()
+
+        # Delete all existing tag_shared edges
+        cursor.execute("DELETE FROM vault_edges WHERE edge_type = 'tag_shared'")
+
+        # Load all document nodes with their tags
+        rows = cursor.execute(
+            "SELECT id, tags_json FROM vault_nodes WHERE node_type = 'document'"
+        ).fetchall()
+
+        # Build tag -> [node_id] index
+        tag_to_nodes: dict[str, list[int]] = {}
+        for row in rows:
+            tags = json.loads(row["tags_json"] or "[]")
+            for tag in tags:
+                tag_lower = tag.lower().strip()
+                if tag_lower:
+                    tag_to_nodes.setdefault(tag_lower, []).append(row["id"])
+
+        # Create edges between nodes sharing tags
+        edge_pairs: dict[tuple[int, int], int] = {}
+        for tag, node_ids in tag_to_nodes.items():
+            if len(node_ids) < 2:
+                continue
+            for i, a in enumerate(node_ids):
+                for b in node_ids[i + 1:]:
+                    pair = (min(a, b), max(a, b))
+                    edge_pairs[pair] = edge_pairs.get(pair, 0) + 1
+
+        edge_count = 0
+        for (src, tgt), weight in edge_pairs.items():
+            cursor.execute(
+                """INSERT OR IGNORE INTO vault_edges
+                   (source_node_id, target_node_id, edge_type, weight)
+                   VALUES (?, ?, 'tag_shared', ?)
+                """,
+                (src, tgt, float(weight)),
+            )
+            edge_count += cursor.rowcount
+
+        conn.commit()
+
+    logger.info("Rebuilt %d tag_shared edges", edge_count)
+    return edge_count
+
+
+def update_tag_shared_edges_for_file(
+    file_path: str,
+    db_path: Path | None = None,
+) -> int:
+    """Update tag_shared edges for a single file after it changes.
+
+    Returns number of tag_shared edges created.
+    """
+    node = get_node_by_path(file_path, db_path=db_path)
+    if node is None:
+        return 0
+
+    node_id = node["id"]
+    tags = json.loads(node.get("tags_json", "[]") or "[]")
+    if not tags:
+        # Remove any existing tag_shared edges for this node
+        delete_edges_for_node(node_id, edge_type="tag_shared", direction="both", db_path=db_path)
+        return 0
+
+    tags_lower = [t.lower().strip() for t in tags if t]
+    if not tags_lower:
+        delete_edges_for_node(node_id, edge_type="tag_shared", direction="both", db_path=db_path)
+        return 0
+
+    # Remove existing tag_shared edges for this node
+    delete_edges_for_node(node_id, edge_type="tag_shared", direction="both", db_path=db_path)
+
+    # Find other nodes sharing any of these tags
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        rows = conn.execute(
+            "SELECT id, tags_json FROM vault_nodes "
+            "WHERE node_type = 'document' AND id != ?",
+            (node_id,),
+        ).fetchall()
+
+    edge_count = 0
+    for row in rows:
+        other_tags = json.loads(row["tags_json"] or "[]")
+        other_lower = {t.lower().strip() for t in other_tags if t}
+        shared = len(set(tags_lower) & other_lower)
+        if shared > 0:
+            upsert_edge(
+                source_id=min(node_id, row["id"]),
+                target_id=max(node_id, row["id"]),
+                edge_type="tag_shared",
+                weight=float(shared),
+                db_path=db_path,
+            )
+            edge_count += 1
+
+    return edge_count
+
+
+# ---------------------------------------------------------------------------
+# Semantic similarity edge builders
+# ---------------------------------------------------------------------------
+
+
+def rebuild_semantic_similarity_edges(
+    top_k: int = 3,
+    min_similarity: float = 0.5,
+    db_path: Path | None = None,
+) -> int:
+    """Rebuild ALL semantic_similarity edges using vector KNN.
+
+    For each document node with an embedding, find the top_k most similar
+    documents and create semantic_similarity edges if similarity >= min_similarity.
+
+    Deletes all existing semantic_similarity edges first.
+
+    Returns:
+        Number of semantic_similarity edges created.
+    """
+    try:
+        from core.embedding_store import search_similar, get_file_embedding
+    except ImportError:
+        logger.debug("embedding_store not available — skipping semantic similarity edges")
+        return 0
+
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        cursor = conn.cursor()
+
+        # Delete all existing semantic_similarity edges
+        cursor.execute("DELETE FROM vault_edges WHERE edge_type = 'semantic_similarity'")
+        conn.commit()
+
+        # Get all document nodes
+        rows = cursor.execute(
+            "SELECT id, file_path, title FROM vault_nodes WHERE node_type = 'document'"
+        ).fetchall()
+
+    if not rows:
+        return 0
+
+    # Build file_path -> node_id lookup
+    path_to_id: dict[str, int] = {}
+    for row in rows:
+        path_to_id[row["file_path"]] = row["id"]
+
+    edge_count = 0
+    seen_pairs: set[tuple[int, int]] = set()
+
+    for row in rows:
+        # Use the file's title as the query (lightweight alternative to raw embedding KNN)
+        file_emb = get_file_embedding(row["file_path"], db_path=db_path)
+        if file_emb is None:
+            continue
+
+        # Search for similar files
+        similar = search_similar(row["title"], limit=top_k + 1, db_path=db_path)
+        source_id = row["id"]
+
+        for match in similar:
+            if match["file_path"] == row["file_path"]:
+                continue  # Skip self-match
+
+            target_id = path_to_id.get(match["file_path"])
+            if target_id is None:
+                continue
+
+            # sqlite-vec returns L2 distance; convert to similarity
+            # For normalized embeddings, similarity ≈ 1 - distance/2
+            distance = match["distance"]
+            similarity = max(0.0, 1.0 - distance / 2.0)
+            if similarity < min_similarity:
+                continue
+
+            pair = (min(source_id, target_id), max(source_id, target_id))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+
+            upsert_edge(
+                source_id=pair[0],
+                target_id=pair[1],
+                edge_type="semantic_similarity",
+                weight=round(similarity, 4),
+                db_path=db_path,
+            )
+            edge_count += 1
+
+    logger.info("Rebuilt %d semantic_similarity edges", edge_count)
+    return edge_count
+
+
+def update_semantic_similarity_edges_for_file(
+    file_path: str,
+    top_k: int = 3,
+    min_similarity: float = 0.5,
+    db_path: Path | None = None,
+) -> int:
+    """Update semantic_similarity edges for a single file.
+
+    Returns number of semantic_similarity edges created.
+    """
+    try:
+        from core.embedding_store import search_similar, get_file_embedding
+    except ImportError:
+        return 0
+
+    node = get_node_by_path(file_path, db_path=db_path)
+    if node is None:
+        return 0
+
+    node_id = node["id"]
+
+    # Check file has an embedding
+    file_emb = get_file_embedding(file_path, db_path=db_path)
+    if file_emb is None:
+        return 0
+
+    # Remove existing semantic_similarity edges for this node
+    delete_edges_for_node(node_id, edge_type="semantic_similarity", direction="both", db_path=db_path)
+
+    # Find similar files
+    similar = search_similar(node["title"], limit=top_k + 1, db_path=db_path)
+
+    edge_count = 0
+    for match in similar:
+        if match["file_path"] == file_path:
+            continue
+
+        target = get_node_by_path(match["file_path"], db_path=db_path)
+        if target is None:
+            continue
+
+        distance = match["distance"]
+        similarity = max(0.0, 1.0 - distance / 2.0)
+        if similarity < min_similarity:
+            continue
+
+        upsert_edge(
+            source_id=min(node_id, target["id"]),
+            target_id=max(node_id, target["id"]),
+            edge_type="semantic_similarity",
+            weight=round(similarity, 4),
+            db_path=db_path,
+        )
+        edge_count += 1
+
     return edge_count
 
 

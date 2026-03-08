@@ -757,6 +757,146 @@ def migrate(db_path: Path = DB_PATH):
         conn.commit()
         print("Step 22 complete: engagement + signals + brain_level + alerts")
 
+    # 23. Upgrade vec0 tables from float[384] to float[512] (nomic-embed-text-v1.5)
+    try:
+        import sqlite_vec  # noqa: F811
+
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+
+        # Check if already migrated via embedding_state marker
+        cursor.execute(
+            "SELECT value FROM embedding_state WHERE key = 'vec_dimension'"
+        )
+        row = cursor.fetchone()
+        if row and row[0] == "512":
+            print("vec0 tables already at 512 dimensions — skipping Step 23")
+        else:
+            print("Step 23: Upgrading vec0 tables from 384 to 512 dimensions...")
+
+            # 23a. Drop existing vec0 tables (cannot ALTER virtual tables)
+            cursor.execute("DROP TABLE IF EXISTS vec_vault")
+            cursor.execute("DROP TABLE IF EXISTS vec_icor")
+            print("  dropped vec_vault + vec_icor")
+
+            # 23b. Recreate with 512-dim embeddings
+            cursor.execute("""
+                CREATE VIRTUAL TABLE vec_vault USING vec0(
+                    embedding float[512],
+                    +file_path TEXT,
+                    +title TEXT,
+                    +content_hash TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE VIRTUAL TABLE vec_icor USING vec0(
+                    embedding float[512],
+                    +dimension TEXT,
+                    +reference_text TEXT
+                )
+            """)
+            print("  recreated vec_vault + vec_icor with float[512]")
+
+            # 23c. Clear embedding_state to force re-embedding on next boot
+            cursor.execute("DELETE FROM embedding_state")
+            print("  cleared embedding_state (will re-embed on next boot)")
+
+            # 23d. Set migration marker
+            cursor.execute(
+                "INSERT OR REPLACE INTO embedding_state (key, value) "
+                "VALUES ('vec_dimension', '512')"
+            )
+
+            conn.commit()
+            print("Step 23 complete: vec0 tables recreated with 512 dimensions")
+
+    except ImportError:
+        print("sqlite-vec not installed — skipping Step 23 vec0 upgrade (non-critical)")
+    except Exception as e:
+        print(f"Step 23 vec0 upgrade failed (non-critical): {e}")
+
+    # 24. Section-level chunking tables (vault_chunks + vec_vault_chunks)
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='vault_chunks'"
+    )
+    if cursor.fetchone():
+        print("vault_chunks table already exists — skipping Step 24")
+    else:
+        print("Step 24: Creating vault_chunks + vec_vault_chunks chunking schema...")
+
+        # 24a. vault_chunks — section-level chunks of vault files
+        cursor.execute("""
+            CREATE TABLE vault_chunks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER NOT NULL REFERENCES vault_nodes(id) ON DELETE CASCADE,
+                file_path TEXT NOT NULL,
+                chunk_number INTEGER NOT NULL,
+                chunk_type TEXT CHECK(chunk_type IN ('whole_file', 'header_based', 'fixed_size')),
+                start_line INTEGER,
+                end_line INTEGER,
+                word_count INTEGER DEFAULT 0,
+                char_count INTEGER DEFAULT 0,
+                section_header TEXT DEFAULT '',
+                header_level INTEGER DEFAULT 0,
+                content_hash TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                indexed_at TEXT,
+                UNIQUE(node_id, chunk_number)
+            )
+        """)
+        print("  vault_chunks table: created")
+
+        # 24b. Indexes on vault_chunks
+        cursor.execute(
+            "CREATE INDEX idx_vc_node ON vault_chunks(node_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_vc_file_path ON vault_chunks(file_path)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_vc_hash ON vault_chunks(content_hash)"
+        )
+        print("  vault_chunks indexes: created")
+
+        # 24c. vec_vault_chunks — vector embeddings for chunks (sqlite-vec)
+        try:
+            import sqlite_vec  # noqa: F811
+
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+
+            cursor.execute("""
+                CREATE VIRTUAL TABLE vec_vault_chunks USING vec0(
+                    embedding float[512]
+                )
+            """)
+            print("  vec_vault_chunks virtual table: created (512-dim)")
+        except ImportError:
+            print("  sqlite-vec not installed — skipping vec_vault_chunks (non-critical)")
+        except Exception as e:
+            print(f"  vec_vault_chunks creation failed (non-critical): {e}")
+
+        conn.commit()
+        print("Step 24 complete: vault_chunks + vec_vault_chunks chunking schema ready")
+
+    # 25. Metadata filtering indexes on vault_nodes
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_vn_last_modified'"
+    )
+    if cursor.fetchone():
+        print("Metadata indexes already exist — skipping Step 25")
+    else:
+        cursor.execute(
+            "CREATE INDEX idx_vn_last_modified ON vault_nodes(last_modified)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vn_type_nonempty ON vault_nodes(type) WHERE type != ''"
+        )
+        conn.commit()
+        print("Step 25 complete: metadata filtering indexes created")
+
     conn.close()
     print(f"\nMigration complete on {db_path}")
     print(f"  - sync_state table: created/verified")
@@ -773,6 +913,9 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - pending_captures table: created/verified")
     print(f"  - sync_outbox + captures_log tables: created/verified")
     print(f"  - engagement + signals + brain_level + alerts: created/verified")
+    print(f"  - vec0 tables: upgraded to 512 dimensions (if sqlite-vec available)")
+    print(f"  - vault_chunks + vec_vault_chunks: section-level chunking created/verified")
+    print(f"  - metadata filtering indexes: last_modified + type_nonempty created/verified")
 
 
 if __name__ == "__main__":

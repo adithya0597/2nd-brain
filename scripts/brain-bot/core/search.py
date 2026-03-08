@@ -1,6 +1,6 @@
-"""Hybrid search: Vector + FTS5 + Graph with Reciprocal Rank Fusion.
+"""Hybrid search: Vector + Chunk-Vector + FTS5 + Graph with Reciprocal Rank Fusion.
 
-Provides fast search across the entire Second Brain vault using three
+Provides fast search across the entire Second Brain vault using four
 complementary search channels, fused with RRF for optimal ranking.
 """
 import logging
@@ -31,7 +31,7 @@ class SearchResponse:
     total_candidates: int
 
 
-def _search_vector(query_text: str, limit: int = 20, db_path: Path = None) -> list[tuple[str, dict]]:
+def _search_vector(query_text: str, limit: int = 20, db_path: Path = None, metadata_filters=None) -> list[tuple[str, dict]]:
     """Search using vector similarity via embedding_store.
 
     Returns [(file_path, {title, snippet, distance})] ordered by relevance.
@@ -39,7 +39,7 @@ def _search_vector(query_text: str, limit: int = 20, db_path: Path = None) -> li
     """
     try:
         from core.embedding_store import search_similar
-        results = search_similar(query_text, limit=limit, db_path=db_path)
+        results = search_similar(query_text, limit=limit, db_path=db_path, metadata_filters=metadata_filters)
         return [
             (r["file_path"], {
                 "title": r["title"],
@@ -50,6 +50,40 @@ def _search_vector(query_text: str, limit: int = 20, db_path: Path = None) -> li
         ]
     except Exception:
         logger.debug("Vector search unavailable", exc_info=True)
+        return []
+
+
+def _search_chunks(query_text: str, limit: int = 20, db_path: Path = None) -> list[tuple[str, dict]]:
+    """Search using chunk-level vector similarity.
+
+    Returns file-level results (deduplicated from chunks).
+    If a file has multiple matching chunks, keeps the best match
+    and notes the matching section in the snippet.
+    """
+    try:
+        from core.chunk_embedder import search_chunks
+        results = search_chunks(query_text, limit=limit, db_path=db_path)
+
+        # Deduplicate to file level (keep best chunk per file)
+        seen_files: dict[str, dict] = {}
+        for r in results:
+            fp = r["file_path"]
+            if fp not in seen_files or r["distance"] < seen_files[fp]["distance"]:
+                seen_files[fp] = r
+
+        return [
+            (fp, {
+                "title": info["title"],
+                "snippet": (
+                    f"(chunk: {info['section_header'] or 'section ' + str(info['chunk_index'])}"
+                    f", sim: {1 - info['distance']:.2f})"
+                ),
+                "distance": info["distance"],
+            })
+            for fp, info in seen_files.items()
+        ]
+    except Exception:
+        logger.debug("Chunk search unavailable", exc_info=True)
         return []
 
 
@@ -172,18 +206,23 @@ def hybrid_search(
     channels: list[str] | None = None,
     k: int = 60,
     db_path: Path = None,
+    metadata_filters=None,
 ) -> SearchResponse:
     """Main hybrid search entry point.
 
-    Searches across vector, FTS, and graph channels, then fuses with RRF.
+    Searches across vector, chunks, FTS, and graph channels, then fuses with RRF.
 
     Args:
         query_text: The search query.
         limit: Maximum results to return.
         channels: Optional list of channels to use (default: all available).
-                  Valid channels: "vector", "fts", "graph"
+                  Valid channels: "vector", "chunks", "fts", "graph"
         k: RRF constant.
         db_path: Optional DB path override.
+        metadata_filters: Optional MetadataFilters to narrow vector search
+            results by frontmatter attributes (type, status, date range, etc.).
+            Only applied to the vector channel; FTS and graph have their own
+            filtering logic.
 
     Returns:
         SearchResponse with ranked, deduplicated results.
@@ -191,7 +230,7 @@ def hybrid_search(
     if not query_text or not query_text.strip():
         return SearchResponse(results=[], query=query_text or "", channels_used=[], total_candidates=0)
 
-    active_channels = channels or ["vector", "fts", "graph"]
+    active_channels = channels or ["vector", "chunks", "fts", "graph"]
     db_path = db_path or config.DB_PATH
 
     # Run search channels
@@ -200,12 +239,20 @@ def hybrid_search(
     channels_used = []
 
     if "vector" in active_channels:
-        vec_results = _search_vector(query_text, limit=limit, db_path=db_path)
+        vec_results = _search_vector(query_text, limit=limit, db_path=db_path, metadata_filters=metadata_filters)
         if vec_results:
             ranked_lists["vector"] = [fp for fp, _ in vec_results]
             for fp, meta in vec_results:
                 metadata.setdefault(fp, {}).update(meta)
             channels_used.append("vector")
+
+    if "chunks" in active_channels:
+        chunk_results = _search_chunks(query_text, limit=limit, db_path=db_path)
+        if chunk_results:
+            ranked_lists["chunks"] = [fp for fp, _ in chunk_results]
+            for fp, meta in chunk_results:
+                metadata.setdefault(fp, {}).update(meta)
+            channels_used.append("chunks")
 
     if "fts" in active_channels:
         fts_results = _search_fts(query_text, limit=limit, db_path=str(db_path))

@@ -1,6 +1,6 @@
 {
   "_description": "Maps local ICOR hierarchy IDs to Notion page IDs. Updated by /brain:sync-notion.",
-  "_last_synced": "2026-03-04T04:00:27.682812Z",
+  "_last_synced": "2026-03-08T06:32:39.269762Z",
   "dimensions": {
     "Health & Vitality": {
       "local_id": 1,
@@ -147,7 +147,8 @@
   "goals": {
     "Investment Portfolio": {
       "notion_page_id": "231fda46-1a19-803c-b6bc-cc4c73166804",
-      "tag": "Investments"
+      "tag": "Investments",
+      "status": "Dream"
     }
   },
   "projects": {
@@ -157,35 +158,44 @@
     },
     "LinkedIn Portfolio": {
       "notion_page_id": "231fda46-1a19-8086-a71a-ed192059b6fd",
-      "tag": "Personal Brand"
+      "tag": "Personal Brand",
+      "status": "Ongoing"
     },
     "Create a Portfolio Agent": {
       "notion_page_id": "2fbfda46-1a19-8087-ae0d-ea891e90574a",
-      "tag": "Side Projects"
+      "tag": "Side Projects",
+      "status": "Planned"
     },
     "AI automated trader": {
       "notion_page_id": "260fda46-1a19-8061-af15-e96d52b5609b",
-      "tag": "Investments"
+      "tag": "Investments",
+      "status": "Planned"
     },
     "My brand (Hoodies T-shirts)": {
       "notion_page_id": "231fda46-1a19-81eb-90b5-caf485197d06",
-      "tag": "Personal Brand"
+      "tag": "Personal Brand",
+      "status": "Doing"
     },
     "Investment Porfolio": {
       "notion_page_id": "231fda46-1a19-801c-b45b-de9b7f45c66c",
-      "tag": "Investments"
+      "tag": "Investments",
+      "status": "Doing"
     },
     "Denim Jacket with replaceable canvas in the back": {
-      "notion_page_id": "231fda46-1a19-812f-9527-fa8079b6794d"
+      "notion_page_id": "231fda46-1a19-812f-9527-fa8079b6794d",
+      "status": "Planned"
     },
     "Design Agent": {
-      "notion_page_id": "231fda46-1a19-818f-92c7-c668e7e93ae5"
+      "notion_page_id": "231fda46-1a19-818f-92c7-c668e7e93ae5",
+      "status": "Planned"
     },
     "Ideas in Fashion Industry ": {
-      "notion_page_id": "25afda46-1a19-80f4-81e3-d5040a998599"
+      "notion_page_id": "25afda46-1a19-80f4-81e3-d5040a998599",
+      "status": "Planned"
     },
     "AI assisted apparel Assistant ": {
-      "notion_page_id": "260fda46-1a19-803f-b80f-f4d8ed04faa4"
+      "notion_page_id": "260fda46-1a19-803f-b80f-f4d8ed04faa4",
+      "status": "Planned"
     }
   },
   "dashboard_page_id": null

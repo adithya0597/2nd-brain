@@ -27,7 +27,11 @@ logger = logging.getLogger(__name__)
 
 # Files with max cosine similarity below this threshold against ALL
 # reference embeddings for a dimension are NOT linked to that dimension.
-ICOR_AFFINITY_THRESHOLD = 0.3
+ICOR_AFFINITY_THRESHOLD = 0.52
+ICOR_AFFINITY_TOP_K = 2  # Keep at most top-K dimensions per file
+
+# Prefixes for files that should be skipped (non-knowledge content)
+_AFFINITY_SKIP_PREFIXES = ("Templates/", "Identity/", "CLAUDE")
 
 
 # ---------------------------------------------------------------------------
@@ -35,12 +39,15 @@ ICOR_AFFINITY_THRESHOLD = 0.3
 # ---------------------------------------------------------------------------
 
 
-def _cosine_similarity(vec_a_bytes: bytes, vec_b_bytes: bytes, dim: int = 384) -> float:
+def _cosine_similarity(vec_a_bytes: bytes, vec_b_bytes: bytes, dim: int | None = None) -> float:
     """Compute cosine similarity between two serialized float vectors.
 
-    Both inputs are raw bytes produced by ``struct.pack(f"{dim}f", *vec)``.
+    Both inputs are raw bytes produced by ``struct.pack(f"{dim}f", *vec)``
+    where *dim* matches ``config.EMBEDDING_DIM``.
     Returns a float in [-1, 1], or 0.0 if either vector has zero norm.
     """
+    if dim is None:
+        dim = config.EMBEDDING_DIM
     a = struct.unpack(f"{dim}f", vec_a_bytes)
     b = struct.unpack(f"{dim}f", vec_b_bytes)
     dot = sum(x * y for x, y in zip(a, b))
@@ -77,6 +84,10 @@ def compute_file_icor_affinity(
         Returns ``[]`` if embeddings are unavailable or the file is not
         yet embedded.
     """
+    # Skip non-knowledge files
+    if any(file_path.startswith(prefix) for prefix in _AFFINITY_SKIP_PREFIXES):
+        return []
+
     try:
         from core.embedding_store import get_file_embedding, get_icor_embeddings
     except ImportError:
@@ -108,9 +119,9 @@ def compute_file_icor_affinity(
         if max_sim >= ICOR_AFFINITY_THRESHOLD:
             results.append((dimension, max_sim))
 
-    # Sort by score descending
+    # Sort by score descending, apply Top-K limit
     results.sort(key=lambda t: t[1], reverse=True)
-    return results
+    return results[:ICOR_AFFINITY_TOP_K]
 
 
 # ---------------------------------------------------------------------------

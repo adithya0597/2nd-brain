@@ -155,6 +155,16 @@ class RegistryManager:
             self._data.setdefault("key_elements", {})[name] = entry
 
     def set_project(self, name: str, notion_page_id: str, tag: str = None, goal: str = None, status: str = None):
+        # Purge stale keys: if another project with the same notion_page_id
+        # exists under a different name (renamed in Notion), remove the old entry
+        projects = self._data.setdefault("projects", {})
+        stale_keys = [
+            k for k, v in projects.items()
+            if k != name and v.get("notion_page_id") == notion_page_id
+        ]
+        for k in stale_keys:
+            del projects[k]
+
         entry: dict = {"notion_page_id": notion_page_id}
         if tag:
             entry["tag"] = tag
@@ -162,15 +172,25 @@ class RegistryManager:
             entry["goal"] = goal
         if status:
             entry["status"] = status
-        self._data.setdefault("projects", {})[name] = entry
+        projects[name] = entry
 
     def set_goal(self, name: str, notion_page_id: str, tag: str = None, status: str = None):
+        # Purge stale keys: if another goal with the same notion_page_id
+        # exists under a different name (renamed in Notion), remove the old entry
+        goals = self._data.setdefault("goals", {})
+        stale_keys = [
+            k for k, v in goals.items()
+            if k != name and v.get("notion_page_id") == notion_page_id
+        ]
+        for k in stale_keys:
+            del goals[k]
+
         entry: dict = {"notion_page_id": notion_page_id}
         if tag:
             entry["tag"] = tag
         if status:
             entry["status"] = status
-        self._data.setdefault("goals", {})[name] = entry
+        goals[name] = entry
 
     def set_person(self, name: str, notion_page_id: str, **fields):
         """Store a person entry in the registry."""
@@ -1125,6 +1145,48 @@ class NotionSync:
             "Vault files written: %d (projects: %d, goals: %d, people: %d)",
             files_written, len(projects), len(goals), len(people),
         )
+
+        # Trigger graph indexing for all written files so they appear in the
+        # knowledge graph. Notion sync writes files via path.write_text() which
+        # bypasses vault_ops post-write hooks, so we batch-index here.
+        self._index_written_files(projects, goals, people)
+
+    # ------------------------------------------------------------------
+    # Post-sync: batch graph indexing for written vault files
+    # ------------------------------------------------------------------
+
+    def _index_written_files(self, projects: dict, goals: dict, people: dict):
+        """Batch-index all vault files written by Notion sync into the graph.
+
+        This compensates for _update_file_frontmatter() bypassing vault_ops
+        post-write hooks. Each file gets indexed into vault_nodes so the
+        knowledge graph stays consistent.
+        """
+        try:
+            from core.vault_indexer import index_single_file
+        except ImportError:
+            logger.debug("vault_indexer not available — skipping post-sync indexing")
+            return
+
+        indexed = 0
+        dirs_and_items = [
+            ("Projects", projects),
+            ("Goals", goals),
+            ("People", people),
+        ]
+        for subdir, items in dirs_and_items:
+            for name in items:
+                filename = self._sanitize_filename(name) + ".md"
+                filepath = self._vault_path / subdir / filename
+                if filepath.exists():
+                    try:
+                        index_single_file(filepath, self._vault_path, self._db_path)
+                        indexed += 1
+                    except Exception:
+                        logger.debug("Post-sync index failed for %s", filepath, exc_info=True)
+
+        if indexed:
+            logger.info("Post-sync indexed %d vault files into graph", indexed)
 
     # ------------------------------------------------------------------
     # Post-sync: log operations

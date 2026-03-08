@@ -29,6 +29,27 @@ WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 TAG_RE = re.compile(r"(?:^|\s)#([a-zA-Z][\w/-]*)", re.MULTILINE)
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 
+# ---------------------------------------------------------------------------
+# Exclusion denylist — non-knowledge files that pollute the graph
+# ---------------------------------------------------------------------------
+_EXCLUDED_DIRS = {"Templates", "Identity", ".obsidian"}
+_EXCLUDED_FILES = {"CLAUDE.md"}
+
+
+def _is_excluded(rel_path: Path) -> bool:
+    """Check if a file should be excluded from the knowledge graph."""
+    parts = rel_path.parts
+    if parts and parts[0] in _EXCLUDED_DIRS:
+        return True
+    if rel_path.name in _EXCLUDED_FILES:
+        return True
+    return False
+
+
+def _normalize_link(title: str) -> str:
+    """Normalize a wikilink target for case/hyphen-insensitive matching."""
+    return title.lower().replace("-", " ").replace("_", " ").strip()
+
 
 def _extract_frontmatter(content: str) -> dict:
     """Parse YAML frontmatter from markdown content."""
@@ -47,10 +68,29 @@ def _extract_wikilinks(content: str) -> list[str]:
 
 
 def _extract_tags(content: str) -> list[str]:
-    """Extract all #tags from content (excluding frontmatter tags)."""
-    # Strip frontmatter first
+    """Extract all tags from content: YAML frontmatter tags + body #hashtags."""
+    # Body hashtags
     body = FRONTMATTER_RE.sub("", content)
-    return TAG_RE.findall(body)
+    body_tags = TAG_RE.findall(body)
+
+    # Frontmatter tags and icor_elements
+    fm = _extract_frontmatter(content)
+    fm_tags = []
+    for key in ("tags", "icor_elements"):
+        val = fm.get(key, [])
+        if isinstance(val, list):
+            fm_tags.extend(str(t) for t in val if t)
+        elif isinstance(val, str) and val:
+            fm_tags.append(val)
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for t in fm_tags + body_tags:
+        if t not in seen:
+            seen.add(t)
+            result.append(t)
+    return result
 
 
 def _title_from_path(path: Path) -> str:
@@ -66,6 +106,8 @@ def _parse_single_file(md_file: Path, vault_path: Path) -> dict | None:
     """
     rel = md_file.relative_to(vault_path)
     if any(part.startswith(".") for part in rel.parts):
+        return None
+    if _is_excluded(rel):
         return None
 
     try:
@@ -164,10 +206,11 @@ def index_to_db(entries: list[dict], incoming: dict[str, list[str]], db_path: Pa
         # Phase 2: Build title -> node_id lookup for edge resolution
         #   Includes all node types (document + icor_dimension) so wikilinks
         #   pointing at ICOR dimension nodes also resolve correctly.
+        #   Uses normalized titles for case/hyphen-insensitive matching.
         title_to_id: dict[str, int] = {}
         cursor.execute("SELECT id, title FROM vault_nodes")
         for row_id, row_title in cursor.fetchall():
-            title_to_id[row_title] = row_id
+            title_to_id[_normalize_link(row_title)] = row_id
 
         # Phase 3: Create wikilink edges for each entry
         edge_count = 0
@@ -177,7 +220,7 @@ def index_to_db(entries: list[dict], incoming: dict[str, list[str]], db_path: Pa
                 continue
 
             for link_title in entry["outgoing_links"]:
-                target_id = title_to_id.get(link_title)
+                target_id = title_to_id.get(_normalize_link(link_title))
                 if target_id and target_id != source_id:
                     cursor.execute(
                         """INSERT OR IGNORE INTO vault_edges
@@ -250,6 +293,87 @@ def index_single_file(file_path: Path, vault_path: Path = None, db_path: Path = 
         pass
 
     logger.info("Incrementally indexed: %s", entry["file_path"])
+
+
+def evict_deleted_nodes(vault_path: Path = None, db_path: Path = None) -> int:
+    """Remove graph nodes for vault files that no longer exist on disk.
+
+    Returns the number of nodes evicted.
+    """
+    from core.graph_ops import delete_node
+
+    vault_path = vault_path or config.VAULT_PATH
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        rows = conn.execute(
+            "SELECT id, file_path FROM vault_nodes WHERE node_type = 'document'"
+        ).fetchall()
+
+    deleted = 0
+    for row in rows:
+        full_path = vault_path / row["file_path"]
+        if not full_path.exists():
+            delete_node(row["file_path"], db_path=db_path)
+            deleted += 1
+            logger.debug("Evicted deleted node: %s", row["file_path"])
+
+    if deleted:
+        logger.info("Evicted %d nodes for deleted files", deleted)
+    return deleted
+
+
+def evict_excluded_nodes(db_path: Path = None) -> int:
+    """Remove graph nodes matching the exclusion denylist.
+
+    Returns the number of nodes evicted.
+    """
+    from core.graph_ops import delete_node
+
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        rows = conn.execute(
+            "SELECT id, file_path FROM vault_nodes WHERE node_type = 'document'"
+        ).fetchall()
+
+    evicted = 0
+    for row in rows:
+        if _is_excluded(Path(row["file_path"])):
+            delete_node(row["file_path"], db_path=db_path)
+            evicted += 1
+            logger.debug("Evicted excluded node: %s", row["file_path"])
+
+    if evicted:
+        logger.info("Evicted %d excluded nodes", evicted)
+    return evicted
+
+
+def index_missing_files(vault_path: Path = None, db_path: Path = None) -> int:
+    """Find and index vault files not yet in the graph.
+
+    Returns the number of newly indexed files.
+    """
+    vault_path = vault_path or config.VAULT_PATH
+
+    with get_connection(db_path, row_factory=sqlite3.Row) as conn:
+        rows = conn.execute(
+            "SELECT file_path FROM vault_nodes WHERE node_type = 'document'"
+        ).fetchall()
+    existing = {row["file_path"] for row in rows}
+
+    indexed = 0
+    for md_file in sorted(vault_path.rglob("*.md")):
+        rel = md_file.relative_to(vault_path)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if _is_excluded(rel):
+            continue
+        if str(rel) in existing:
+            continue
+
+        index_single_file(md_file, vault_path, db_path)
+        indexed += 1
+
+    if indexed:
+        logger.info("Indexed %d missing files", indexed)
+    return indexed
 
 
 def run_full_index(vault_path: Path = None, db_path: Path = None) -> int:

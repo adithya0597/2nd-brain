@@ -14,15 +14,15 @@ sys.modules.setdefault("core.db_connection", MagicMock())
 class TestSerializeF32:
     """Test vector serialization/deserialization roundtrip."""
 
-    def test_roundtrip_384_dim(self):
-        """384-dim vector serializes to 1536 bytes and roundtrips correctly."""
+    def test_roundtrip_512_dim(self):
+        """512-dim vector serializes to 2048 bytes and roundtrips correctly."""
         from core.embedding_store import _serialize_f32, _deserialize_f32
 
-        vector = [float(i) / 384 for i in range(384)]
+        vector = [float(i) / 512 for i in range(512)]
         packed = _serialize_f32(vector)
-        assert len(packed) == 384 * 4  # 1536 bytes
+        assert len(packed) == 512 * 4  # 2048 bytes
 
-        unpacked = _deserialize_f32(packed, 384)
+        unpacked = _deserialize_f32(packed, 512)
         for orig, restored in zip(vector, unpacked):
             assert abs(orig - restored) < 1e-6
 

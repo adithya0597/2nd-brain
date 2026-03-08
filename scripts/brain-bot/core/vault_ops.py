@@ -48,10 +48,28 @@ def _on_vault_write(file_path: Path):
             logger.debug("Incremental embedding failed for %s", file_path, exc_info=True)
 
         try:
+            from core.chunk_embedder import rechunk_and_embed_file
+            rechunk_and_embed_file(file_path, vault_path=config.VAULT_PATH, db_path=config.DB_PATH)
+        except Exception:
+            logger.debug("Chunk embedding failed for %s", file_path, exc_info=True)
+
+        try:
             from core.icor_affinity import update_icor_edges_for_file
             update_icor_edges_for_file(str(file_path.relative_to(config.VAULT_PATH)))
         except Exception:
             logger.debug("Incremental ICOR affinity failed for %s", file_path, exc_info=True)
+
+        try:
+            from core.graph_ops import update_tag_shared_edges_for_file
+            update_tag_shared_edges_for_file(str(file_path.relative_to(config.VAULT_PATH)))
+        except Exception:
+            logger.debug("Incremental tag_shared edges failed for %s", file_path, exc_info=True)
+
+        try:
+            from core.graph_ops import update_semantic_similarity_edges_for_file
+            update_semantic_similarity_edges_for_file(str(file_path.relative_to(config.VAULT_PATH)))
+        except Exception:
+            logger.debug("Incremental semantic_similarity edges failed for %s", file_path, exc_info=True)
 
         try:
             from core.graph_cache import invalidate as _invalidate_graph_cache

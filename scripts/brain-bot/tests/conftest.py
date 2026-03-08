@@ -79,8 +79,8 @@ def _ensure_config_defaults():
         "ANTHROPIC_MODEL": "claude-sonnet-4-5-20250929",
         "CLASSIFIER_LLM_MODEL": "claude-haiku-4-5-20251001",
         # Embedding
-        "EMBEDDING_MODEL": "BAAI/bge-small-en-v1.5",
-        "EMBEDDING_DIM": 384,
+        "EMBEDDING_MODEL": "nomic-ai/nomic-embed-text-v1.5",
+        "EMBEDDING_DIM": 512,
         # Notion
         "NOTION_TOKEN": "",
         "NOTION_COLLECTIONS": {},
