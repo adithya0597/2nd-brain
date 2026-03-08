@@ -1,4 +1,8 @@
-"""Centralized Anthropic client singleton."""
+"""Centralized async Anthropic client singleton.
+
+PTB v21 is fully async — using a sync Anthropic client would block the event
+loop for 10-60s per AI call. AsyncAnthropic is required.
+"""
 import sys
 
 import anthropic
@@ -8,14 +12,14 @@ _initialized = False
 
 
 def get_ai_client():
-    """Return shared Anthropic client, or None if no API key configured."""
+    """Return shared AsyncAnthropic client, or None if no API key configured."""
     global _client, _initialized
     if _initialized:
         return _client
     config = sys.modules.get("config")
     api_key = getattr(config, "ANTHROPIC_API_KEY", "") if config else ""
     if api_key:
-        _client = anthropic.Anthropic(api_key=api_key)
+        _client = anthropic.AsyncAnthropic(api_key=api_key)
     else:
         _client = None
     _initialized = True

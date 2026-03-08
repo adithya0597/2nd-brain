@@ -1,45 +1,45 @@
-"""Second Brain Slack Bot — Entry Point.
+"""Second Brain Telegram Bot — Entry Point.
 
-Bolt + Socket Mode app that bridges Slack with the Second Brain vault,
-SQLite database, and Anthropic API.
+python-telegram-bot v21 application that bridges Telegram with the Second Brain
+vault, SQLite database, and Anthropic API.
 """
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-import signal
-import sys
-import threading
+from zoneinfo import ZoneInfo
 
-import schedule
-from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
+from telegram import BotCommand, Update
+from telegram.ext import (
+    Application,
+    ApplicationBuilder,
+    ContextTypes,
+    Defaults,
+    filters,
+    MessageHandler,
+)
 
 from config import (
-    CHANNELS,
-    OWNER_SLACK_ID,
-    SLACK_APP_TOKEN,
-    SLACK_BOT_TOKEN,
+    GROUP_CHAT_ID,
+    OWNER_TELEGRAM_ID,
+    TELEGRAM_BOT_TOKEN,
+    TOPICS,
 )
 from core.async_utils import shutdown as shutdown_executor
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-# Ensure log directory exists
 log_dir = Path(__file__).parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
-# Configure logging with rotation
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-# Console handler
 console = logging.StreamHandler()
 console.setFormatter(formatter)
 root_logger.addHandler(console)
 
-# File handler with rotation (10MB, keep 5 backups)
 file_handler = RotatingFileHandler(
     log_dir / "brain-bot.log",
     maxBytes=10 * 1024 * 1024,
@@ -50,221 +50,204 @@ root_logger.addHandler(file_handler)
 
 logger = logging.getLogger("brain-bot")
 
-# ---------------------------------------------------------------------------
-# App Setup
-# ---------------------------------------------------------------------------
-app = App(token=SLACK_BOT_TOKEN)
+# Timezone for scheduled jobs
+CST = ZoneInfo("America/Chicago")
 
 
 # ---------------------------------------------------------------------------
-# Owner-only middleware
+# Owner-only filter
 # ---------------------------------------------------------------------------
-@app.middleware
-def owner_only(body, next, logger):
-    """Only process events from the bot owner."""
-    if not OWNER_SLACK_ID:
-        # No owner restriction configured
-        next()
-        return
+class OwnerFilter(filters.MessageFilter):
+    """Only allow messages from the bot owner."""
 
-    user = body.get("event", {}).get("user") or body.get("user_id") or body.get("user", {}).get("id", "")
-    if user == OWNER_SLACK_ID or not user:
-        next()
-    else:
-        logger.debug("Ignoring event from non-owner user: %s", user)
+    def filter(self, message):
+        if not OWNER_TELEGRAM_ID:
+            return True  # No restriction configured
+        user = message.from_user
+        if user is None:
+            return False
+        return user.id == OWNER_TELEGRAM_ID
+
+
+owner_filter = OwnerFilter()
 
 
 # ---------------------------------------------------------------------------
-# Register handlers (imported lazily to avoid circular imports)
+# Startup: post_init callback
 # ---------------------------------------------------------------------------
-def resolve_channel_ids(client) -> dict[str, str]:
-    """Resolve channel name -> ID mapping once at startup."""
-    mapping: dict[str, str] = {}
-    try:
-        result = client.conversations_list(types="public_channel,private_channel", limit=200)
-        for ch in result.get("channels", []):
-            if ch["name"].startswith("brain-"):
-                mapping[ch["name"]] = ch["id"]
-    except Exception:
-        logger.warning("conversations_list failed, falling back to name resolution")
+async def post_init(application: Application) -> None:
+    """Run after the Application has been initialized and the bot is ready."""
+    logger.info("Running post_init startup sequence...")
 
-    # Fallback: resolve by posting/deleting probe messages
-    if not any(k.startswith("brain-") for k in mapping):
-        logger.info("Resolving channel IDs by name (private channel workaround)")
-        for name in CHANNELS:
-            try:
-                r = client.chat_postMessage(channel=f"#{name}", text="\u200b")
-                mapping[name] = r["channel"]
-                client.chat_delete(channel=r["channel"], ts=r["ts"])
-            except Exception:
-                logger.debug("Could not resolve channel #%s", name)
+    # 1. Register bot commands with Telegram
+    commands = [
+        BotCommand("today", "Morning review and daily briefing"),
+        BotCommand("close", "Evening review and day wrap-up"),
+        BotCommand("drift", "Alignment drift analysis"),
+        BotCommand("emerge", "Surface unnamed patterns"),
+        BotCommand("ideas", "Generate actionable ideas"),
+        BotCommand("schedule", "Energy-aware weekly planning"),
+        BotCommand("ghost", "Digital twin response"),
+        BotCommand("status", "Quick status dashboard"),
+        BotCommand("sync", "Sync with Notion"),
+        BotCommand("projects", "Active project dashboard"),
+        BotCommand("resources", "Knowledge base catalog"),
+        BotCommand("trace", "Concept evolution timeline"),
+        BotCommand("connect", "Serendipity engine"),
+        BotCommand("challenge", "Red-team a belief"),
+        BotCommand("graduate", "Promote journal themes"),
+        BotCommand("context", "Load session context"),
+        BotCommand("find", "Semantic vault search"),
+        BotCommand("help", "List available commands"),
+        BotCommand("engage", "Engagement analysis"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Registered %d bot commands with Telegram", len(commands))
 
-    logger.info("Resolved %d channel IDs at startup", len(mapping))
-    return mapping
-
-
-def register_handlers():
-    """Import and register all handler modules."""
+    # 2. Register handler modules
     try:
         from handlers import register_all
-        register_all(app)
-        logger.info("All handlers registered")
-
-        # Pre-resolve channel IDs and distribute to handlers
-        channel_ids = resolve_channel_ids(app.client)
-
-        try:
-            from handlers.capture import register as capture_register
-            if hasattr(capture_register, "set_channel_ids"):
-                capture_register.set_channel_ids(channel_ids)
-        except Exception:
-            logger.debug("Could not set capture channel IDs")
-
-        try:
-            from handlers.commands import set_channel_ids as cmd_set_ids
-            cmd_set_ids(channel_ids)
-        except Exception:
-            logger.debug("Could not set commands channel IDs")
-
-        # Load dynamic keywords into classifier at startup
-        try:
-            from config import load_dynamic_keywords
-            from handlers.capture import get_classifier
-            keywords = load_dynamic_keywords()
-            get_classifier().update_keywords(keywords)
-            logger.info("Classifier loaded with dynamic keywords")
-        except Exception:
-            logger.info("Dynamic keywords unavailable — using seed keywords")
-    except ImportError:
-        logger.warning("handlers package not found — running with no handlers")
-
-
-# ---------------------------------------------------------------------------
-# Scheduler
-# ---------------------------------------------------------------------------
-def _run_scheduler():
-    """Run the schedule loop in a daemon thread."""
-    while True:
-        schedule.run_pending()
-        import time
-        time.sleep(30)
-
-
-def start_scheduler():
-    """Start the scheduler daemon thread."""
-    try:
-        from handlers.scheduled import register_schedules
-        register_schedules(app)
-        logger.info("Scheduled jobs registered")
-    except ImportError:
-        logger.info("No scheduled handlers found — scheduler idle")
-
-    t = threading.Thread(target=_run_scheduler, daemon=True)
-    t.start()
-    logger.info("Scheduler thread started")
-
-
-# ---------------------------------------------------------------------------
-# Graceful shutdown
-# ---------------------------------------------------------------------------
-def handle_shutdown(signum, frame):
-    logger.info("Received signal %s — shutting down", signum)
-    shutdown_executor()
-    sys.exit(0)
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-def _run_health_check(client, channel_ids):
-    """Verify critical subsystems on startup."""
-    checks = {}
-    # 1. Database accessible
-    try:
-        from core.async_utils import run_async
-        from core.db_ops import query
-        rows = run_async(query("SELECT COUNT(*) as c FROM icor_hierarchy"))
-        checks["database"] = f"OK ({rows[0]['c']} ICOR nodes)"
+        register_all(application)
+        logger.info("All handler modules registered")
     except Exception as e:
-        checks["database"] = f"FAIL: {e}"
-    # 2. Vault path exists
-    from config import VAULT_PATH
-    checks["vault"] = "OK" if Path(VAULT_PATH).is_dir() else "FAIL: not found"
-    # 3. Anthropic API key present
-    from config import ANTHROPIC_API_KEY
-    checks["anthropic_api"] = "OK" if ANTHROPIC_API_KEY else "WARN: not set (AI commands disabled)"
-    # 4. Channel IDs resolved
-    checks["channels"] = f"OK ({len(channel_ids)} resolved)" if channel_ids else "WARN: none resolved"
-    # 5. Log results
-    for name, status in checks.items():
-        level = logging.WARNING if "FAIL" in status or "WARN" in status else logging.INFO
-        logger.log(level, "Health check [%s]: %s", name, status)
-    # 6. Optional: post to #brain-dashboard
-    dash_id = channel_ids.get("brain-dashboard")
-    if dash_id:
-        from core.formatter import format_health_check
-        blocks = format_health_check(checks)
-        try:
-            client.chat_postMessage(channel=dash_id, text="Bot startup health check", blocks=blocks)
-        except Exception:
-            logger.debug("Could not post health check to dashboard")
+        logger.warning("Handler registration failed (bot will run without handlers): %s", e)
 
+    # 3. Load dynamic keywords into classifier
+    try:
+        from config import load_dynamic_keywords
+        keywords = load_dynamic_keywords()
+        logger.info("Dynamic keywords loaded: %s", {d: len(v) for d, v in keywords.items()})
+    except Exception:
+        logger.info("Dynamic keywords unavailable — using seed keywords")
 
-def main():
-    signal.signal(signal.SIGINT, handle_shutdown)
-    signal.signal(signal.SIGTERM, handle_shutdown)
-
-    register_handlers()
-    start_scheduler()
-
-    # Run vault + journal indexers on startup
+    # 4. Run vault + journal indexers
     try:
         from core.vault_indexer import run_full_index as index_vault
         from core.journal_indexer import run_full_index as index_journal
         vault_count = index_vault()
         journal_count = index_journal()
         logger.info("Startup index: %d vault files, %d journal entries", vault_count, journal_count)
-        # Populate FTS5 index after vault index
-        try:
-            from config import DB_PATH, VAULT_PATH
-            from core.fts_index import populate_fts
-            fts_count = populate_fts(db_path=str(DB_PATH), vault_path=str(VAULT_PATH))
-            logger.info("FTS5 index populated: %d files", fts_count)
-        except Exception as e:
-            logger.warning("FTS5 population failed (non-critical): %s", e)
-        # Populate vector embeddings after FTS (optional, non-critical)
-        try:
-            from core.embedding_store import embed_all_files, seed_icor_embeddings
-            embed_count = embed_all_files()
-            icor_count = seed_icor_embeddings()
-            logger.info("Vector embeddings: %d vault files, %d ICOR refs", embed_count, icor_count)
-        except Exception as e:
-            logger.warning("Vector embedding failed (non-critical): %s", e)
-        # Sprint 3: Graph schema + ICOR affinity + community detection
-        try:
-            from core.graph_ops import ensure_icor_nodes
-            from core.icor_affinity import rebuild_all_icor_edges
-            from core.community import update_community_ids
-            ensure_icor_nodes()
-            affinity_count = rebuild_all_icor_edges()
-            community_count = update_community_ids()
-            logger.info("Graph: ICOR nodes ensured, %d affinity edges, %d communities assigned",
-                        affinity_count, community_count)
-        except Exception as e:
-            logger.warning("Graph/community setup failed (non-critical): %s", e)
     except Exception:
-        logger.warning("Startup indexing failed — will work without cached index")
+        logger.warning("Startup vault/journal indexing failed")
 
-    # Run health check after indexers
+    # 5. Populate FTS5 index
     try:
-        channel_ids = resolve_channel_ids(app.client)
-        _run_health_check(app.client, channel_ids)
-    except Exception:
-        logger.warning("Health check failed — continuing startup")
+        from config import DB_PATH, VAULT_PATH
+        from core.fts_index import populate_fts
+        fts_count = populate_fts(db_path=str(DB_PATH), vault_path=str(VAULT_PATH))
+        logger.info("FTS5 index populated: %d files", fts_count)
+    except Exception as e:
+        logger.warning("FTS5 population failed (non-critical): %s", e)
 
-    logger.info("Starting Second Brain bot in Socket Mode...")
-    handler = SocketModeHandler(app, SLACK_APP_TOKEN)
-    handler.start()
+    # 6. Populate vector embeddings
+    try:
+        from core.embedding_store import embed_all_files, seed_icor_embeddings
+        embed_count = embed_all_files()
+        icor_count = seed_icor_embeddings()
+        logger.info("Vector embeddings: %d vault files, %d ICOR refs", embed_count, icor_count)
+    except Exception as e:
+        logger.warning("Vector embedding failed (non-critical): %s", e)
+
+    # 7. Graph schema + ICOR affinity + community detection
+    try:
+        from core.graph_ops import ensure_icor_nodes
+        from core.icor_affinity import rebuild_all_icor_edges
+        from core.community import update_community_ids
+        ensure_icor_nodes()
+        affinity_count = rebuild_all_icor_edges()
+        community_count = update_community_ids()
+        logger.info(
+            "Graph: ICOR nodes ensured, %d affinity edges, %d communities assigned",
+            affinity_count, community_count,
+        )
+    except Exception as e:
+        logger.warning("Graph/community setup failed (non-critical): %s", e)
+
+    # 8. Health check
+    _run_health_check()
+
+    logger.info("Post-init complete. Bot is ready.")
+
+
+# ---------------------------------------------------------------------------
+# Shutdown: post_shutdown callback
+# ---------------------------------------------------------------------------
+async def post_shutdown(application: Application) -> None:
+    """Clean up resources on shutdown."""
+    logger.info("Shutting down executor pool...")
+    shutdown_executor()
+    logger.info("Shutdown complete.")
+
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+def _run_health_check():
+    """Verify critical subsystems on startup."""
+    checks = {}
+
+    # 1. Database accessible
+    try:
+        from core.db_connection import get_connection
+        with get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) as c FROM icor_hierarchy")
+            row = cursor.fetchone()
+            checks["database"] = f"OK ({row[0]} ICOR nodes)"
+    except Exception as e:
+        checks["database"] = f"FAIL: {e}"
+
+    # 2. Vault path exists
+    from config import VAULT_PATH
+    checks["vault"] = "OK" if Path(VAULT_PATH).is_dir() else "FAIL: not found"
+
+    # 3. Anthropic API key present
+    from config import ANTHROPIC_API_KEY
+    checks["anthropic_api"] = "OK" if ANTHROPIC_API_KEY else "WARN: not set (AI commands disabled)"
+
+    # 4. Topic IDs configured
+    checks["topics"] = f"OK ({len(TOPICS)} configured)" if TOPICS else "WARN: no topic IDs configured"
+
+    # 5. Owner configured
+    checks["owner"] = f"OK (ID: {OWNER_TELEGRAM_ID})" if OWNER_TELEGRAM_ID else "WARN: no owner restriction"
+
+    # 6. Log results
+    for name, status in checks.items():
+        level = logging.WARNING if "FAIL" in status or "WARN" in status else logging.INFO
+        logger.log(level, "Health check [%s]: %s", name, status)
+
+
+# ---------------------------------------------------------------------------
+# Unhandled message fallback (owner-only, in inbox topic)
+# ---------------------------------------------------------------------------
+async def _unhandled_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Catch-all for text messages in the inbox topic — will be handled by capture module."""
+    # This is a placeholder. The capture handler module (Agent B) will replace this
+    # with the actual classification + routing pipeline.
+    logger.debug("Unhandled message from user %s", update.effective_user.id if update.effective_user else "unknown")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+def main():
+    application = (
+        ApplicationBuilder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .defaults(Defaults(tzinfo=CST))
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .concurrent_updates(8)
+        .build()
+    )
+
+    # Add a low-priority catch-all for unhandled text messages (owner only)
+    application.add_handler(
+        MessageHandler(owner_filter & filters.TEXT & ~filters.COMMAND, _unhandled_message),
+        group=999,  # Lowest priority — other handlers should be in lower group numbers
+    )
+
+    logger.info("Starting Second Brain bot with polling...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":

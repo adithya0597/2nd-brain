@@ -1,10 +1,8 @@
-slack-bolt>=1.18.0
-slack-sdk>=3.27.0
+python-telegram-bot[job-queue]>=21.11
 anthropic>=0.40.0
 notion-client>=2.2.0
 aiosqlite>=0.20.0
 python-dotenv>=1.0.0
-schedule>=1.2.0
 sentence-transformers>=2.2.0
 pyyaml>=6.0
 sqlite-vec>=0.1.6

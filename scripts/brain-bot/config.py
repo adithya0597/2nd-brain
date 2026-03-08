@@ -1,4 +1,4 @@
-"""Configuration for Second Brain Slack Bot."""
+"""Configuration for Second Brain Telegram Bot."""
 import logging
 import os
 from pathlib import Path
@@ -8,11 +8,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Slack tokens
-SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
-SLACK_APP_TOKEN = os.environ["SLACK_APP_TOKEN"]  # xapp- token for Socket Mode
-SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
-OWNER_SLACK_ID = os.environ.get("OWNER_SLACK_ID", "")  # Only process messages from owner
+# Telegram
+TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+OWNER_TELEGRAM_ID = int(os.environ.get("OWNER_TELEGRAM_ID", "0"))
+GROUP_CHAT_ID = int(os.environ.get("GROUP_CHAT_ID", "0"))
 
 # Anthropic
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -27,7 +26,7 @@ EMBEDDING_DIM = 384
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
 
 # Paths (resolve relative to project root)
-PROJECT_ROOT = Path(__file__).parent.parent.parent  # scripts/slack-bot/ -> project root
+PROJECT_ROOT = Path(__file__).parent.parent.parent  # scripts/brain-bot/ -> project root
 VAULT_PATH = PROJECT_ROOT / "vault"
 DB_PATH = PROJECT_ROOT / "data" / "brain.db"
 COMMANDS_PATH = PROJECT_ROOT / ".claude" / "commands" / "brain"
@@ -44,22 +43,31 @@ NOTION_COLLECTIONS = {
     "people": "collection://231fda46-1a19-811c-ac4d-000b87d02a66",
 }
 
-# Channel name -> purpose mapping
-CHANNELS = {
-    "brain-inbox": "Raw capture and routing",
-    "brain-daily": "Morning briefings, evening reviews, actions, projects, resources",
-    "brain-insights": "Drift analysis, idea generation, pattern synthesis, and reflections",
-    "brain-dashboard": "ICOR heatmap, project status, and cost tracking",
-}
+# Forum topic name -> thread_id mapping (populated from TOPICS_* env vars or at runtime)
+# Each topic in the Telegram group replaces a Slack channel.
+# Set these after creating forum topics in your group, or configure via env vars.
+TOPICS: dict[str, int] = {}
+_topic_names = [
+    "brain-inbox", "brain-daily", "brain-actions", "brain-dashboard",
+    "brain-ideas", "brain-drift", "brain-insights",
+    "brain-health", "brain-wealth", "brain-relations",
+    "brain-growth", "brain-purpose", "brain-systems",
+    "brain-projects", "brain-resources",
+]
+for _name in _topic_names:
+    _env_key = f"TOPIC_{_name.upper().replace('-', '_')}"
+    _val = os.environ.get(_env_key, "")
+    if _val:
+        TOPICS[_name] = int(_val)
 
-# ICOR dimension -> channel mapping (captures now go to captures_log table, not Slack channels)
-DIMENSION_CHANNELS = {
-    "Health & Vitality": None,
-    "Wealth & Finance": None,
-    "Relationships": None,
-    "Mind & Growth": None,
-    "Purpose & Impact": None,
-    "Systems & Environment": None,
+# ICOR dimension -> topic mapping (captures go to captures_log table + topic if configured)
+DIMENSION_TOPICS = {
+    "Health & Vitality": "brain-health",
+    "Wealth & Finance": "brain-wealth",
+    "Relationships": "brain-relations",
+    "Mind & Growth": "brain-growth",
+    "Purpose & Impact": "brain-purpose",
+    "Systems & Environment": "brain-systems",
 }
 
 # Keywords for quick routing (no AI needed)
@@ -72,7 +80,7 @@ DIMENSION_KEYWORDS = {
     "Systems & Environment": ["system", "automate", "tool", "setup", "organize", "clean", "home", "workspace", "routine", "habit", "process", "workflow", "set up", "setting up", "clean up", "cleaning up", "time management"],
 }
 
-# Keywords for cross-posting captures to PARA channels
+# Keywords for cross-posting captures to PARA topics
 PROJECT_KEYWORDS = ["project", "milestone", "deadline", "sprint", "deliverable", "launch", "ship", "release", "roadmap", "timeline", "blocker", "blocked", "progress", "phase", "kickoff"]
 RESOURCE_KEYWORDS = ["article", "book", "resource", "reference", "template", "tool", "framework", "library", "tutorial", "course", "documentation", "guide", "cheatsheet", "recipe", "podcast", "video", "lecture"]
 
