@@ -100,6 +100,7 @@ async def post_init(application: Application) -> None:
         BotCommand("find", "Semantic vault search"),
         BotCommand("help", "List available commands"),
         BotCommand("engage", "Engagement analysis"),
+        BotCommand("dashboard", "Full ICOR dashboard with quick actions"),
     ]
     await application.bot.set_my_commands(commands)
     logger.info("Registered %d bot commands with Telegram", len(commands))
@@ -163,7 +164,15 @@ async def post_init(application: Application) -> None:
     except Exception as e:
         logger.warning("Graph/community setup failed (non-critical): %s", e)
 
-    # 8. Health check
+    # 8. Register scheduled jobs with PTB's JobQueue
+    try:
+        from handlers.scheduled import register_jobs
+        register_jobs(application.job_queue)
+        logger.info("Scheduled jobs registered with JobQueue")
+    except Exception as e:
+        logger.warning("Failed to register scheduled jobs: %s", e)
+
+    # 9. Health check
     _run_health_check()
 
     logger.info("Post-init complete. Bot is ready.")
