@@ -1,226 +1,226 @@
-"""Feedback handlers for classification corrections.
+"""Classification feedback handlers for Telegram.
 
-Handles "Correct" / "Wrong" button clicks on routed messages.
+Handles Correct/Wrong button clicks on capture confirmations.
 Updates the classifications table and keyword_feedback for learning.
 """
 import json
 import logging
 
-from slack_bolt import App
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 
 import config
-from core.async_utils import run_async
+from config import DIMENSION_TOPICS
 from core.db_ops import execute, query
-import handlers.commands as _commands_mod
 
 logger = logging.getLogger(__name__)
 
 
-def register(app: App):
-    """Register feedback action handlers."""
+def _cb(data: dict) -> str:
+    """Compact JSON callback data."""
+    return json.dumps(data, separators=(",", ":"))
 
-    @app.action("feedback_correct")
-    def handle_correct(ack, body, client):
-        """User confirmed the classification was correct."""
-        ack()
-        try:
-            value = json.loads(body["actions"][0]["value"])
-            ts = value.get("ts", "")
-            dimensions = value.get("dimensions", [])
 
-            # Increment success count for keywords that matched this dimension
-            for dim in dimensions:
-                run_async(execute(
+async def handle_fb_correct(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User confirmed the classification was correct."""
+    cb_query = update.callback_query
+    await cb_query.answer("\u2705 Thanks!")
+
+    try:
+        data = json.loads(cb_query.data)
+        msg_id = data.get("m", "")
+
+        # Look up dimensions from the classification record
+        rows = await query(
+            "SELECT primary_dimension, all_scores_json FROM classifications WHERE message_ts = ?",
+            (str(msg_id),),
+        )
+        if rows:
+            primary_dim = rows[0]["primary_dimension"]
+            if primary_dim:
+                await execute(
                     "UPDATE keyword_feedback SET success_count = success_count + 1 "
                     "WHERE dimension = ?",
-                    (dim,),
-                ))
-
-            # Update the message to show confirmed
-            channel = body.get("channel", {}).get("id", "")
-            message_ts = body.get("message", {}).get("ts", "")
-            if channel and message_ts:
-                # Remove buttons and add confirmation
-                original_blocks = body.get("message", {}).get("blocks", [])
-                # Filter out the feedback action block
-                updated_blocks = [
-                    b for b in original_blocks
-                    if not (b.get("block_id", "").startswith("feedback_"))
-                ]
-                updated_blocks.append({
-                    "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": "Classification confirmed"}],
-                })
-                client.chat_update(
-                    channel=channel,
-                    ts=message_ts,
-                    blocks=updated_blocks,
-                    text="Classification confirmed",
-                )
-        except Exception:
-            logger.exception("Failed to handle feedback_correct")
-
-    @app.action("feedback_wrong")
-    def handle_wrong(ack, body, client):
-        """User indicated the classification was wrong — show dimension picker."""
-        ack()
-        try:
-            value = json.loads(body["actions"][0]["value"])
-            ts = value.get("ts", "")
-            original_dims = value.get("dimensions", [])
-
-            # Build overflow menu with all dimensions
-            options = [
-                {
-                    "text": {"type": "plain_text", "text": dim},
-                    "value": json.dumps({
-                        "ts": ts,
-                        "correct_dimension": dim,
-                        "original_dimensions": original_dims,
-                    }),
-                }
-                for dim in config.DIMENSION_CHANNELS.keys()
-            ]
-
-            channel = body.get("channel", {}).get("id", "")
-            message_ts = body.get("message", {}).get("ts", "")
-            if channel and message_ts:
-                original_blocks = body.get("message", {}).get("blocks", [])
-                # Replace feedback buttons with dimension picker
-                updated_blocks = [
-                    b for b in original_blocks
-                    if not (b.get("block_id", "").startswith("feedback_"))
-                ]
-                updated_blocks.append({
-                    "type": "actions",
-                    "block_id": f"correction_{ts}",
-                    "elements": [
-                        {
-                            "type": "static_select",
-                            "placeholder": {"type": "plain_text", "text": "Select correct dimension"},
-                            "action_id": "feedback_select_dimension",
-                            "options": options,
-                        },
-                    ],
-                })
-                client.chat_update(
-                    channel=channel,
-                    ts=message_ts,
-                    blocks=updated_blocks,
-                    text="Select the correct dimension",
-                )
-        except Exception:
-            logger.exception("Failed to handle feedback_wrong")
-
-    @app.action("feedback_select_dimension")
-    def handle_dimension_select(ack, body, client):
-        """User selected the correct dimension from the picker."""
-        ack()
-        try:
-            selected = body["actions"][0]["selected_option"]["value"]
-            data = json.loads(selected)
-            ts = data.get("ts", "")
-            correct_dim = data.get("correct_dimension", "")
-            original_dims = data.get("original_dimensions", [])
-
-            # Update classification record
-            run_async(execute(
-                "UPDATE classifications SET user_correction = ?, corrected_at = datetime('now') "
-                "WHERE message_ts = ?",
-                (correct_dim, ts),
-            ))
-
-            # Decrement success / increment fail for original dimensions
-            for dim in original_dims:
-                run_async(execute(
-                    "UPDATE keyword_feedback SET fail_count = fail_count + 1 "
-                    "WHERE dimension = ?",
-                    (dim,),
-                ))
-
-            # Update the message
-            channel = body.get("channel", {}).get("id", "")
-            message_ts = body.get("message", {}).get("ts", "")
-            if channel and message_ts:
-                original_blocks = body.get("message", {}).get("blocks", [])
-                updated_blocks = [
-                    b for b in original_blocks
-                    if not (b.get("block_id", "").startswith("correction_"))
-                ]
-                updated_blocks.append({
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": f"Corrected to *{correct_dim}* (was: {', '.join(original_dims) or 'none'})",
-                    }],
-                })
-                client.chat_update(
-                    channel=channel,
-                    ts=message_ts,
-                    blocks=updated_blocks,
-                    text=f"Corrected to {correct_dim}",
+                    (primary_dim,),
                 )
 
-            # Log corrected capture to captures_log (replaces dimension channel routing)
-            rows = run_async(query(
-                "SELECT message_text FROM classifications WHERE message_ts = ?",
-                (ts,),
-            ))
-            if rows:
-                import json as _json
-                run_async(execute(
+        # Update the message: remove buttons, add confirmation
+        await cb_query.edit_message_reply_markup(reply_markup=None)
+        original_text = cb_query.message.text_html or cb_query.message.text or ""
+        await cb_query.edit_message_text(
+            original_text + "\n\n<i>\u2705 Classification confirmed</i>",
+            parse_mode="HTML",
+        )
+
+    except Exception:
+        logger.exception("Failed to handle feedback_correct")
+
+
+async def handle_fb_wrong(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User indicated the classification was wrong — show dimension picker."""
+    cb_query = update.callback_query
+    await cb_query.answer()
+
+    try:
+        data = json.loads(cb_query.data)
+        msg_id = data.get("m", "")
+
+        # Build dimension picker (2 per row)
+        dim_names = list(DIMENSION_TOPICS.keys())
+        buttons = [
+            InlineKeyboardButton(
+                dim_name,
+                callback_data=_cb({"a": "fb_d", "m": msg_id, "d": i}),
+            )
+            for i, dim_name in enumerate(dim_names)
+        ]
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        keyboard = InlineKeyboardMarkup(rows)
+
+        # Replace buttons with dimension picker
+        original_text = cb_query.message.text_html or cb_query.message.text or ""
+        await cb_query.edit_message_text(
+            original_text + "\n\n<b>Select the correct dimension:</b>",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+
+    except Exception:
+        logger.exception("Failed to handle feedback_wrong")
+
+
+async def handle_fb_dim_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User selected the correct dimension from the picker."""
+    cb_query = update.callback_query
+    await cb_query.answer()
+
+    try:
+        data = json.loads(cb_query.data)
+        msg_id = data.get("m", "")
+        dim_idx = data.get("d", 0)
+
+        dim_names = list(DIMENSION_TOPICS.keys())
+        if dim_idx < 0 or dim_idx >= len(dim_names):
+            return
+        correct_dim = dim_names[dim_idx]
+
+        # Look up original dimensions
+        rows = await query(
+            "SELECT primary_dimension, all_scores_json FROM classifications WHERE message_ts = ?",
+            (str(msg_id),),
+        )
+        original_dims = []
+        if rows:
+            original_dim = rows[0]["primary_dimension"]
+            if original_dim:
+                original_dims = [original_dim]
+            # Also try to get all from scores JSON
+            try:
+                scores = json.loads(rows[0]["all_scores_json"] or "[]")
+                original_dims = [s["dimension"] for s in scores]
+            except Exception:
+                pass
+
+        # Update classification record
+        await execute(
+            "UPDATE classifications SET user_correction = ?, corrected_at = datetime('now') "
+            "WHERE message_ts = ?",
+            (correct_dim, str(msg_id)),
+        )
+
+        # Decrement success / increment fail for original dimensions
+        for dim in original_dims:
+            await execute(
+                "UPDATE keyword_feedback SET fail_count = fail_count + 1 "
+                "WHERE dimension = ?",
+                (dim,),
+            )
+
+        # Log corrected capture to captures_log
+        if rows:
+            text = rows[0].get("message_text", "") if isinstance(rows[0], dict) else ""
+            if not text:
+                text_rows = await query(
+                    "SELECT message_text FROM classifications WHERE message_ts = ?",
+                    (str(msg_id),),
+                )
+                text = text_rows[0]["message_text"] if text_rows else ""
+            if text:
+                await execute(
                     "INSERT INTO captures_log "
                     "(message_text, dimensions_json, confidence, method, is_actionable, source_channel) "
                     "VALUES (?, ?, 1.0, 'user_corrected', 0, 'brain-inbox')",
-                    (rows[0]["message_text"], _json.dumps([correct_dim])),
-                ))
+                    (text, json.dumps([correct_dim])),
+                )
 
-            logger.info("Classification corrected: ts=%s, %s -> %s", ts, original_dims, correct_dim)
-        except Exception:
-            logger.exception("Failed to handle feedback_select_dimension")
+        # Update the message
+        import html
+        original_text_parts = (cb_query.message.text or "").split("\nSelect the correct dimension:")
+        base_text = original_text_parts[0].strip() if original_text_parts else ""
 
-    @app.action("bouncer_select_dimension")
-    def handle_bouncer_select(ack, body, client):
-        """User selected a dimension from the confidence bouncer DM."""
-        ack()
-        try:
-            selected = body["actions"][0]["selected_option"]["value"]
-            data = json.loads(selected)
-            message_ts = data.get("ts", "")
-            selected_dim = data.get("dimension", "")
-            original_text = data.get("text", "")
-            original_channel = data.get("channel", "")
+        orig_text = ", ".join(original_dims) or "none"
+        await cb_query.edit_message_text(
+            f"{html.escape(base_text)}\n\n"
+            f"<i>Corrected to <b>{html.escape(correct_dim)}</b> "
+            f"(was: {html.escape(orig_text)})</i>",
+            parse_mode="HTML",
+        )
 
-            if not message_ts or not selected_dim:
-                return
+        logger.info("Classification corrected: msg_id=%s, %s -> %s", msg_id, original_dims, correct_dim)
 
-            # Update pending_captures
-            run_async(execute(
-                "UPDATE pending_captures SET user_selection = ?, status = 'resolved', "
-                "resolved_at = datetime('now') WHERE message_ts = ?",
-                (selected_dim, message_ts),
-            ))
+    except Exception:
+        logger.exception("Failed to handle feedback_select_dimension")
 
-            # Update DM message
-            dm_channel = body.get("channel", {}).get("id", "")
-            dm_ts = body.get("message", {}).get("ts", "")
-            if dm_channel and dm_ts:
-                try:
-                    client.chat_update(
-                        channel=dm_channel, ts=dm_ts,
-                        blocks=[{
-                            "type": "section",
-                            "text": {"type": "mrkdwn", "text": f":white_check_mark: *Filed to {selected_dim}*"},
-                        }],
-                        text=f"Filed to {selected_dim}",
-                    )
-                except Exception:
-                    pass
 
-            # Route to the selected dimension channel
-            from handlers.capture import _process_bouncer_resolution
-            _process_bouncer_resolution(client, original_text, message_ts, selected_dim, original_channel)
+async def handle_bouncer_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User selected a dimension from the confidence bouncer DM."""
+    cb_query = update.callback_query
+    await cb_query.answer()
 
-            logger.info("Bouncer resolved: ts=%s -> %s", message_ts, selected_dim)
-        except Exception:
-            logger.exception("Error handling bouncer selection")
+    try:
+        data = json.loads(cb_query.data)
+        msg_id = data.get("m", "")
+        dim_idx = data.get("d", 0)
+
+        dim_names = list(DIMENSION_TOPICS.keys())
+        if dim_idx < 0 or dim_idx >= len(dim_names):
+            return
+        selected_dim = dim_names[dim_idx]
+
+        # Update pending_captures
+        await execute(
+            "UPDATE pending_captures SET user_selection = ?, status = 'resolved', "
+            "resolved_at = datetime('now') WHERE message_ts = ?",
+            (selected_dim, str(msg_id)),
+        )
+
+        # Update the bouncer DM message
+        import html
+        await cb_query.edit_message_text(
+            f"\u2705 <b>Filed to {html.escape(selected_dim)}</b>",
+            parse_mode="HTML",
+        )
+
+        # Look up original text for routing
+        rows = await query(
+            "SELECT message_text FROM pending_captures WHERE message_ts = ?",
+            (str(msg_id),),
+        )
+        original_text = rows[0]["message_text"] if rows else ""
+
+        # Complete the routing
+        from handlers.capture import process_bouncer_resolution
+        await process_bouncer_resolution(original_text, int(msg_id), selected_dim, None)
+
+        logger.info("Bouncer resolved: msg_id=%s -> %s", msg_id, selected_dim)
+
+    except Exception:
+        logger.exception("Error handling bouncer selection")
+
+
+def register(application: Application):
+    """Register feedback callback query handlers."""
+    application.add_handler(CallbackQueryHandler(handle_fb_correct, pattern=r'\{"a":"fb_ok"'))
+    application.add_handler(CallbackQueryHandler(handle_fb_wrong, pattern=r'\{"a":"fb_no"'))
+    application.add_handler(CallbackQueryHandler(handle_fb_dim_select, pattern=r'\{"a":"fb_d"'))
+    application.add_handler(CallbackQueryHandler(handle_bouncer_select, pattern=r'\{"a":"bnc"'))
