@@ -58,6 +58,11 @@ def append_to_rolling_memo(content: str, date_str: str | None = None) -> bool:
                 )
                 logger.info("Created rolling memo: %s", MEMO_PATH)
             else:
+                # Dedup: skip if today's date already has an entry
+                existing = MEMO_PATH.read_text()
+                if f"### {date_str}" in existing:
+                    logger.info("Rolling memo already has entry for %s, skipping", date_str)
+                    return True
                 # Append with a blank line separator
                 with open(MEMO_PATH, "a") as f:
                     f.write("\n" + content.strip() + "\n")
