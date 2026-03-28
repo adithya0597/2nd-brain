@@ -624,6 +624,24 @@ async def job_resolve_pending_captures(context: CallbackContext):
         logger.exception("Error in job_resolve_pending_captures")
 
 
+async def job_rolling_memo(context: CallbackContext):
+    """Daily 9:30pm: Generate structured daily memo for context compression."""
+    try:
+        logger.info("Running rolling memo job")
+        result = await _call_claude("rolling-memo")
+        if result:
+            from core.rolling_memo import append_to_rolling_memo
+            from core.async_utils import run_in_executor
+            success = await run_in_executor(append_to_rolling_memo, result)
+            if success:
+                logger.info("Rolling memo appended")
+            else:
+                logger.warning("Rolling memo append failed")
+        _record_job_run("rolling_memo")
+    except Exception:
+        logger.exception("Rolling memo job failed")
+
+
 async def job_graduation_proposals(context: CallbackContext):
     """Weekly Sunday 5:15am: Detect and propose concept graduations."""
     try:
@@ -723,6 +741,9 @@ def register_jobs(job_queue):
 
     # Daily 9pm: Evening review prompt
     job_queue.run_daily(job_evening_prompt, time=time(21, 0, tzinfo=CST), name="evening_prompt")
+
+    # Daily 9:30pm: Rolling memo (after evening prompt, before Notion sync)
+    job_queue.run_daily(job_rolling_memo, time=time(21, 30, tzinfo=CST), name="rolling_memo")
 
     # Daily 10pm: Notion sync (silent)
     job_queue.run_daily(job_notion_sync, time=time(22, 0, tzinfo=CST), name="notion_sync")

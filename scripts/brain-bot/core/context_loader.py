@@ -33,6 +33,11 @@ _COMMAND_QUERIES = {
         "today_journal": "SELECT id, content, mood, energy, icor_elements FROM journal_entries WHERE date = date('now') ORDER BY created_at",
         "pending_actions": "SELECT id, description, source_file, icor_element, icor_project FROM action_items WHERE status = 'pending' ORDER BY created_at DESC",
     },
+    "rolling-memo": {
+        "today_journal": "SELECT date, summary, mood, energy, icor_elements FROM journal_entries WHERE date = date('now')",
+        "recent_captures": "SELECT message_text, dimensions_json, created_at FROM captures_log WHERE date(created_at) = date('now') ORDER BY created_at DESC LIMIT 5",
+        "engagement_today": "SELECT engagement_score, captures_count, actions_count FROM engagement_daily WHERE date = date('now')",
+    },
     "drift": {
         "journal_60d": "SELECT date, content, icor_elements, sentiment_score FROM journal_entries WHERE date >= date('now', '-60 days') ORDER BY date",
         "icor_hierarchy": "SELECT h.id, h.level, h.name, p.name AS parent_name, h.attention_score, h.last_mentioned FROM icor_hierarchy h LEFT JOIN icor_hierarchy p ON h.parent_id = p.id ORDER BY h.id",
