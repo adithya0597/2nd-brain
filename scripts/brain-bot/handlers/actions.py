@@ -190,6 +190,54 @@ async def handle_save_vault(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Error saving to vault")
 
 
+async def handle_review_fading(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show a preview of the top fading file."""
+    cb = update.callback_query
+    await cb.answer("Loading...")
+
+    try:
+        from core.db_ops import query as _query
+        fading = await _query("""
+            SELECT n.title, n.file_path
+            FROM vault_nodes n
+            LEFT JOIN vault_edges e ON n.id = e.source_node_id
+            WHERE n.node_type = 'document'
+              AND n.file_path NOT LIKE '%Daily Notes%'
+              AND n.file_path NOT LIKE '%Inbox%'
+              AND n.file_path NOT LIKE '%Reports%'
+              AND NOT EXISTS (
+                  SELECT 1 FROM vault_edges re
+                  JOIN vault_nodes src ON re.source_node_id = src.id
+                  WHERE re.target_node_id = n.id
+                    AND re.edge_type = 'wikilink'
+                    AND src.last_modified >= date('now', '-30 days')
+              )
+            GROUP BY n.id HAVING COUNT(e.id) >= 3
+            ORDER BY julianday('now') - julianday(n.indexed_at) DESC
+            LIMIT 1
+        """)
+
+        if fading:
+            import config
+            file_path = config.VAULT_PATH / fading[0]["file_path"]
+            title = fading[0]["title"]
+            content = ""
+            if file_path.exists():
+                content = file_path.read_text()[:500]
+
+            from core.formatter import _esc
+            await cb.message.reply_text(
+                f"<b>\U0001f4d6 {_esc(title)}</b>\n\n"
+                f"<blockquote>{_esc(content)}{'...' if len(content) >= 500 else ''}</blockquote>",
+                parse_mode="HTML",
+            )
+        else:
+            await cb.message.reply_text("No fading content found.")
+    except Exception:
+        logger.exception("Review fading failed")
+        await cb.message.reply_text("Failed to load content.")
+
+
 async def handle_dismiss(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Delete an interactive message."""
     query = update.callback_query
@@ -227,3 +275,4 @@ def register(application: Application):
     application.add_handler(CallbackQueryHandler(handle_snooze, pattern=r'\{"a":"snooze"'))
     application.add_handler(CallbackQueryHandler(handle_save_vault, pattern=r'\{"a":"save_vault"'))
     application.add_handler(CallbackQueryHandler(handle_dismiss, pattern=r'\{"a":"dismiss"'))
+    application.add_handler(CallbackQueryHandler(handle_review_fading, pattern=r'\{"a":"review_fading"'))

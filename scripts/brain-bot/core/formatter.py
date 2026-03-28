@@ -989,3 +989,46 @@ def format_health_check(checks: dict) -> FormatResult:
 
     parts.append(f"\n<i>Started at {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>")
     return "\n".join(parts), None
+
+
+# ---------------------------------------------------------------------------
+# Fading Memories
+# ---------------------------------------------------------------------------
+
+def format_fading_memories(fading_items: list[dict]) -> tuple[str, InlineKeyboardMarkup | None]:
+    """Format fading memories section for the evening prompt.
+
+    Args:
+        fading_items: List of dicts with keys: title, days_old, edge_count, file_path
+
+    Returns:
+        (html_text, inline_keyboard) tuple
+    """
+    if not fading_items:
+        return "", None
+
+    lines = [
+        f"\n{_DIV}",
+        "<b>Fading Memories</b>",
+        "These haven't been revisited in a while:\n",
+    ]
+    for item in fading_items[:3]:
+        title = _esc(item.get("title", "?"))
+        days = item.get("days_old", 0)
+        edges = item.get("edge_count", 0)
+        lines.append(f"  \u2022 <b>{title}</b> \u2014 {days}d, {edges} connections")
+
+    lines.append("\n<i>A quick review keeps knowledge fresh.</i>")
+
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "\U0001f50d Review Top",
+            callback_data=_cb({"a": "review_fading"}),
+        ),
+        InlineKeyboardButton(
+            "\u2705 Dismiss",
+            callback_data=_cb({"a": "dismiss"}),
+        ),
+    ]])
+
+    return "\n".join(lines), kb

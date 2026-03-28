@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS vault_edges (
     weight REAL DEFAULT 1.0,
     metadata_json TEXT DEFAULT '{}',
     created_at TEXT DEFAULT (datetime('now')),
+    verified_at TEXT,
     UNIQUE(source_node_id, target_node_id, edge_type),
     FOREIGN KEY (source_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE,
     FOREIGN KEY (target_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE

@@ -899,6 +899,68 @@ def migrate(db_path: Path = DB_PATH):
         conn.commit()
         print("Step 25 complete: metadata filtering indexes created")
 
+    # 26. Graduation proposals table (Concept Graduation v1)
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='graduation_proposals'"
+    )
+    if cursor.fetchone():
+        print("graduation_proposals table already exists — skipping Step 26")
+    else:
+        cursor.execute("""
+            CREATE TABLE graduation_proposals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cluster_hash TEXT NOT NULL UNIQUE,
+                proposed_title TEXT NOT NULL,
+                proposed_dimension TEXT,
+                source_capture_ids TEXT NOT NULL DEFAULT '[]',
+                source_texts TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('pending','approved','rejected','snoozed','expired')),
+                message_id INTEGER,
+                proposed_at TEXT DEFAULT (datetime('now')),
+                resolved_at TEXT,
+                snooze_until TEXT
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX idx_gp_status ON graduation_proposals(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_gp_hash ON graduation_proposals(cluster_hash)"
+        )
+        conn.commit()
+        print("Step 26 complete: graduation_proposals table ready")
+
+    # Step 26b: search_log table for measurement infrastructure
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS search_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query TEXT NOT NULL,
+            command TEXT,
+            channel_rankings TEXT DEFAULT '{}',
+            rrf_ranking TEXT DEFAULT '[]',
+            channels_used TEXT DEFAULT '',
+            total_candidates INTEGER DEFAULT 0,
+            result_count INTEGER DEFAULT 0,
+            elapsed_ms REAL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sl_command ON search_log(command)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sl_created ON search_log(created_at)")
+    conn.commit()
+    print("Step 26b: search_log table ready")
+
+    # Step 26c: verified_at column on vault_edges
+    try:
+        cursor.execute("ALTER TABLE vault_edges ADD COLUMN verified_at TEXT")
+        print("Step 26c: vault_edges.verified_at column added")
+    except Exception:
+        pass  # Column already exists
+    cursor.execute("UPDATE vault_edges SET verified_at = created_at WHERE verified_at IS NULL")
+    conn.commit()
+    print("Step 26c: verified_at backfilled from created_at")
+
     conn.close()
     print(f"\nMigration complete on {db_path}")
     print(f"  - sync_state table: created/verified")
@@ -918,6 +980,7 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - vec0 tables: upgraded to 512 dimensions (if sqlite-vec available)")
     print(f"  - vault_chunks + vec_chunks: section-level chunking created/verified")
     print(f"  - metadata filtering indexes: last_modified + type_nonempty created/verified")
+    print(f"  - graduation_proposals table: concept graduation created/verified")
 
 
 if __name__ == "__main__":

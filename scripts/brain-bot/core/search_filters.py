@@ -47,8 +47,8 @@ def is_selective(filters: MetadataFilters | None) -> bool:
     if filters.dimensions and len(filters.dimensions) <= 3:
         return True
 
-    # 1-2 file types out of 5 = 20-40% selectivity
-    if filters.file_types and len(filters.file_types) <= 2:
+    # Up to 4 file types out of ~10 = 20-40% selectivity
+    if filters.file_types and len(filters.file_types) <= 4:
         return True
 
     # Single community out of 5-10 = 10-20% selectivity
@@ -198,7 +198,15 @@ def filters_for_command(command_name: str) -> MetadataFilters | None:
                 now.strftime("%Y-%m-%d"),
             ),
         ),
-        # trace, connect, challenge, ghost: no filters (full history)
+        # trace, connect: no filters (full history)
+        # ghost, challenge: exclude system-generated content to prevent
+        # provenance erasure (LLM summaries replacing user's voice)
+        "ghost": MetadataFilters(
+            file_types=["concept", "journal", "meeting", ""],
+        ),
+        "challenge": MetadataFilters(
+            file_types=["concept", "journal", "meeting", ""],
+        ),
     }
 
     return COMMAND_FILTERS.get(command_name)

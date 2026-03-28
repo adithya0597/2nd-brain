@@ -328,6 +328,7 @@ def create_report_file(
 
         frontmatter = f"""---
 type: report
+source: system
 command: {command}
 date: {date}
 {icor_line}
@@ -388,6 +389,7 @@ def create_concept_file(
 
         frontmatter = f"""---
 type: concept
+source: system
 status: {status}
 date: {date}
 {icor_line}
@@ -429,6 +431,7 @@ def create_weekly_plan(
 
         frontmatter = f"""---
 type: weekly-plan
+source: system
 date: {date}
 ---
 

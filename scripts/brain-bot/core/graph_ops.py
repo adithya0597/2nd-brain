@@ -121,11 +121,12 @@ def upsert_edge(
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO vault_edges
-               (source_node_id, target_node_id, edge_type, weight, metadata_json)
-               VALUES (?, ?, ?, ?, ?)
+               (source_node_id, target_node_id, edge_type, weight, metadata_json, verified_at)
+               VALUES (?, ?, ?, ?, ?, datetime('now'))
                ON CONFLICT(source_node_id, target_node_id, edge_type) DO UPDATE SET
                    weight        = excluded.weight,
-                   metadata_json = excluded.metadata_json
+                   metadata_json = excluded.metadata_json,
+                   verified_at   = datetime('now')
             """,
             (source_id, target_id, edge_type, weight, metadata_json),
         )
@@ -334,11 +335,12 @@ def bulk_upsert_edges(
     with get_connection(db_path) as conn:
         conn.executemany(
             """INSERT INTO vault_edges
-               (source_node_id, target_node_id, edge_type, weight, metadata_json)
-               VALUES (?, ?, ?, ?, ?)
+               (source_node_id, target_node_id, edge_type, weight, metadata_json, verified_at)
+               VALUES (?, ?, ?, ?, ?, datetime('now'))
                ON CONFLICT(source_node_id, target_node_id, edge_type) DO UPDATE SET
                    weight        = excluded.weight,
-                   metadata_json = excluded.metadata_json
+                   metadata_json = excluded.metadata_json,
+                   verified_at   = datetime('now')
             """,
             rows,
         )

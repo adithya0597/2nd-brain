@@ -160,11 +160,11 @@ _COMMAND_VAULT_FILES = {
     "graduate": [],
     "trace": [],
     "ideas": [],
-    "ghost": [
+    "ghost": [  # User-authored identity files only (provenance-safe)
         "Identity/ICOR.md",
         "Identity/Values.md",
     ],
-    "challenge": [
+    "challenge": [  # User-authored identity files only (provenance-safe)
         "Identity/Values.md",
         "Identity/ICOR.md",
     ],
@@ -197,6 +197,10 @@ _GRAPH_CONTEXT_COMMANDS = {
     "emerge": {"method": "recent_daily", "depth": 1},
     "graduate": {"method": "recent_daily", "depth": 1},
     "ideas": {"method": "recent_daily", "depth": 1},
+    # ghost/challenge seed from Identity/ files only — provenance-safe since
+    # identity files are user-authored and their wikilink neighbors are unlikely
+    # to include Reports/. search_filters.py adds file_types exclusion for any
+    # hybrid search that may be added later.
     "ghost": {"method": "identity", "depth": 2},
     "challenge": {"method": "identity", "depth": 1},
     "weekly-review": {"method": "recent_daily", "depth": 1},
@@ -251,6 +255,7 @@ def _gather_hybrid_context(command_name: str, user_input: str, db_path: Path = N
             limit=search_config["limit"],
             db_path=db_path,
             metadata_filters=metadata_filters,
+            command=command_name,
         )
 
         result = {}

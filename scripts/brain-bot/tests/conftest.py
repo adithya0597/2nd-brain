@@ -292,6 +292,7 @@ CREATE TABLE IF NOT EXISTS vault_edges (
     weight REAL DEFAULT 1.0,
     metadata_json TEXT DEFAULT '{}',
     created_at TEXT DEFAULT (datetime('now')),
+    verified_at TEXT,
     UNIQUE(source_node_id, target_node_id, edge_type),
     FOREIGN KEY (source_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE,
     FOREIGN KEY (target_node_id) REFERENCES vault_nodes(id) ON DELETE CASCADE
@@ -538,6 +539,24 @@ CREATE TABLE IF NOT EXISTS alerts (
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
 CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(alert_type);
 CREATE INDEX IF NOT EXISTS idx_alerts_fingerprint ON alerts(fingerprint);
+
+-- graduation_proposals (migrate-db.py step 26)
+CREATE TABLE IF NOT EXISTS graduation_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cluster_hash TEXT NOT NULL UNIQUE,
+    proposed_title TEXT NOT NULL,
+    proposed_dimension TEXT,
+    source_capture_ids TEXT NOT NULL DEFAULT '[]',
+    source_texts TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','approved','rejected','snoozed','expired')),
+    message_id INTEGER,
+    proposed_at TEXT DEFAULT (datetime('now')),
+    resolved_at TEXT,
+    snooze_until TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_gp_status ON graduation_proposals(status);
+CREATE INDEX IF NOT EXISTS idx_gp_hash ON graduation_proposals(cluster_hash);
 """
 
 _SEED_SYNC_STATE = """

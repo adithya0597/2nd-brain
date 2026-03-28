@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Handler modules in registration order.
 # Each module must expose a register(application: Application) function.
-_HANDLER_MODULES = ["capture", "commands", "actions", "feedback", "dashboard"]
+_HANDLER_MODULES = ["capture", "commands", "actions", "feedback", "dashboard", "graduation"]
 
 
 def register_all(application: Application):

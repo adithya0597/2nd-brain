@@ -207,6 +207,7 @@ def hybrid_search(
     k: int = 60,
     db_path: Path = None,
     metadata_filters=None,
+    command: str | None = None,
 ) -> SearchResponse:
     """Main hybrid search entry point.
 
@@ -275,8 +276,30 @@ def hybrid_search(
             channels_used.append("graph")
 
     # Fuse with RRF
+    import time as _time
+    _search_start = _time.monotonic()
     total_candidates = len(metadata)
     fused = _rrf_fuse(ranked_lists, metadata, k=k)
+    elapsed_ms = (_time.monotonic() - _search_start) * 1000
+
+    # Log search for measurement infrastructure
+    try:
+        import json as _json
+        from core.db_connection import get_connection
+        with get_connection() as _conn:
+            _conn.execute(
+                "INSERT INTO search_log (query, command, channel_rankings, rrf_ranking, "
+                "channels_used, total_candidates, result_count, elapsed_ms) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (query_text, command,
+                 _json.dumps({ch: fps[:10] for ch, fps in ranked_lists.items()}),
+                 _json.dumps([r["file_path"] for r in fused[:10]]),
+                 ",".join(channels_used), total_candidates, len(fused),
+                 round(elapsed_ms, 2)),
+            )
+            _conn.commit()
+    except Exception:
+        logger.debug("search_log insert failed", exc_info=True)
 
     # Convert to SearchResult objects
     results = [

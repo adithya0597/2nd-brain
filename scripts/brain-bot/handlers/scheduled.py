@@ -130,8 +130,8 @@ async def _send_to_topic(bot, topic_name: str, text: str, keyboard=None):
     topic_id = TOPICS.get(topic_name)
     if not topic_id:
         logger.warning("Topic %s not configured, skipping send", topic_name)
-        return
-    await send_long_message(
+        return None
+    return await send_long_message(
         bot,
         chat_id=GROUP_CHAT_ID,
         text=text,
@@ -177,7 +177,41 @@ async def job_evening_prompt(context: CallbackContext):
             "<i>Run /close when you're ready for the full evening review.</i>"
         )
 
-        await _send_to_topic(context.bot, "brain-daily", text)
+        # Fading memories section (Mon/Wed/Fri only, skip if no journal)
+        fading_kb = None
+        weekday = datetime.now().weekday()
+        show_fading = weekday in (0, 2, 4) and recent  # recent = journal entries exist
+
+        if show_fading:
+            try:
+                fading = await query("""
+                    SELECT n.title, n.indexed_at, n.file_path,
+                           COUNT(e.id) AS edge_count,
+                           CAST(julianday('now') - julianday(n.indexed_at) AS INTEGER) AS days_old
+                    FROM vault_nodes n
+                    LEFT JOIN vault_edges e ON n.id = e.source_node_id
+                    WHERE n.node_type = 'document'
+                      AND n.file_path NOT LIKE '%Daily Notes%'
+                      AND n.file_path NOT LIKE '%Inbox%'
+                      AND n.file_path NOT LIKE '%Reports%'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM vault_edges re
+                          JOIN vault_nodes src ON re.source_node_id = src.id
+                          WHERE re.target_node_id = n.id
+                            AND re.edge_type = 'wikilink'
+                            AND src.last_modified >= date('now', '-30 days')
+                      )
+                    GROUP BY n.id HAVING edge_count >= 3
+                    ORDER BY days_old DESC LIMIT 3
+                """)
+                if fading:
+                    from core.formatter import format_fading_memories
+                    fading_section, fading_kb = format_fading_memories(fading)
+                    text += fading_section
+            except Exception:
+                logger.debug("Fading memories query failed", exc_info=True)
+
+        await _send_to_topic(context.bot, "brain-daily", text, fading_kb)
         _record_job_run("evening_prompt")
     except Exception:
         logger.exception("Evening prompt job failed")
@@ -590,6 +624,77 @@ async def job_resolve_pending_captures(context: CallbackContext):
         logger.exception("Error in job_resolve_pending_captures")
 
 
+async def job_graduation_proposals(context: CallbackContext):
+    """Weekly Sunday 5:15am: Detect and propose concept graduations."""
+    try:
+        logger.info("Running graduation proposals job")
+        from core.graduation_detector import detect_graduation_candidates
+
+        # Expire old pending proposals (14-day TTL)
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute(
+            "UPDATE graduation_proposals SET status='expired', resolved_at=datetime('now') "
+            "WHERE status='pending' AND proposed_at <= datetime('now', '-14 days')"
+        )
+        # Un-snooze overdue snoozed proposals
+        conn.execute(
+            "UPDATE graduation_proposals SET status='pending' "
+            "WHERE status='snoozed' AND snooze_until <= datetime('now')"
+        )
+        conn.commit()
+        conn.close()
+
+        candidates = await detect_graduation_candidates()
+        if not candidates:
+            logger.info("No graduation candidates found")
+            _record_job_run("graduation_proposals")
+            return
+
+        # Hard cap: 1 proposal per run
+        candidate = candidates[0]
+
+        row_id = await execute(
+            "INSERT OR IGNORE INTO graduation_proposals "
+            "(cluster_hash, proposed_title, proposed_dimension, source_capture_ids, source_texts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                candidate["cluster_hash"],
+                candidate["proposed_title"],
+                candidate["dimension"],
+                json.dumps(candidate["source_ids"]),
+                json.dumps(candidate["source_texts"]),
+            ),
+        )
+
+        if row_id:
+            rows = await query(
+                "SELECT * FROM graduation_proposals WHERE id=?", (row_id,),
+            )
+            if rows:
+                from handlers.graduation import format_graduation_proposal
+
+                text, kb = format_graduation_proposal(
+                    {
+                        **rows[0],
+                        "capture_count": candidate["capture_count"],
+                        "days_span": candidate["days_span"],
+                    }
+                )
+                msgs = await _send_to_topic(
+                    context.bot, "brain-insights", text, keyboard=kb,
+                )
+                if msgs:
+                    last_msg = msgs[-1] if isinstance(msgs, list) else msgs
+                    await execute(
+                        "UPDATE graduation_proposals SET message_id=? WHERE id=?",
+                        (last_msg.message_id, row_id),
+                    )
+
+        _record_job_run("graduation_proposals")
+    except Exception:
+        logger.exception("Graduation proposals job failed")
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -628,6 +733,14 @@ def register_jobs(job_queue):
         time=time(2, 0, tzinfo=CST),
         days=(6,),  # 6 = Sunday
         name="keyword_expansion",
+    )
+
+    # Weekly Sunday 5:15am: Graduation proposals (after vault reindex at 5am)
+    job_queue.run_daily(
+        job_graduation_proposals,
+        time=time(5, 15, tzinfo=CST),
+        days=(6,),  # 6 = Sunday
+        name="graduation_proposals",
     )
 
     # Weekly Sunday 6pm: Drift report

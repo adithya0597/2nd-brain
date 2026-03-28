@@ -115,9 +115,19 @@ class TestIsSelective:
         f = MetadataFilters(file_types=["journal", "concept"])
         assert is_selective(f) is True
 
-    def test_three_file_types_not_selective(self):
-        """Three file types > 2, not selective enough."""
+    def test_three_file_types_is_selective(self):
+        """Three file types <= 4, still selective."""
         f = MetadataFilters(file_types=["a", "b", "c"])
+        assert is_selective(f) is True
+
+    def test_four_file_types_is_selective(self):
+        """Four file types <= 4, still selective (provenance filters)."""
+        f = MetadataFilters(file_types=["concept", "journal", "meeting", ""])
+        assert is_selective(f) is True
+
+    def test_five_file_types_not_selective(self):
+        """Five file types > 4, not selective enough."""
+        f = MetadataFilters(file_types=["a", "b", "c", "d", "e"])
         assert is_selective(f) is False
 
     def test_community_id_is_selective(self):
@@ -489,13 +499,17 @@ class TestFiltersForCommand:
         f = filters_for_command("connect")
         assert f is None
 
-    def test_challenge_has_no_filters(self):
+    def test_challenge_excludes_system_content(self):
         f = filters_for_command("challenge")
-        assert f is None
+        assert f is not None
+        assert f.file_types == ["concept", "journal", "meeting", ""]
+        assert f.date_range is None  # Full history for identity commands
 
-    def test_ghost_has_no_filters(self):
+    def test_ghost_excludes_system_content(self):
         f = filters_for_command("ghost")
-        assert f is None
+        assert f is not None
+        assert f.file_types == ["concept", "journal", "meeting", ""]
+        assert f.date_range is None  # Full history for identity commands
 
     def test_unknown_command_returns_none(self):
         f = filters_for_command("nonexistent_command")
@@ -516,7 +530,7 @@ class TestFiltersForCommand:
 
     def test_all_commands_default_node_type(self):
         """All returned filters should keep the default node_type='document'."""
-        for cmd in ("find", "today", "drift", "ideas", "emerge"):
+        for cmd in ("find", "today", "drift", "ideas", "emerge", "ghost", "challenge"):
             f = filters_for_command(cmd)
             assert f.node_type == "document", f"{cmd} should have node_type=document"
 
