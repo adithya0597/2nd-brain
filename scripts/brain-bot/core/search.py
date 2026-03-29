@@ -158,10 +158,22 @@ def _search_graph(query_text: str, limit: int = 15, db_path: Path = None) -> lis
         return []
 
 
+# Per-command channel weight profiles for weighted RRF.
+# Missing commands default to equal weights (1.0).
+# Weights > 1.0 boost a channel; < 1.0 dampen it.
+_COMMAND_CHANNEL_WEIGHTS: dict[str, dict[str, float]] = {
+    "trace":   {"graph": 1.5, "chunks": 1.3},
+    "connect": {"graph": 1.8, "vector": 1.3},
+    "ideas":   {"chunks": 1.4, "fts": 1.2},
+    "emerge":  {"vector": 1.2, "graph": 1.0},
+}
+
+
 def _rrf_fuse(
     ranked_lists: dict[str, list[str]],
     metadata: dict[str, dict],
     k: int = 60,
+    channel_weights: dict[str, float] | None = None,
 ) -> list[dict]:
     """Reciprocal Rank Fusion across multiple ranked lists.
 
@@ -169,6 +181,7 @@ def _rrf_fuse(
         ranked_lists: {channel_name: [file_path ordered by rank]}
         metadata: {file_path: {title, snippet, ...}}
         k: RRF constant (default 60, higher = more uniform weighting)
+        channel_weights: Optional per-channel weight multipliers. Default 1.0.
 
     Returns:
         List of dicts: [{file_path, title, snippet, score, sources}]
@@ -178,8 +191,9 @@ def _rrf_fuse(
     sources: dict[str, list[str]] = {}
 
     for channel, file_paths in ranked_lists.items():
+        w = (channel_weights or {}).get(channel, 1.0)
         for rank, fp in enumerate(file_paths):
-            rrf_score = 1.0 / (k + rank + 1)
+            rrf_score = w * (1.0 / (k + rank + 1))
             scores[fp] = scores.get(fp, 0.0) + rrf_score
             sources.setdefault(fp, []).append(channel)
 
@@ -279,7 +293,8 @@ def hybrid_search(
     import time as _time
     _search_start = _time.monotonic()
     total_candidates = len(metadata)
-    fused = _rrf_fuse(ranked_lists, metadata, k=k)
+    weights = _COMMAND_CHANNEL_WEIGHTS.get(command, {}) if command else {}
+    fused = _rrf_fuse(ranked_lists, metadata, k=k, channel_weights=weights)
     elapsed_ms = (_time.monotonic() - _search_start) * 1000
 
     # Log search for measurement infrastructure

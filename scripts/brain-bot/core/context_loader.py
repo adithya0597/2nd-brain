@@ -455,6 +455,12 @@ def _gather_graph_context(command_name: str, user_input: str) -> dict[str, str]:
         # For /ghost, /challenge: start from identity files
         linked_rows = get_linked_files(["ICOR", "Values"], depth=depth)
 
+    # Sort by last_modified for temporal ordering (most recent first)
+    # Critical for /trace which needs chronological context
+    linked_rows.sort(
+        key=lambda r: r.get("last_modified", "") or "", reverse=True
+    )
+
     # Read actual file contents for linked rows
     result = {}
     for row in linked_rows[:15]:  # Cap at 15 files to avoid token overload
