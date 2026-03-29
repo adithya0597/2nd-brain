@@ -173,6 +173,9 @@ _COMMAND_VAULT_FILES = {
         "Identity/Values.md",
         "Identity/ICOR.md",
     ],
+    "rolling-memo": [
+        "Reports/rolling-memo.md",  # Load prior entries for pattern continuity
+    ],
     "connect": [],
     "emerge": [],
     "projects": [

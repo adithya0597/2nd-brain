@@ -71,6 +71,16 @@ def _record_job_run(job_name: str):
         logger.warning("Failed to record job run: %s", job_name)
 
 
+async def _notify_job_failure(bot, job_name: str, error: Exception):
+    """Send job failure notification to brain-daily topic (user-facing jobs only)."""
+    try:
+        error_text = str(error)[:200]
+        text = f"<b>Job Failed: {job_name}</b>\n<code>{error_text}</code>"
+        await _send_to_topic(bot, "brain-daily", text)
+    except Exception:
+        logger.debug("Failed to send job failure notification", exc_info=True)
+
+
 def _should_run_biweekly(job_name: str) -> bool:
     """Check if a bi-weekly job should run (2 weeks since last run)."""
     try:
@@ -151,8 +161,9 @@ async def job_morning_briefing(context: CallbackContext):
         result = await _call_claude("today")
         await _send_to_topic(context.bot, "brain-daily", result)
         _record_job_run("morning_briefing")
-    except Exception:
+    except Exception as e:
         logger.exception("Morning briefing job failed")
+        await _notify_job_failure(context.bot, "morning_briefing", e)
 
 
 async def job_evening_prompt(context: CallbackContext):
@@ -213,8 +224,9 @@ async def job_evening_prompt(context: CallbackContext):
 
         await _send_to_topic(context.bot, "brain-daily", text, fading_kb)
         _record_job_run("evening_prompt")
-    except Exception:
+    except Exception as e:
         logger.exception("Evening prompt job failed")
+        await _notify_job_failure(context.bot, "evening_prompt", e)
 
 
 async def job_dashboard_refresh(context: CallbackContext):
@@ -314,8 +326,9 @@ async def job_drift_report(context: CallbackContext):
         result = await _call_claude("drift")
         await _send_to_topic(context.bot, "brain-insights", result)
         _record_job_run("drift_report")
-    except Exception:
+    except Exception as e:
         logger.exception("Drift report job failed")
+        await _notify_job_failure(context.bot, "drift_report", e)
 
 
 async def job_emerge_biweekly(context: CallbackContext):
@@ -638,8 +651,9 @@ async def job_rolling_memo(context: CallbackContext):
             else:
                 logger.warning("Rolling memo append failed")
         _record_job_run("rolling_memo")
-    except Exception:
+    except Exception as e:
         logger.exception("Rolling memo job failed")
+        await _notify_job_failure(context.bot, "rolling_memo", e)
 
 
 async def job_graduation_proposals(context: CallbackContext):
@@ -671,7 +685,7 @@ async def job_graduation_proposals(context: CallbackContext):
         # Hard cap: 1 proposal per run
         candidate = candidates[0]
 
-        row_id = await execute(
+        await execute(
             "INSERT OR IGNORE INTO graduation_proposals "
             "(cluster_hash, proposed_title, proposed_dimension, source_capture_ids, source_texts) "
             "VALUES (?, ?, ?, ?, ?)",
@@ -684,33 +698,38 @@ async def job_graduation_proposals(context: CallbackContext):
             ),
         )
 
-        if row_id:
-            rows = await query(
-                "SELECT * FROM graduation_proposals WHERE id=?", (row_id,),
-            )
-            if rows:
-                from handlers.graduation import format_graduation_proposal
+        # Query unconditionally for unsent proposals (handles both new inserts
+        # and ignored duplicates where lastrowid=0)
+        unsent = await query(
+            "SELECT * FROM graduation_proposals "
+            "WHERE cluster_hash=? AND message_id IS NULL AND status='pending'",
+            (candidate["cluster_hash"],),
+        )
+        if unsent:
+            from handlers.graduation import format_graduation_proposal
 
-                text, kb = format_graduation_proposal(
-                    {
-                        **rows[0],
-                        "capture_count": candidate["capture_count"],
-                        "days_span": candidate["days_span"],
-                    }
+            proposal = unsent[0]
+            text, kb = format_graduation_proposal(
+                {
+                    **proposal,
+                    "capture_count": candidate["capture_count"],
+                    "days_span": candidate["days_span"],
+                }
+            )
+            msgs = await _send_to_topic(
+                context.bot, "brain-insights", text, keyboard=kb,
+            )
+            if msgs:
+                last_msg = msgs[-1] if isinstance(msgs, list) else msgs
+                await execute(
+                    "UPDATE graduation_proposals SET message_id=? WHERE id=?",
+                    (last_msg.message_id, proposal["id"]),
                 )
-                msgs = await _send_to_topic(
-                    context.bot, "brain-insights", text, keyboard=kb,
-                )
-                if msgs:
-                    last_msg = msgs[-1] if isinstance(msgs, list) else msgs
-                    await execute(
-                        "UPDATE graduation_proposals SET message_id=? WHERE id=?",
-                        (last_msg.message_id, row_id),
-                    )
 
         _record_job_run("graduation_proposals")
-    except Exception:
+    except Exception as e:
         logger.exception("Graduation proposals job failed")
+        await _notify_job_failure(context.bot, "graduation_proposals", e)
 
 
 # ---------------------------------------------------------------------------
