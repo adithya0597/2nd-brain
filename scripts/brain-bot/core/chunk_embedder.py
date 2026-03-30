@@ -44,9 +44,11 @@ def rechunk_and_embed_file(file_path: Path, vault_path: Path = None, db_path: Pa
     from core.chunker import chunk_file
     chunks = chunk_file(content, file_path=rel_path)
 
-    # Get node_id for this file
+    # Use a single connection for all metadata DB operations to avoid
+    # snapshot isolation issues between separate connections in WAL mode.
     from core.db_connection import get_connection
     with get_connection(db_path) as conn:
+        # Get node_id for this file
         row = conn.execute(
             "SELECT id FROM vault_nodes WHERE file_path = ?", (rel_path,)
         ).fetchone()
@@ -55,8 +57,7 @@ def rechunk_and_embed_file(file_path: Path, vault_path: Path = None, db_path: Pa
             return 0
         node_id = row[0]
 
-    # Get existing chunk hashes
-    with get_connection(db_path) as conn:
+        # Get existing chunk hashes
         existing = {
             r[0]: r[1] for r in conn.execute(
                 "SELECT chunk_number, content_hash FROM vault_chunks WHERE node_id = ?",
@@ -64,76 +65,71 @@ def rechunk_and_embed_file(file_path: Path, vault_path: Path = None, db_path: Pa
             ).fetchall()
         }
 
-    # Determine which chunks changed
-    new_chunks = []
-    for chunk in chunks:
-        h = _chunk_content_hash(chunk.content)
-        if existing.get(chunk.chunk_index) != h:
-            new_chunks.append((chunk, h))
+        # Determine which chunks changed
+        new_chunks = []
+        for chunk in chunks:
+            h = _chunk_content_hash(chunk.content)
+            if existing.get(chunk.chunk_index) != h:
+                new_chunks.append((chunk, h))
 
-    if not new_chunks:
-        return 0
+        if not new_chunks:
+            return 0
 
-    # Embed changed chunks
-    from core.embedding_store import _get_model, _serialize_f32, _truncate_vector
-    model = _get_model()
-    if model is None:
-        return 0
+        # Embed changed chunks
+        from core.embedding_store import _get_model, _serialize_f32, _truncate_vector
+        model = _get_model()
+        if model is None:
+            return 0
 
-    texts = [c.content for c, _ in new_chunks]
-    raw_vectors = model.encode(texts, batch_size=32)
-    vectors = [_truncate_vector(v) for v in raw_vectors]
+        texts = [c.content for c, _ in new_chunks]
+        raw_vectors = model.encode(texts, batch_size=32)
+        vectors = [_truncate_vector(v) for v in raw_vectors]
 
-    # Upsert to DB
+        # Delete old chunks for this file, then reinsert all
+        conn.execute("DELETE FROM vault_chunks WHERE node_id = ?", (node_id,))
+        for chunk in chunks:
+            h = _chunk_content_hash(chunk.content)
+            conn.execute(
+                """INSERT INTO vault_chunks
+                   (node_id, file_path, chunk_number, chunk_type,
+                    start_line, end_line, word_count, char_count,
+                    section_header, header_level, content_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (node_id, rel_path, chunk.chunk_index, chunk.chunk_type,
+                 chunk.start_line, chunk.end_line, chunk.word_count,
+                 len(chunk.content), chunk.section_header,
+                 chunk.header_level, h)
+            )
+        conn.commit()
+
+        # Build a map of chunk_number -> new chunk ID for vec insertion
+        chunk_id_map = {
+            r[0]: r[1] for r in conn.execute(
+                "SELECT chunk_number, id FROM vault_chunks WHERE node_id = ?",
+                (node_id,)
+            ).fetchall()
+        }
+
+    # Vec operations use a separate connection (requires sqlite-vec extension)
     from core.embedding_store import _get_vec_connection
     vec_conn = _get_vec_connection(db_path)
     if vec_conn is None:
         return 0
 
     try:
-        with get_connection(db_path) as conn:
-            # Delete old chunks for this file, then reinsert all
-            conn.execute("DELETE FROM vault_chunks WHERE node_id = ?", (node_id,))
-            for chunk in chunks:
-                h = _chunk_content_hash(chunk.content)
-                conn.execute(
-                    """INSERT INTO vault_chunks
-                       (node_id, file_path, chunk_number, chunk_type,
-                        start_line, end_line, word_count, char_count,
-                        section_header, header_level, content_hash)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (node_id, rel_path, chunk.chunk_index, chunk.chunk_type,
-                     chunk.start_line, chunk.end_line, chunk.word_count,
-                     len(chunk.content), chunk.section_header,
-                     chunk.header_level, h)
-                )
-            conn.commit()
-
-        # Delete old vec embeddings for this file's chunks
-        # Get chunk IDs
-        with get_connection(db_path) as conn:
-            chunk_ids = [r[0] for r in conn.execute(
-                "SELECT id FROM vault_chunks WHERE node_id = ?", (node_id,)
-            ).fetchall()]
-
-        # Delete old vectors and insert new ones
-        for chunk_id in chunk_ids:
+        # Delete ALL old vec embeddings for this file's chunks, then insert
+        # only for changed chunks. Use the new chunk IDs from chunk_id_map.
+        for chunk_id in chunk_id_map.values():
             vec_conn.execute("DELETE FROM vec_chunks WHERE rowid = ?", (chunk_id,))
 
         for (chunk, h), vector in zip(new_chunks, vectors):
-            # Find the chunk_id for this chunk_index
-            with get_connection(db_path) as conn:
-                row = conn.execute(
-                    "SELECT id FROM vault_chunks WHERE node_id = ? AND chunk_number = ?",
-                    (node_id, chunk.chunk_index)
-                ).fetchone()
-                if row:
-                    chunk_id = row[0]
-                    vec_bytes = _serialize_f32(vector)
-                    vec_conn.execute(
-                        "INSERT INTO vec_chunks (rowid, embedding) VALUES (?, ?)",
-                        (chunk_id, vec_bytes)
-                    )
+            chunk_id = chunk_id_map.get(chunk.chunk_index)
+            if chunk_id:
+                vec_bytes = _serialize_f32(vector)
+                vec_conn.execute(
+                    "INSERT INTO vec_chunks (rowid, embedding) VALUES (?, ?)",
+                    (chunk_id, vec_bytes)
+                )
 
         vec_conn.commit()
         return len(new_chunks)

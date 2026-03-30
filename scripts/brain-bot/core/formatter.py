@@ -952,6 +952,7 @@ def format_help() -> FormatResult:
         ("/brain-status", "Quick SQLite status dashboard"),
         ("/brain-sync", "Bidirectional Notion sync"),
         ("/brain-context", "Load session context"),
+        ("/brain-maintain", "Graph health check"),
         ("/brain-help", "This help message"),
     ]
 

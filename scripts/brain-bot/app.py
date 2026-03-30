@@ -101,6 +101,7 @@ async def post_init(application: Application) -> None:
         BotCommand("help", "List available commands"),
         BotCommand("engage", "Engagement analysis"),
         BotCommand("dashboard", "Full ICOR dashboard with quick actions"),
+        BotCommand("maintain", "Graph health check"),
     ]
     await application.bot.set_my_commands(commands)
     logger.info("Registered %d bot commands with Telegram", len(commands))
@@ -175,27 +176,41 @@ async def post_init(application: Application) -> None:
     except Exception:
         logger.warning("Chunk embedding failed during boot", exc_info=True)
 
-    # 7. Graph schema + ICOR affinity + tag_shared + semantic + community detection
+    # 7. Graph builders (each wrapped individually so one failure doesn't block others)
     try:
-        from core.graph_ops import (
-            ensure_icor_nodes,
-            rebuild_tag_shared_edges,
-            rebuild_semantic_similarity_edges,
-        )
-        from core.icor_affinity import rebuild_all_icor_edges
-        from core.community import update_community_ids
+        from core.graph_ops import ensure_icor_nodes
         ensure_icor_nodes()
-        affinity_count = rebuild_all_icor_edges()
-        tag_shared_count = rebuild_tag_shared_edges()
-        semantic_count = rebuild_semantic_similarity_edges()
-        community_count = update_community_ids()
-        logger.info(
-            "Graph: ICOR nodes ensured, %d affinity edges, %d tag_shared, "
-            "%d semantic, %d communities assigned",
-            affinity_count, tag_shared_count, semantic_count, community_count,
-        )
+        logger.info("ICOR nodes ensured")
     except Exception as e:
-        logger.warning("Graph/community setup failed (non-critical): %s", e)
+        logger.warning("ICOR node setup failed (non-critical): %s", e)
+
+    try:
+        from core.icor_affinity import rebuild_all_icor_edges
+        affinity_count = rebuild_all_icor_edges()
+        logger.info("ICOR affinity edges rebuilt: %d", affinity_count)
+    except Exception as e:
+        logger.warning("ICOR affinity edge rebuild failed (non-critical): %s", e)
+
+    try:
+        from core.graph_ops import rebuild_tag_shared_edges
+        tag_shared_count = rebuild_tag_shared_edges()
+        logger.info("Tag shared edges rebuilt: %d", tag_shared_count)
+    except Exception as e:
+        logger.warning("Tag shared edge rebuild failed (non-critical): %s", e)
+
+    try:
+        from core.graph_ops import rebuild_semantic_similarity_edges
+        semantic_count = rebuild_semantic_similarity_edges()
+        logger.info("Semantic similarity edges rebuilt: %d", semantic_count)
+    except Exception as e:
+        logger.warning("Semantic similarity edge rebuild failed (non-critical): %s", e)
+
+    try:
+        from core.community import update_community_ids
+        community_count = update_community_ids()
+        logger.info("Community detection complete: %d nodes assigned", community_count)
+    except Exception as e:
+        logger.warning("Community detection failed (non-critical): %s", e)
 
     # 8. Register scheduled jobs with PTB's JobQueue
     try:
@@ -279,6 +294,10 @@ def main():
         .post_init(post_init)
         .post_shutdown(post_shutdown)
         .concurrent_updates(8)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(10)
         .build()
     )
 
@@ -287,6 +306,12 @@ def main():
         MessageHandler(owner_filter & filters.TEXT & ~filters.COMMAND, _unhandled_message),
         group=999,  # Lowest priority — other handlers should be in lower group numbers
     )
+
+    # Global error handler — log and continue instead of crashing
+    async def _error_handler(update, context):
+        logger.error("Unhandled exception: %s", context.error, exc_info=context.error)
+
+    application.add_error_handler(_error_handler)
 
     logger.info("Starting Second Brain bot with polling...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)

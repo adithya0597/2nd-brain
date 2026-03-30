@@ -99,6 +99,13 @@ def _ensure_config_defaults():
         # Thresholds
         "CONFIDENCE_THRESHOLD": 0.60,
         "BOUNCER_TIMEOUT_MINUTES": 15,
+        # Whisper
+        "WHISPER_MODEL": "base",
+        "WHISPER_DEVICE": "cpu",
+        # AI provider
+        "AI_PROVIDER": "",
+        "GEMINI_API_KEY": "",
+        "GEMINI_MODEL": "gemini-2.5-flash",
     }
     for attr, default in _ALL_DEFAULTS.items():
         setattr(cfg, attr, default)

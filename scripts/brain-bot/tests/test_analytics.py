@@ -157,7 +157,7 @@ class TestDetectStaleActions:
     async def test_respects_stale_threshold(self, test_db):
         conn = sqlite3.connect(str(test_db))
         # Recent action (within threshold) - use a date in the future to ensure it's fresh
-        _insert_action(conn, "Fresh task", "2026-03-05", icor_element="Fitness")
+        _insert_action(conn, "Fresh task", "2026-03-27", icor_element="Fitness")
         conn.commit()
         conn.close()
 
@@ -250,9 +250,9 @@ class TestFindCoOccurrenceClusters:
         # Fitness + Nutrition: 5 co-occurrences
         for i in range(5):
             _insert_journal(conn, f"2026-02-{10 + i:02d}", ["Fitness", "Nutrition"])
-        # Fitness + Income: 3 co-occurrences
+        # Fitness + Income: 3 co-occurrences (must be within 60-day window)
         for i in range(3):
-            _insert_journal(conn, f"2026-01-{10 + i:02d}", ["Fitness", "Income"])
+            _insert_journal(conn, f"2026-03-{10 + i:02d}", ["Fitness", "Income"])
         conn.commit()
         conn.close()
 
@@ -443,7 +443,7 @@ class TestComputeStuckItem:
     async def test_returns_none_if_not_stale_enough(self, test_db):
         conn = sqlite3.connect(str(test_db))
         # Insert a very recent action
-        _insert_action(conn, "Fresh task", "2026-03-05")
+        _insert_action(conn, "Fresh task", "2026-03-27")
         conn.commit()
         conn.close()
 

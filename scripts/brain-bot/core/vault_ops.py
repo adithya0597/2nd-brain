@@ -77,7 +77,8 @@ def _on_vault_write(file_path: Path):
         except ImportError:
             pass
 
-    threading.Thread(target=_do_index, daemon=True).start()
+    from core.async_utils import executor
+    executor.submit(_do_index)
 
 
 def read_file(path: Path) -> str:

@@ -377,7 +377,11 @@ class TestTimeoutAutoFiles:
             }
         ]
 
-        mock_query = AsyncMock(return_value=pending_rows)
+        # First call: table existence check returns True; second call: actual query
+        mock_query = AsyncMock(side_effect=[
+            [{"name": "pending_captures"}],  # table exists
+            pending_rows,                      # pending rows
+        ])
         mock_execute = AsyncMock()
 
         mock_context = MagicMock()
@@ -390,8 +394,8 @@ class TestTimeoutAutoFiles:
              patch("config.BOUNCER_TIMEOUT_MINUTES", 15):
             await job_resolve_pending_captures(mock_context)
 
-        # Should have called query for pending captures
-        mock_query.assert_called_once()
+        # Should have called query twice: table check + pending captures
+        assert mock_query.call_count == 2
 
         # Should have called execute to update status
         status_calls = [
@@ -405,7 +409,10 @@ class TestTimeoutAutoFiles:
         """When no captures are pending, the job does nothing."""
         from handlers.scheduled import job_resolve_pending_captures
 
-        mock_query = AsyncMock(return_value=[])
+        mock_query = AsyncMock(side_effect=[
+            [{"name": "pending_captures"}],  # table exists
+            [],                               # no pending rows
+        ])
         mock_execute = AsyncMock()
 
         mock_context = MagicMock()
@@ -416,7 +423,7 @@ class TestTimeoutAutoFiles:
              patch("config.BOUNCER_TIMEOUT_MINUTES", 15):
             await job_resolve_pending_captures(mock_context)
 
-        mock_query.assert_called_once()
+        assert mock_query.call_count == 2
         mock_execute.assert_not_called()
 
     @pytest.mark.asyncio
@@ -436,7 +443,10 @@ class TestTimeoutAutoFiles:
             }
         ]
 
-        mock_query = AsyncMock(return_value=pending_rows)
+        mock_query = AsyncMock(side_effect=[
+            [{"name": "pending_captures"}],  # table exists
+            pending_rows,                      # pending rows
+        ])
         mock_execute = AsyncMock()
 
         mock_context = MagicMock()

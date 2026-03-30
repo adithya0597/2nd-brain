@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from notion_client.errors import APIResponseError
+
 from core import db_ops, sync_outbox
 from core.notion_client import NotionClientWrapper
 from core.notion_mappers import (
@@ -262,6 +264,18 @@ class NotionSync:
         for name, step in steps:
             try:
                 await step()
+            except APIResponseError as e:
+                if e.status == 401:
+                    msg = (
+                        "NOTION_TOKEN is invalid or expired. "
+                        "Please regenerate at https://www.notion.so/my-integrations"
+                    )
+                    logger.error(msg)
+                    self._result.errors.append(msg)
+                    break  # Stop all remaining steps — auth won't recover
+                msg = f"Step '{name}' failed: {e}"
+                logger.exception(msg)
+                self._result.errors.append(msg)
             except Exception as e:
                 msg = f"Step '{name}' failed: {e}"
                 logger.exception(msg)
@@ -301,6 +315,16 @@ class NotionSync:
             if step:
                 try:
                     await step()
+                except APIResponseError as e:
+                    if e.status == 401:
+                        msg = (
+                            "NOTION_TOKEN is invalid or expired. "
+                            "Please regenerate at https://www.notion.so/my-integrations"
+                        )
+                        logger.error(msg)
+                        self._result.errors.append(msg)
+                        break
+                    self._result.errors.append(f"Step '{et}' failed: {e}")
                 except Exception as e:
                     self._result.errors.append(f"Step '{et}' failed: {e}")
 

@@ -108,12 +108,17 @@ def _get_vec_connection(db_path: Path = None):
     if not _check_vec_available():
         return None
 
-    import sqlite_vec
     db_path = db_path or config.DB_PATH
     conn = sqlite3.connect(str(db_path))
-    conn.enable_load_extension(True)
-    sqlite_vec.load(conn)
-    conn.enable_load_extension(False)
+    try:
+        import sqlite_vec
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+    except (ImportError, Exception) as e:
+        logger.warning("sqlite-vec extension failed to load: %s. Vector search disabled.", e)
+        conn.close()
+        return None
     # Apply standard PRAGMAs
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")

@@ -81,6 +81,7 @@ _COMMAND_MAP = {
     "review": ("weekly-review", "brain-daily"),
     "process_meeting": ("process-meeting", "brain-daily"),
     "engage": ("engage", "brain-daily"),
+    "maintain": ("maintain", "brain-dashboard"),
 }
 
 
@@ -123,7 +124,6 @@ def _write_command_output_to_vault(brain_command: str, result_text: str, user_in
                 import asyncio
 
                 concepts = parse_graduate_output(result_text)
-                loop = asyncio.new_event_loop()
                 for concept in concepts:
                     try:
                         file_path = create_concept_file(
@@ -134,7 +134,7 @@ def _write_command_output_to_vault(brain_command: str, result_text: str, user_in
                             status=concept.status,
                         )
                         rel_path = str(file_path.relative_to(VAULT_PATH))
-                        loop.run_until_complete(insert_concept_metadata(
+                        asyncio.run(insert_concept_metadata(
                             title=concept.title,
                             file_path=rel_path,
                             icor_elements=concept.icor_elements,
@@ -147,7 +147,6 @@ def _write_command_output_to_vault(brain_command: str, result_text: str, user_in
                         logger.info("Graduated concept: %s -> %s", concept.title, file_path)
                     except Exception:
                         logger.exception("Failed to create concept: %s", concept.title)
-                loop.close()
                 if concepts:
                     logger.info("Graduated %d concepts from /graduate", len(concepts))
             except Exception:
@@ -179,7 +178,7 @@ async def _run_ai_command(
 
         ai = get_ai_client()
         if not ai:
-            await msg.edit_text("\u274c Anthropic API key not configured.")
+            await msg.edit_text("\u274c AI not configured. Set GEMINI_API_KEY or ANTHROPIC_API_KEY in .env")
             return
 
         response = await ai.messages.create(

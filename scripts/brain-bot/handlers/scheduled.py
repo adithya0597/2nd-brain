@@ -59,14 +59,14 @@ CST = ZoneInfo("America/Chicago")
 def _record_job_run(job_name: str):
     """Record that a scheduled job ran successfully."""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.execute(
-            "INSERT OR REPLACE INTO scheduler_state (job_name, last_run_at, updated_at) "
-            "VALUES (?, datetime('now'), datetime('now'))",
-            (job_name,),
-        )
-        conn.commit()
-        conn.close()
+        from core.db_connection import get_connection
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO scheduler_state (job_name, last_run_at, updated_at) "
+                "VALUES (?, datetime('now'), datetime('now'))",
+                (job_name,),
+            )
+            conn.commit()
     except Exception:
         logger.warning("Failed to record job run: %s", job_name)
 
@@ -84,13 +84,13 @@ async def _notify_job_failure(bot, job_name: str, error: Exception):
 def _should_run_biweekly(job_name: str) -> bool:
     """Check if a bi-weekly job should run (2 weeks since last run)."""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.execute(
-            "SELECT last_run_at FROM scheduler_state WHERE job_name = ?",
-            (job_name,),
-        )
-        row = cursor.fetchone()
-        conn.close()
+        from core.db_connection import get_connection
+        with get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT last_run_at FROM scheduler_state WHERE job_name = ?",
+                (job_name,),
+            )
+            row = cursor.fetchone()
         if not row or not row[0]:
             return True
         last_run = datetime.fromisoformat(row[0])
@@ -107,6 +107,8 @@ async def _call_claude(brain_command: str, user_input: str = "") -> str:
     messages = build_claude_messages(brain_command, user_input, context)
 
     ai = get_ai_client()
+    if ai is None:
+        raise RuntimeError("AI client not initialized — check GEMINI_API_KEY or ANTHROPIC_API_KEY in .env")
     model = get_ai_model()
     response = await ai.messages.create(
         model=model,
@@ -253,10 +255,24 @@ async def job_dashboard_refresh(context: CallbackContext):
         if neglected:
             neglected_text = "\n".join(
                 f"\u2022 <b>{n['name']}</b> ({n.get('dimension', 'N/A')}) \u2014 "
-                f"{int(n.get('days_since', 0))} days silent"
+                f"{int(n.get('days_since') or 0)} days silent"
                 for n in neglected[:5]
             )
             text += f"\n\n<b>Neglected Elements:</b>\n{neglected_text}"
+
+        # Add graph density metric
+        try:
+            from core.graph_maintenance import compute_graph_density
+            density_info = compute_graph_density()
+            density_pct = density_info.get("density", 0)
+            node_count = density_info.get("node_count", 0)
+            edge_count = density_info.get("edge_count", 0)
+            text += (
+                f"\n\n<b>Graph:</b> {node_count} nodes, {edge_count} edges "
+                f"(density {density_pct:.1%})"
+            )
+        except Exception:
+            logger.debug("Graph density unavailable for dashboard", exc_info=True)
 
         await _send_to_topic(context.bot, "brain-dashboard", text, keyboard)
 
@@ -399,6 +415,22 @@ async def job_vault_reindex(context: CallbackContext):
                         affinity_count, community_count)
         except Exception as e:
             logger.warning("ICOR affinity/community rebuild failed: %s", e)
+
+        # Rebuild tag-shared edges (co-tag overlap between documents)
+        try:
+            from core.graph_ops import rebuild_tag_shared_edges
+            tag_count = await run_in_executor(rebuild_tag_shared_edges)
+            logger.info("Tag shared edges rebuilt: %d", tag_count)
+        except Exception as e:
+            logger.warning("Tag shared edge rebuild failed: %s", e)
+
+        # Rebuild semantic similarity edges (embedding-based document similarity)
+        try:
+            from core.graph_ops import rebuild_semantic_similarity_edges
+            sim_count = await run_in_executor(rebuild_semantic_similarity_edges)
+            logger.info("Semantic similarity edges rebuilt: %d", sim_count)
+        except Exception as e:
+            logger.warning("Semantic similarity edge rebuild failed: %s", e)
 
         _record_job_run("vault_reindex")
     except Exception:
@@ -601,6 +633,13 @@ async def job_resolve_pending_captures(context: CallbackContext):
     try:
         from config import BOUNCER_TIMEOUT_MINUTES
 
+        # Guard: skip if pending_captures table hasn't been created yet
+        table_check = await query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='pending_captures'"
+        )
+        if not table_check:
+            return
+
         rows = await query(
             "SELECT id, message_text, message_ts, primary_dimension, chat_id, "
             "bouncer_dm_ts, bouncer_dm_channel "
@@ -656,6 +695,103 @@ async def job_rolling_memo(context: CallbackContext):
         await _notify_job_failure(context.bot, "rolling_memo", e)
 
 
+async def job_graph_maintenance(context: CallbackContext):
+    """Weekly Sunday 4:30am: Graph health check — find orphans and suggest connections."""
+    try:
+        logger.info("Running graph maintenance job")
+        from core.graph_maintenance import run_maintenance
+        from core.async_utils import run_in_executor
+
+        result = await run_in_executor(run_maintenance)
+
+        if result and result.get("orphans"):
+            orphan_count = result.get("total_orphans", len(result["orphans"]))
+            density_info = result.get("density", {})
+            density_pct = density_info.get("density", 0)
+
+            text = (
+                f"<b>Graph Health Check</b>\n\n"
+                f"Orphan documents: <b>{orphan_count}</b>\n"
+                f"Stale concepts: <b>{len(result.get('stale_concepts', []))}</b>\n"
+                f"Graph density: <b>{density_pct:.1%}</b>"
+            )
+            await _send_to_topic(context.bot, "brain-dashboard", text)
+
+        _record_job_run("graph_maintenance")
+    except Exception:
+        logger.exception("Graph maintenance job failed")
+
+
+async def job_system_health_check(context: CallbackContext):
+    """Daily 5:30am: System health check — API status, graph quality, engagement."""
+    try:
+        import sqlite3
+        from core.db_connection import get_connection
+
+        lines = ["<b>System Health Check</b>\n"]
+
+        # 1. AI Provider status
+        from core.ai_client import _detect_provider
+        provider = _detect_provider()
+        ai = get_ai_client()
+        if ai:
+            lines.append(f"AI: {provider} ({get_ai_model()}) — OK")
+        else:
+            lines.append("AI: NOT CONFIGURED")
+
+        # 2. Notion status
+        try:
+            import os
+            token = os.environ.get("NOTION_TOKEN", "")
+            if token:
+                from notion_client import Client
+                Client(auth=token).users.me()
+                lines.append("Notion: OK")
+            else:
+                lines.append("Notion: NO TOKEN")
+        except Exception as e:
+            lines.append(f"Notion: FAILED — {str(e)[:50]}")
+
+        # 3. Graph stats
+        with get_connection() as conn:
+            edges = conn.execute(
+                "SELECT edge_type, count(*) FROM vault_edges GROUP BY edge_type ORDER BY count(*) DESC"
+            ).fetchall()
+            total_edges = sum(c for _, c in edges)
+            edge_str = ", ".join(f"{t}:{c}" for t, c in edges)
+            nodes = conn.execute(
+                "SELECT count(*) FROM vault_nodes WHERE node_type='document'"
+            ).fetchone()[0]
+            chunks = conn.execute("SELECT count(*) FROM vault_chunks").fetchone()[0]
+
+        lines.append(f"\nGraph: {nodes} docs, {total_edges} edges ({edge_str})")
+        lines.append(f"Chunks: {chunks}")
+
+        # 4. Engagement (7-day)
+        with get_connection() as conn:
+            journal_7d = conn.execute(
+                "SELECT count(*) FROM journal_entries WHERE date >= date('now', '-7 days')"
+            ).fetchone()[0]
+            captures_7d = conn.execute(
+                "SELECT count(*) FROM captures_log WHERE created_at >= datetime('now', '-7 days')"
+            ).fetchone()[0]
+
+        lines.append(f"\n7-day: {journal_7d} journal entries, {captures_7d} captures")
+
+        # 5. Edge type coverage warning
+        edge_types_present = {t for t, _ in edges}
+        expected = {"wikilink", "semantic_similarity", "tag_shared", "icor_affinity"}
+        missing = expected - edge_types_present
+        if missing:
+            lines.append(f"\n⚠️ Missing edge types: {', '.join(missing)}")
+
+        text = "\n".join(lines)
+        await _send_to_topic(context.bot, "brain-dashboard", text)
+        _record_job_run("system_health_check")
+    except Exception:
+        logger.exception("System health check failed")
+
+
 async def job_graduation_proposals(context: CallbackContext):
     """Weekly Sunday 5:15am: Detect and propose concept graduations."""
     try:
@@ -663,18 +799,18 @@ async def job_graduation_proposals(context: CallbackContext):
         from core.graduation_detector import detect_graduation_candidates
 
         # Expire old pending proposals (14-day TTL)
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.execute(
-            "UPDATE graduation_proposals SET status='expired', resolved_at=datetime('now') "
-            "WHERE status='pending' AND proposed_at <= datetime('now', '-14 days')"
-        )
-        # Un-snooze overdue snoozed proposals
-        conn.execute(
-            "UPDATE graduation_proposals SET status='pending' "
-            "WHERE status='snoozed' AND snooze_until <= datetime('now')"
-        )
-        conn.commit()
-        conn.close()
+        from core.db_connection import get_connection
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE graduation_proposals SET status='expired', resolved_at=datetime('now') "
+                "WHERE status='pending' AND proposed_at <= datetime('now', '-14 days')"
+            )
+            # Un-snooze overdue snoozed proposals
+            conn.execute(
+                "UPDATE graduation_proposals SET status='pending' "
+                "WHERE status='snoozed' AND snooze_until <= datetime('now')"
+            )
+            conn.commit()
 
         candidates = await detect_graduation_candidates()
         if not candidates:
@@ -745,6 +881,9 @@ def register_jobs(job_queue):
     # Daily 5am: Vault + journal re-index
     job_queue.run_daily(job_vault_reindex, time=time(5, 0, tzinfo=CST), name="vault_reindex")
 
+    # Daily 5:30am: System health check (after vault reindex)
+    job_queue.run_daily(job_system_health_check, time=time(5, 30, tzinfo=CST), name="system_health_check")
+
     # Daily 5:30am: Engagement metrics (after vault reindex)
     job_queue.run_daily(job_daily_engagement, time=time(5, 30, tzinfo=CST), name="daily_engagement")
 
@@ -773,6 +912,14 @@ def register_jobs(job_queue):
         time=time(2, 0, tzinfo=CST),
         days=(6,),  # 6 = Sunday
         name="keyword_expansion",
+    )
+
+    # Weekly Sunday 4:30am: Graph maintenance health check (after DB backup at 4am)
+    job_queue.run_daily(
+        job_graph_maintenance,
+        time=time(4, 30, tzinfo=CST),
+        days=(6,),  # 6 = Sunday
+        name="graph_maintenance",
     )
 
     # Weekly Sunday 5:15am: Graduation proposals (after vault reindex at 5am)

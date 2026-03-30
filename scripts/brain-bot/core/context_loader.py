@@ -106,6 +106,25 @@ _COMMAND_QUERIES = {
         "attention": "SELECT dimension, key_element, current_attention FROM attention_indicators ORDER BY dimension",
         "icor_hierarchy": "SELECT h.id, h.level, h.name, p.name AS parent_name, h.attention_score, h.last_mentioned FROM icor_hierarchy h LEFT JOIN icor_hierarchy p ON h.parent_id = p.id ORDER BY h.id",
     },
+    "maintain": {
+        "orphan_documents": """
+            SELECT n.file_path, n.title FROM vault_nodes
+            WHERE node_type = 'document'
+              AND id NOT IN (
+                SELECT DISTINCT source_node_id FROM vault_edges
+                UNION SELECT DISTINCT target_node_id FROM vault_edges
+              )
+            ORDER BY last_modified DESC LIMIT 20
+        """,
+        "graph_density": "SELECT COUNT(*) AS edges FROM vault_edges",
+        "total_nodes": "SELECT COUNT(*) AS cnt FROM vault_nodes WHERE node_type = 'document'",
+        "stale_concepts": """
+            SELECT file_path, title FROM vault_nodes
+            WHERE node_type = 'document' AND type = 'concept'
+              AND last_modified < datetime('now', '-60 days')
+            ORDER BY last_modified ASC LIMIT 20
+        """,
+    },
     "engage": {
         "brain_level": """
             SELECT level, consistency, breadth, depth, growth, momentum, computed_at
@@ -196,6 +215,7 @@ _COMMAND_VAULT_FILES = {
         "Identity/Active-Projects.md",
     ],
     "engage": ["Identity/ICOR.md"],
+    "maintain": [],
 }
 
 # Commands that should get graph context (seed_method, depth)

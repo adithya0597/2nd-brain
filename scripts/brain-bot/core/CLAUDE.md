@@ -12,7 +12,6 @@ All non-handler logic lives here: classification, context assembly, database acc
 | `ai_client.py` | Async Anthropic client wrapper with prompt caching support |
 | `alerts.py` | Alert/notification utilities for system events |
 | `analytics.py` | Usage analytics and metrics tracking |
-| `app_home_builder.py` | Builds Telegram app home / settings views |
 | `article_fetcher.py` | Fetches and parses article content from URLs |
 | `async_utils.py` | Thread pool executor for offloading sync work from async handlers |
 | `classifier.py` | 4-tier hybrid classification: noise filter → keyword match → embedding similarity → LLM fallback |

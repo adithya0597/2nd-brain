@@ -19,7 +19,12 @@ async def query(sql: str, params: tuple = (), db_path: Path = None) -> list[dict
 
 
 async def execute(sql: str, params: tuple = (), db_path: Path = None) -> int:
-    """Run an INSERT/UPDATE/DELETE and return lastrowid."""
+    """Run an INSERT/UPDATE/DELETE and return lastrowid.
+
+    WARNING: For INSERT OR IGNORE, lastrowid returns 0 when the row already
+    exists (IGNORE fires). Do not use the return value to determine whether
+    a row was inserted — query the table by natural key instead.
+    """
     async with get_async_connection(db_path) as db:
         cursor = await db.execute(sql, params)
         await db.commit()

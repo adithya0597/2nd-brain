@@ -13,7 +13,14 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 OWNER_TELEGRAM_ID = int(os.environ.get("OWNER_TELEGRAM_ID", "0"))
 GROUP_CHAT_ID = int(os.environ.get("GROUP_CHAT_ID", "0"))
 
-# Anthropic
+# AI Provider — auto-detects from available keys, or override with AI_PROVIDER=gemini|anthropic
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "")  # empty = auto-detect
+
+# Gemini
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+
+# Anthropic (fallback)
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 CLASSIFIER_LLM_MODEL = os.environ.get("CLASSIFIER_LLM_MODEL", "claude-haiku-4-5-20251001")
