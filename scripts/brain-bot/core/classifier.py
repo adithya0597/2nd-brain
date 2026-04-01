@@ -61,7 +61,7 @@ _NOISE_PATTERNS = re.compile(
     r"^(good\s+(morning|afternoon|evening|night)|"
     r"hey(\s+what'?s\s+up)?|hello(\s+there)?|hi(\s+there)?|yo|sup|"
     r"what'?s\s+up|how'?s\s+it\s+going|how\s+are\s+you|"
-    r"thanks|thank you|ok|okay|cool|nice|great|sure|yep|yup|nope|"
+    r"thanks|thank you|ok thanks|ok|okay|cool|nice|great|sure|yep|yup|nope|"
     r"gm|gn|bye|later|cheers|lol|haha)[\s!.?]*$",
     re.IGNORECASE,
 )
