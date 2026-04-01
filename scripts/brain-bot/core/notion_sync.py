@@ -2,7 +2,7 @@
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from notion_client.errors import APIResponseError
@@ -110,7 +110,7 @@ class RegistryManager:
 
     def save(self):
         """Atomic save: write to .tmp then rename."""
-        self._data["_last_synced"] = datetime.utcnow().isoformat() + "Z"
+        self._data["_last_synced"] = datetime.now(timezone.utc).isoformat()
         tmp_path = self._path.with_suffix(".json.tmp")
         tmp_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path.write_text(json.dumps(self._data, indent=2) + "\n", encoding="utf-8")
@@ -234,7 +234,7 @@ class NotionSync:
         self._ai_client = ai_client
         self._ai_model = ai_model or "claude-sonnet-4-20250514"
         self._result = SyncResult()
-        self._now = datetime.utcnow().isoformat()
+        self._now = datetime.now(timezone.utc).isoformat()
         self._dry_run = dry_run
         self._tag_lookup: dict[str, str] = {}
 
@@ -1043,7 +1043,7 @@ class NotionSync:
         projects = self._registry.data.get("projects", {})
         goals = self._registry.data.get("goals", {})
         people = self._registry.data.get("people", {})
-        now_str = datetime.utcnow().strftime("%Y-%m-%d")
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         files_written = 0
 
         # --- 1. Active-Projects.md index (existing behavior) ---
