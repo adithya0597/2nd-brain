@@ -376,7 +376,7 @@ class MessageClassifier:
 
             result = []
             for dim, sim in scores:
-                if sim < 0.60:
+                if sim < 0.64:
                     break
                 result.append(DimensionScore(
                     dimension=dim,
