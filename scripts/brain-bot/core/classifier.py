@@ -78,46 +78,46 @@ _ACTION_PATTERNS = re.compile(
 # Embedding model is configurable via config.EMBEDDING_MODEL (shared with embedding_store).
 _DIMENSION_REFERENCES: dict[str, list[str]] = {
     "Health & Vitality": [
-        "Going to the gym for a full body workout with deadlifts squats and bench press followed by stretching and foam rolling",
-        "Tracking my daily calorie intake and meal prepping chicken rice and vegetables for the whole week to stay on my nutrition plan",
-        "Struggling with insomnia lately need to improve my sleep hygiene by cutting screen time and maintaining a consistent bedtime routine",
-        "Booked a doctor appointment for my annual physical checkup including blood work and dental cleaning this month",
-        "Morning meditation and yoga session for twenty minutes focusing on breathwork and mindfulness to reduce stress and anxiety",
+        "Going to the gym for a workout hitting legs doing squats deadlifts and pushups then stretching and foam rolling",
+        "Start every day with pushups squats and pull ups as a morning exercise routine to stay fit and active",
+        "Woke up late from a bad nap and felt gloomy but forced myself to work out anyway to fix my energy and mood",
+        "Checking my whoop band stats and health tracker data to monitor sleep recovery heart rate and daily fitness",
+        "Struggling with sleep hygiene and insomnia need a consistent bedtime routine and less screen time before bed",
     ],
     "Wealth & Finance": [
-        "Reviewing my investment portfolio rebalancing between index funds bonds and crypto allocations to optimize for long term growth",
-        "Setting up a monthly budget tracking income expenses savings rate and working toward eliminating credit card debt completely",
-        "Exploring side hustle opportunities like freelancing consulting or building a SaaS product to create additional income streams",
-        "Researching real estate investment properties analyzing cap rates rental yields and mortgage rates in target neighborhoods",
-        "Tax planning season organizing receipts maximizing deductions and contributing to retirement accounts before the deadline",
+        "Applying for jobs and preparing for interviews to get hired as an engineer and earn a salary income",
+        "LinkedIn outreach and networking to find job opportunities and advance my career for financial stability",
+        "Creating a demo video for a job interview at a company as part of the hiring process first round",
+        "Automating job scraping and job applications to speed up my job search and land a position faster",
+        "Had a hard day trying to automate my job search and application process but results with nothing but failure",
     ],
     "Relationships": [
-        "Planning a dinner date with my partner this weekend trying that new Italian restaurant downtown for our anniversary celebration",
-        "Need to catch up with old college friends organizing a group hangout or video call to maintain those important friendships",
-        "Family gathering this holiday coordinating travel plans gifts and making sure to spend quality time with parents and siblings",
-        "Working on communication skills with my partner setting healthy boundaries and practicing active listening in conversations",
-        "Meeting a new mentor for coffee this week to discuss career growth and build my professional network connections",
+        "Planning to meet up with friends or family for dinner catching up and spending quality time together",
+        "Had a call with a professional contact or mentor to get guidance on networking and career strategy",
+        "A director or recruiter from a company reached out on LinkedIn and wants to have a conversation with me",
+        "Working on communication and setting healthy boundaries in personal and professional relationships",
+        "Catching up with old friends organizing a group hangout or video call to maintain friendships",
     ],
     "Mind & Growth": [
-        "Reading a new book on cognitive psychology taking detailed notes and connecting ideas to my existing mental models and frameworks",
-        "Enrolled in an online course on machine learning spending two hours daily on lectures practice problems and project work",
-        "Deep personal reflection journaling about my values beliefs and life philosophy questioning assumptions and seeking deeper understanding",
-        "Prepping and studying for technical interviews grinding LeetCode problems and implementing algorithms to build skills",
-        "Found an interesting article or resource that I need to implement and learn from as soon as possible to grow my skills",
+        "Reading a book or article taking notes and connecting ideas to my existing knowledge and mental models",
+        "Studying and prepping nonstop for technical interviews grinding problems and practicing algorithms",
+        "Found an interesting resource or research paper that I want to read and learn from to grow my knowledge",
+        "Learning a new technology platform like Microsoft Fabric or a cloud ecosystem to build my skills",
+        "Deep personal reflection and journaling about values beliefs and life philosophy for self improvement",
     ],
     "Purpose & Impact": [
-        "Working on my career mission statement clarifying what legacy I want to leave and how my work contributes to society",
-        "Volunteering at the local community center teaching coding workshops to underprivileged youth making a positive social impact",
-        "Building my portfolio project that solves a real problem for people combining technical skills with meaningful purpose and mission",
-        "Mentoring junior developers at work sharing knowledge and experience to help them grow while strengthening my own leadership skills",
-        "Brainstorming creative side projects that align with my passions and values exploring ways to turn purpose into sustainable work",
+        "Writing a LinkedIn post sharing thought leadership about how data engineers need knowledge graphs and AI",
+        "Volunteering at a community center teaching coding workshops to help underprivileged youth learn technology",
+        "Working on my career mission clarifying what legacy I want to leave and how my work helps society at large",
+        "Mentoring junior developers sharing knowledge and experience to help them grow in their engineering careers",
+        "Contributing to open source projects or creating public educational content that benefits the community",
     ],
     "Systems & Environment": [
-        "Setting up automated workflows with scripts and tools to streamline repetitive tasks and improve daily productivity systems",
-        "Decluttering and reorganizing my home workspace optimizing desk layout lighting and ergonomics for better focus and comfort",
-        "Building a morning routine habit stack with specific triggers and rewards tracking consistency in my habit tracker app",
-        "Upgrading my tech setup installing new software configuring development environment and maintaining hardware infrastructure",
-        "Optimizing my time management system reviewing weekly planning process adjusting priorities and eliminating efficiency bottlenecks",
+        "Building and coding my second brain system implementing features like cosine similarity search and automation",
+        "Setting up automated workflows scripts and tools to streamline repetitive tasks and productivity systems",
+        "Designing an agent judging workflow for AI Product Council to evaluate when agents are doing productive work",
+        "Planning and building a dashboard webapp or infrastructure project to improve my digital environment",
+        "Implementing mathematical functions and algorithms for the knowledge graph like RRF and vector embeddings",
     ],
 }
 
@@ -360,7 +360,7 @@ class MessageClassifier:
 
             result = []
             for dim, sim in scores:
-                if sim < 0.28:
+                if sim < 0.55:
                     break
                 result.append(DimensionScore(
                     dimension=dim,
