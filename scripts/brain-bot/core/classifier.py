@@ -220,6 +220,8 @@ class MessageClassifier:
         # Sort: keyword matches first (priority 0), then embedding (priority 1), then by confidence
         _method_priority = {"keyword": 0, "embedding": 1, "zero_shot": 1, "llm": 1}
         merged.sort(key=lambda s: (_method_priority.get(s.method, 2), -s.confidence))
+        # Cap at 3 dimensions max to prevent over-classification
+        merged = merged[:3]
 
         if merged:
             result.matches = merged
