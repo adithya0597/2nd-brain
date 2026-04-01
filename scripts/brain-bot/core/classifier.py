@@ -95,10 +95,11 @@ _DIMENSION_REFERENCES: dict[str, list[str]] = {
     ],
     "Relationships": [
         "Planning to meet up with friends or family for dinner catching up and spending quality time together",
-        "Had a call with a professional contact or mentor to get guidance on networking and career strategy",
-        "A director or recruiter from a company reached out on LinkedIn and wants to have a conversation with me",
+        "Had a call with Scott Evans or a professional contact to get guidance on networking and career strategy",
+        "A chief of staff or director from Wells Fargo reached out on LinkedIn and wants to have a conversation with me",
         "Working on communication and setting healthy boundaries in personal and professional relationships",
         "Catching up with old friends organizing a group hangout or video call to maintain friendships",
+        "Nervous and anxious about an upcoming conversation with a senior leader at a company about a potential role",
     ],
     "Mind & Growth": [
         "Reading a book or article taking notes and connecting ideas to my existing knowledge and mental models",
@@ -252,7 +253,19 @@ class MessageClassifier:
         scores: dict[str, int] = {}
 
         for dimension, keywords in self._keywords.items():
-            count = sum(1 for kw in keywords if kw in text_lower)
+            count = 0
+            for kw in keywords:
+                # Use word-boundary matching to avoid substring false positives
+                # (e.g., "read" matching "reviewed")
+                if " " in kw:
+                    # Multi-word keywords: plain substring match is fine
+                    if kw in text_lower:
+                        count += 1
+                else:
+                    # Single-word keywords: require word boundary
+                    pattern = r"\b" + re.escape(kw) + r"\b"
+                    if re.search(pattern, text_lower):
+                        count += 1
             if count > 0:
                 scores[dimension] = count
 
