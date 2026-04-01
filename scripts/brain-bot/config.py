@@ -80,7 +80,7 @@ DIMENSION_TOPICS = {
 # Keywords for quick routing (no AI needed)
 DIMENSION_KEYWORDS = {
     "Health & Vitality": ["health", "fitness", "workout", "diet", "sleep", "exercise", "nutrition", "meditation", "yoga", "running", "gym", "weight", "mental health", "work out", "working out", "well-being", "wellbeing", "calorie", "stretch"],
-    "Wealth & Finance": ["money", "finance", "invest", "portfolio", "budget", "savings", "income", "expense", "crypto", "stocks", "salary", "debt", "tax", "side hustle", "net worth", "credit card", "bank account", "real estate"],
+    "Wealth & Finance": ["money", "finance", "invest", "portfolio", "budget", "savings", "income", "expense", "crypto", "stocks", "salary", "debt", "tax", "side hustle", "net worth", "credit card", "bank account", "real estate", "job", "jobs", "career", "interview", "linkedin", "applying", "application", "applied", "hire", "hiring", "offer", "compensation", "negotiate", "negotiation", "pitch deck", "resume", "recruiter", "networking", "outreach", "job search", "job hunt", "demo video", "wells fargo", "callbacks"],
     "Relationships": ["friend", "family", "relationship", "dating", "partner", "social", "network", "community", "mentor", "colleague", "hang out", "hanging out", "catch up", "catching up", "get together"],
     "Mind & Growth": ["learn", "read", "book", "course", "study", "skill", "knowledge", "research", "education", "mindset", "philosophy", "psychology", "self improvement", "self-improvement", "personal growth", "online course"],
     "Purpose & Impact": ["career", "mission", "purpose", "impact", "contribute", "volunteer", "leadership", "legacy", "meaning", "values", "give back", "side project", "open source", "passion project"],
