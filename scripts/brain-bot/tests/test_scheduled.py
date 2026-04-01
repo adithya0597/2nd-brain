@@ -106,7 +106,7 @@ class TestShouldRunBiweekly:
     def test_no_previous_run(self):
         mock_conn = MagicMock()
         mock_conn.__enter__().execute.return_value.fetchone.return_value = None
-        with patch("handlers.scheduled.get_connection", return_value=mock_conn):
+        with patch("core.db_connection.get_connection", return_value=mock_conn):
             assert _should_run_biweekly("emerge") is True
 
     def test_recent_run_skips(self):
@@ -115,7 +115,7 @@ class TestShouldRunBiweekly:
         mock_conn.__enter__().execute.return_value.fetchone.return_value = (
             datetime.now().isoformat(),
         )
-        with patch("handlers.scheduled.get_connection", return_value=mock_conn):
+        with patch("core.db_connection.get_connection", return_value=mock_conn):
             assert _should_run_biweekly("emerge") is False
 
     def test_old_run_allows(self):
@@ -123,11 +123,11 @@ class TestShouldRunBiweekly:
         old_date = (datetime.now() - timedelta(days=15)).isoformat()
         mock_conn = MagicMock()
         mock_conn.__enter__().execute.return_value.fetchone.return_value = (old_date,)
-        with patch("handlers.scheduled.get_connection", return_value=mock_conn):
+        with patch("core.db_connection.get_connection", return_value=mock_conn):
             assert _should_run_biweekly("emerge") is True
 
     def test_db_error_returns_true(self):
-        with patch("handlers.scheduled.get_connection", side_effect=Exception("db")):
+        with patch("core.db_connection.get_connection", side_effect=Exception("db")):
             assert _should_run_biweekly("emerge") is True
 
 
@@ -353,9 +353,14 @@ class TestJobVaultReindex:
     @pytest.mark.asyncio
     async def test_success(self, mock_cb_context):
         with (
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock, return_value=50),
-            patch("handlers.scheduled.index_vault", return_value=50),
-            patch("handlers.scheduled.index_journal", return_value=10),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock, return_value=50),
+            patch("core.vault_indexer.run_full_index", return_value=50),
+            patch("core.journal_indexer.run_full_index", return_value=10),
+            patch("core.fts_index.populate_fts", return_value=50),
+            patch("core.icor_affinity.rebuild_all_icor_edges", return_value=10),
+            patch("core.community.update_community_ids", return_value=5),
+            patch("core.graph_ops.rebuild_tag_shared_edges", return_value=20),
+            patch("core.graph_ops.rebuild_semantic_similarity_edges", return_value=15),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_vault_reindex(mock_cb_context)
@@ -415,7 +420,7 @@ class TestJobDbBackup:
 
         with (
             patch("handlers.scheduled.DB_PATH", str(db_file)),
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_db_backup(mock_cb_context)
@@ -426,7 +431,9 @@ class TestJobDailyEngagement:
     async def test_success(self, mock_cb_context):
         mock_metrics = {"engagement_score": 5.5}
         with (
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock, return_value=mock_metrics),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock, return_value=mock_metrics),
+            patch("core.engagement.compute_daily_metrics", return_value=mock_metrics),
+            patch("core.engagement.save_daily_metrics"),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_daily_engagement(mock_cb_context)
@@ -436,7 +443,8 @@ class TestJobDimensionSignals:
     @pytest.mark.asyncio
     async def test_success(self, mock_cb_context):
         with (
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock, return_value=[{"dim": "Health"}]),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock, return_value=[{"dim": "Health"}]),
+            patch("core.dimension_signals.compute_dimension_signals", return_value=[]),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_dimension_signals(mock_cb_context)
@@ -446,7 +454,8 @@ class TestJobWeeklyBrainLevel:
     @pytest.mark.asyncio
     async def test_success(self, mock_cb_context):
         with (
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock, return_value={"level": 7}),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock, return_value={"level": 7}),
+            patch("core.dimension_signals.compute_brain_level", return_value={"level": 7}),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_weekly_brain_level(mock_cb_context)
@@ -479,7 +488,8 @@ class TestJobRollingMemo:
     async def test_success(self, mock_cb_context):
         with (
             patch("handlers.scheduled._call_claude", new_callable=AsyncMock, return_value="Memo content"),
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock, return_value=True),
+            patch("core.rolling_memo.append_to_rolling_memo", return_value=True),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock, return_value=True),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_rolling_memo(mock_cb_context)
@@ -504,7 +514,8 @@ class TestJobGraphMaintenance:
             "density": {"density": 0.05},
         }
         with (
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock, return_value=result),
+            patch("core.graph_maintenance.run_maintenance", return_value=result),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock, return_value=result),
             patch("handlers.scheduled._send_to_topic", new_callable=AsyncMock),
             patch("handlers.scheduled._record_job_run"),
         ):
@@ -514,7 +525,8 @@ class TestJobGraphMaintenance:
     async def test_no_orphans(self, mock_cb_context):
         result = {"orphans": [], "total_orphans": 0, "stale_concepts": [], "density": {"density": 0.1}}
         with (
-            patch("handlers.scheduled.run_in_executor", new_callable=AsyncMock, return_value=result),
+            patch("core.graph_maintenance.run_maintenance", return_value=result),
+            patch("core.async_utils.run_in_executor", new_callable=AsyncMock, return_value=result),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_graph_maintenance(mock_cb_context)
@@ -525,8 +537,9 @@ class TestJobGraduationProposals:
     async def test_no_candidates(self, mock_cb_context):
         mock_conn = MagicMock()
         with (
-            patch("handlers.scheduled.get_connection", return_value=mock_conn),
-            patch("handlers.scheduled.detect_graduation_candidates", new_callable=AsyncMock, return_value=[]),
+            patch("core.db_connection.get_connection", return_value=mock_conn),
+            patch("core.graduation_detector.detect_graduation_candidates", new_callable=AsyncMock, return_value=[]),
+            patch("handlers.scheduled.execute", new_callable=AsyncMock),
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_graduation_proposals(mock_cb_context)
@@ -542,10 +555,10 @@ class TestJobSystemHealthCheck:
         mock_conn.__enter__().execute.return_value.fetchone.return_value = (100,)
 
         with (
-            patch("handlers.scheduled.get_connection", return_value=mock_conn),
+            patch("core.db_connection.get_connection", return_value=mock_conn),
             patch("handlers.scheduled.get_ai_client", return_value=MagicMock()),
             patch("handlers.scheduled.get_ai_model", return_value="test-model"),
-            patch("handlers.scheduled._detect_provider", return_value="anthropic"),
+            patch("core.ai_client._detect_provider", return_value="anthropic"),
             patch("handlers.scheduled._send_to_topic", new_callable=AsyncMock),
             patch("handlers.scheduled._record_job_run"),
         ):
