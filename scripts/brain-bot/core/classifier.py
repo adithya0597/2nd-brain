@@ -85,11 +85,13 @@ _DIMENSION_REFERENCES: dict[str, list[str]] = {
         "Struggling with sleep hygiene and insomnia need a consistent bedtime routine and less screen time before bed",
     ],
     "Wealth & Finance": [
-        "Applying for jobs sending applications and going through interviews to get hired and earn a salary income",
-        "LinkedIn outreach reaching out to hiring managers and recruiters to find job openings for financial stability",
-        "Creating a demo video and sending it to a company recruiter as part of the job hiring process first round",
-        "Automating job scraping job fit analysis and job applications to speed up the job search and get hired faster",
+        "Applying for jobs and preparing for interviews to get hired as an engineer and earn a salary income",
+        "LinkedIn outreach and networking to find job opportunities and advance my career for financial stability",
+        "Creating a demo video for a job interview at a company as part of the hiring process first round",
+        "Automating job scraping and job applications to speed up my job search and land a position faster",
         "Had a hard day trying to automate my job search and application process but results with nothing but failure",
+        "Professional networking with contacts at Wells Fargo and other companies to get referrals for job positions",
+        "Working on a pitch deck and networking plan to present my skills to potential employers and hiring managers",
     ],
     "Relationships": [
         "Planning to meet up with friends or family for dinner catching up and spending quality time together",
@@ -214,7 +216,9 @@ class MessageClassifier:
         keyword_dims = {s.dimension for s in keyword_scores}
         extra_embedding = [s for s in embedding_scores if s.dimension not in keyword_dims]
         merged = keyword_scores + extra_embedding
-        merged.sort(key=lambda s: s.confidence, reverse=True)
+        # Sort: keyword matches first (priority 0), then embedding (priority 1), then by confidence
+        _method_priority = {"keyword": 0, "embedding": 1, "zero_shot": 1, "llm": 1}
+        merged.sort(key=lambda s: (_method_priority.get(s.method, 2), -s.confidence))
 
         if merged:
             result.matches = merged
@@ -356,7 +360,7 @@ class MessageClassifier:
 
             result = []
             for dim, sim in scores:
-                if sim < 0.55:
+                if sim < 0.60:
                     break
                 result.append(DimensionScore(
                     dimension=dim,
