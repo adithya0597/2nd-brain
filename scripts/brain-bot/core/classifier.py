@@ -331,17 +331,18 @@ class MessageClassifier:
             for i, (dim, sim) in enumerate(scores):
                 if sim < 0.32:
                     break
+                # Multi-label: keep top, keep second if within 0.1 of top, stop after that
+                if i == 0:
+                    pass  # Always keep top
+                elif i == 1 and scores[0][1] - sim <= 0.1:
+                    pass  # Keep close second
+                else:
+                    break  # Stop before appending
                 result.append(DimensionScore(
                     dimension=dim,
                     confidence=round(sim, 2),
                     method="zero_shot",
                 ))
-                # Multi-label: include second dimension if within 0.1 of top
-                if i == 0:
-                    continue
-                if i == 1 and scores[0][1] - sim <= 0.1:
-                    continue  # Keep this one
-                break  # Stop after first significant gap
 
             return result
         except Exception:
