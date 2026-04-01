@@ -4,7 +4,6 @@ import logging
 import sqlite3
 from pathlib import Path
 
-import config
 from core.db_connection import get_connection
 
 logger = logging.getLogger(__name__)

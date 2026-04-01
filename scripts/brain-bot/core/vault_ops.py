@@ -494,7 +494,6 @@ def create_web_clip(
 
     Returns path to the created file.
     """
-    import re as _re
 
     with _vault_lock:
         resources_dir = config.VAULT_PATH / "Resources"

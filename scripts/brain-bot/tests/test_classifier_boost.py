@@ -2,7 +2,6 @@
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 # Mock config before importing (conftest sets all defaults)
 sys.modules.setdefault("config", MagicMock())

@@ -92,7 +92,7 @@ PROJECT_KEYWORDS = ["project", "milestone", "deadline", "sprint", "deliverable",
 RESOURCE_KEYWORDS = ["article", "book", "resource", "reference", "template", "tool", "framework", "library", "tutorial", "course", "documentation", "guide", "cheatsheet", "recipe", "podcast", "video", "lecture"]
 
 # Confidence bouncer: messages below this threshold are routed to user DM for clarification
-CONFIDENCE_THRESHOLD = float(os.getenv("BRAIN_CONFIDENCE_THRESHOLD", "0.60"))
+CONFIDENCE_THRESHOLD = float(os.getenv("BRAIN_CONFIDENCE_THRESHOLD", "0.45"))
 BOUNCER_TIMEOUT_MINUTES = int(os.getenv("BRAIN_BOUNCER_TIMEOUT", "15"))
 
 

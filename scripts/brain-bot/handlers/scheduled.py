@@ -725,7 +725,6 @@ async def job_graph_maintenance(context: CallbackContext):
 async def job_system_health_check(context: CallbackContext):
     """Daily 5:30am: System health check — API status, graph quality, engagement."""
     try:
-        import sqlite3
         from core.db_connection import get_connection
 
         lines = ["<b>System Health Check</b>\n"]

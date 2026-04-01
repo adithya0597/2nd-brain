@@ -1,8 +1,7 @@
 """Tests for graph maintenance module."""
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

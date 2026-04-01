@@ -7,7 +7,6 @@ execution context.
 Schema lives in migrate-db.py (step 21) and conftest.py.
 """
 
-import json
 import logging
 from pathlib import Path
 

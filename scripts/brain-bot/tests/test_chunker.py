@@ -2,7 +2,6 @@
 import sys
 from pathlib import Path
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Path & module setup (same pattern as test_graph_ops.py)
@@ -23,7 +22,6 @@ from core.chunker import (
     MIN_WORDS_FOR_CHUNKING,
     MAX_CHUNK_WORDS,
     FIXED_CHUNK_WORDS,
-    FIXED_CHUNK_OVERLAP,
 )
 
 

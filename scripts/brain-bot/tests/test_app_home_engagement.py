@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
 # Ensure brain-bot dir on path and mocks in place
 BRAIN_BOT_DIR = Path(__file__).parent.parent

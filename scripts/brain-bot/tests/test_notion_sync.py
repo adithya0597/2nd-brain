@@ -1,7 +1,7 @@
 """Tests for core/notion_sync.py — Journal sync idempotency and sync state."""
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

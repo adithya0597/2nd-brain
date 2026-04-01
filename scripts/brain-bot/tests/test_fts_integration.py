@@ -6,9 +6,8 @@ import sqlite3
 import sys
 import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
@@ -17,7 +16,7 @@ if str(SLACK_BOT_DIR) not in sys.path:
 # Mock config before importing bot modules (conftest sets all defaults)
 sys.modules.setdefault("config", MagicMock())
 
-from core.fts_index import fts5_escape, populate_fts, search_fts
+from core.fts_index import populate_fts, search_fts
 
 
 # ---------------------------------------------------------------------------

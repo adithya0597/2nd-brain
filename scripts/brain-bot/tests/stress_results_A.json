@@ -1,0 +1,128 @@
+[
+  {
+    "name": "today",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.71,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /today. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": "/Users/adithya/Documents/2nd-brain/vault/Daily Notes/2026-03-07.md",
+    "html_valid": true
+  },
+  {
+    "name": "close",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.27,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /close-day. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": "/Users/adithya/Documents/2nd-brain/vault/Daily Notes/2026-03-07.md",
+    "html_valid": true
+  },
+  {
+    "name": "drift",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.1,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /drift. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "emerge",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.67,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /emerge. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "graduate",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.1,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /graduate. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "schedule",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.09,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /schedule. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "projects",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.1,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /projects. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "resources",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.08,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /resources. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "engage",
+    "group": "A",
+    "status": "fail",
+    "duration_s": 0.09,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /engage. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  }
+]

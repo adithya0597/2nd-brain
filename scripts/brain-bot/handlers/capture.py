@@ -24,7 +24,6 @@ from core.async_utils import run_in_executor
 from core.classifier import ClassificationResult, MessageClassifier
 from core.db_ops import execute, insert_action_item
 from core.formatter import format_capture_confirmation, format_error
-from core.message_utils import send_long_message
 from core.vault_ops import (
     append_to_daily_note,
     create_inbox_entry,

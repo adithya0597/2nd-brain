@@ -1,11 +1,9 @@
 """Tests for core/journal_indexer.py — Daily note parsing and indexing."""
-import json
 import sqlite3
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
-import pytest
 
 SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:

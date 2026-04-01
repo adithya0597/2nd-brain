@@ -1,7 +1,7 @@
 """Tests for core/classifier.py — 4-tier hybrid message classification."""
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,8 +19,6 @@ from core.classifier import (
     MessageClassifier,
     ClassificationResult,
     DimensionScore,
-    _NOISE_PATTERNS,
-    _ACTION_PATTERNS,
 )
 
 

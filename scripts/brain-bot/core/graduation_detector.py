@@ -2,9 +2,7 @@
 import hashlib
 import json
 import logging
-from pathlib import Path
 
-import config
 from core.db_ops import query
 
 logger = logging.getLogger(__name__)

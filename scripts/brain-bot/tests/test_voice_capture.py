@@ -1,5 +1,4 @@
 """Tests for voice capture handling in handlers/capture.py."""
-import json
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -294,7 +293,6 @@ class TestVoiceCaptureErrorHandling:
                 return original_import(name, *args, **kwargs)
 
             # Instead, we test the ImportError path by patching at module level
-            from handlers import capture
 
             with patch.dict("sys.modules", {"core.transcriber": None}):
                 # This should trigger the ImportError in handle_voice_capture

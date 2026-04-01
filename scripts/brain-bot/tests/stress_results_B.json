@@ -1,0 +1,86 @@
+[
+  {
+    "name": "ghost",
+    "group": "B",
+    "status": "fail",
+    "duration_s": 0.66,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /ghost. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "trace",
+    "group": "B",
+    "status": "fail",
+    "duration_s": 19.39,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /trace. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "connect",
+    "group": "B",
+    "status": "fail",
+    "duration_s": 1.09,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /connect. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "challenge",
+    "group": "B",
+    "status": "fail",
+    "duration_s": 0.1,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /challenge. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "ideas",
+    "group": "B",
+    "status": "fail",
+    "duration_s": 0.14,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /ideas. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "context",
+    "group": "B",
+    "status": "fail",
+    "duration_s": 0.09,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /context-load. Check bot logs.",
+      "Short response (22 < 200)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  }
+]

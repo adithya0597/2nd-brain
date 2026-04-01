@@ -1,10 +1,9 @@
 """Tests for cross-session trend queries and alert optimizations."""
 import sys
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 sys.modules.setdefault("config", MagicMock())
 
-import pytest
 
 
 class TestTrendQueries:

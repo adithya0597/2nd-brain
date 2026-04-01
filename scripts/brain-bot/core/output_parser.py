@@ -76,7 +76,7 @@ def parse_graduate_output(result_text: str) -> list[ParsedConcept]:
         if title:
             concepts.append(ParsedConcept(
                 title=title,
-                summary=summary or f"Concept graduated from daily notes",
+                summary=summary or "Concept graduated from daily notes",
                 icor_elements=icor_elements,
                 source_dates=sources,
                 first_mentioned=sources[0] if sources else "",

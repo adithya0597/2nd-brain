@@ -1,6 +1,5 @@
 """Tests for core.transcriber — voice transcription via faster-whisper."""
 import sys
-import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

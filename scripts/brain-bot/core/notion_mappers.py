@@ -1,5 +1,4 @@
 """Pure entity transforms between local and Notion property formats."""
-from datetime import datetime
 
 
 # ---------------------------------------------------------------------------

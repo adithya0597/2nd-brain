@@ -19,7 +19,6 @@ from telegram.ext import (
 
 from config import GROUP_CHAT_ID, TOPICS
 from core.dashboard_builder import build_dashboard_view, build_pinned_summary
-from core.formatter import _cb
 from core.message_utils import send_long_message
 
 logger = logging.getLogger(__name__)

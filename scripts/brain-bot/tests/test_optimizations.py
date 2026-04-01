@@ -3,9 +3,8 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
@@ -15,7 +14,7 @@ if str(SLACK_BOT_DIR) not in sys.path:
 sys.modules.setdefault("config", MagicMock())
 
 from core.vault_indexer import get_linked_files
-from core.notion_sync import NotionSync, RegistryManager
+from core.notion_sync import NotionSync
 
 # ---------------------------------------------------------------------------
 # Schema DDL for vault_nodes + vault_edges + vault_index VIEW

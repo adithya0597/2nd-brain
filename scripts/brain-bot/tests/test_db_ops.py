@@ -1,10 +1,9 @@
 """Tests for core/db_ops.py — Async SQLite operations."""
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
@@ -22,8 +21,6 @@ from core.db_ops import (
     update_sync_state,
     get_sync_state,
     get_icor_hierarchy,
-    get_attention_scores,
-    get_recent_journal,
     log_sync_operation,
     get_unpushed_actions,
     update_action_external,

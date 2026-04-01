@@ -5,9 +5,7 @@ Tests whether context compression works before committing to the full
 so the chunker + embedder indexes it automatically via _on_vault_write().
 """
 import logging
-import threading
 from datetime import datetime
-from pathlib import Path
 
 import config
 

@@ -6,7 +6,6 @@ sys.modules.setdefault("config", MagicMock())
 sys.modules.setdefault("telegram", MagicMock())
 sys.modules.setdefault("telegram.ext", MagicMock())
 
-import pytest
 from core.formatter import format_engagement_report
 
 

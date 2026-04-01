@@ -1,8 +1,6 @@
 """Tests for core/output_parser.py — Parse structured output from Claude AI responses."""
-import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -10,7 +8,7 @@ SLACK_BOT_DIR = Path(__file__).parent.parent
 if str(SLACK_BOT_DIR) not in sys.path:
     sys.path.insert(0, str(SLACK_BOT_DIR))
 
-from core.output_parser import ParsedConcept, parse_graduate_output
+from core.output_parser import parse_graduate_output
 
 
 # ---------------------------------------------------------------------------

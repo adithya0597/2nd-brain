@@ -1,7 +1,6 @@
 """Tests for core.chunk_embedder -- chunk embedding pipeline."""
 import contextlib
 import sqlite3
-import struct
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch

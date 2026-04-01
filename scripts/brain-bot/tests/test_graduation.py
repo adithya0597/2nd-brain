@@ -1,11 +1,9 @@
 """Tests for concept graduation detection and handlers."""
 import json
-import os
 import sqlite3
 import sys
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

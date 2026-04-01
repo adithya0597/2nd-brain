@@ -13,10 +13,8 @@ import re
 import time
 from dataclasses import dataclass, field
 
-import anthropic
 
 import config
-from core.db_ops import query
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +297,6 @@ class MessageClassifier:
             return []
 
         try:
-            import numpy as np
             from core.embedding_store import _truncate_vector
             text_embedding = _truncate_vector(model.encode([text])[0])
 
@@ -346,7 +343,6 @@ class MessageClassifier:
             return []
 
         try:
-            import numpy as np
             from core.embedding_store import _get_model, _truncate_vector
             model = _get_model()
             if model is None:

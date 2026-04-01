@@ -1,13 +1,12 @@
 """Tests for core.graph_cache — standalone TTL cache module."""
 
 import time
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from unittest.mock import MagicMock
 
 import pytest
 
-from core.graph_cache import GraphCache, cached_graph_call, get_cache, invalidate
+from core.graph_cache import GraphCache, cached_graph_call
 
 
 # ---------------------------------------------------------------------------

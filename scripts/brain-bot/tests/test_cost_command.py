@@ -2,7 +2,7 @@
 import sqlite3
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,7 +15,7 @@ sys.modules.setdefault("config", MagicMock())
 sys.modules.setdefault("telegram", MagicMock())
 sys.modules.setdefault("telegram.ext", MagicMock())
 
-from core.db_ops import get_cost_summary, execute
+from core.db_ops import get_cost_summary
 from core.formatter import format_cost_report
 
 

@@ -16,8 +16,6 @@ import yaml
 import config
 from core.db_connection import get_connection
 from core.graph_ops import (
-    get_neighbors,
-    get_node_by_title,
     rebuild_wikilink_edges_for_node,
     upsert_node,
 )
@@ -586,7 +584,7 @@ def find_intersection_nodes(
 # Cache-through wrappers (use graph_cache for TTL-based caching)
 # ---------------------------------------------------------------------------
 
-from core.graph_cache import cached_graph_call, invalidate as invalidate_graph_cache
+from core.graph_cache import cached_graph_call
 
 
 def cached_get_linked_files(seed_titles, depth=2, db_path=None):

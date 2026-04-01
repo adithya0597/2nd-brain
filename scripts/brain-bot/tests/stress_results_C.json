@@ -1,0 +1,71 @@
+[
+  {
+    "name": "status",
+    "group": "C",
+    "status": "pass",
+    "duration_s": 0.04,
+    "response_length": 1227,
+    "response_preview": "\u23f3 Fetching status...\n<b>\ud83c\udfaf ICOR Dashboard</b>\n\n<b>Quick Stats:</b>\n\u2022 Pending actions: 1\n\u2022 Journaled today: Yes\n\u2022 Neglected elements: 22\n\n<b>Health &amp; Vitality</b>\n  \ud83d\udd34 Fitness (2.0)\n  \ud83d\udd34 Nutrition (2.0)\n  \ud83d\udd34 Sleep (0.0)\n  \ud83d\udd34 Mental Health (0.0)\n\n<b>Wealth &amp; Finance</b>\n  \ud83d\udd34 Income (2.0)\n  \ud83d\udd34 Investm",
+    "errors": [],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "help",
+    "group": "C",
+    "status": "pass",
+    "duration_s": 0.0,
+    "response_length": 1490,
+    "response_preview": "<b>\ud83e\udde0 Second Brain Commands</b>\n\n<code>/brain-today</code> \u2014 Morning review + daily note\n<code>/brain-close</code> \u2014 Evening review + journal index\n<code>/brain-schedule</code> \u2014 Energy-aware weekly planning\n<code>/brain-drift</code> \u2014 Goal vs. journal alignment analysis\n<code>/brain-ideas</code> \u2014 A",
+    "errors": [],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "find",
+    "group": "C",
+    "status": "pass",
+    "duration_s": 20.87,
+    "response_length": 1767,
+    "response_preview": "\ud83d\udd0d Searching...\n<b>\ud83d\udd0d Search: \"mindfulness\"</b>\n<i>Channels: vector, fts | 15 candidates | 15 results</i>\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n<b>1. ICOR</b>\n<code>Identity/ICOR.md</code>\n(similarity: 0.07)\n<code>vector</code> <code>fts</code>\n<b>2. Daily Note</b>\n<code>Templates/Daily Note.md</code>\n(similarity: 0.14)\n",
+    "errors": [],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "find --ai",
+    "group": "C",
+    "status": "fail",
+    "duration_s": 0.73,
+    "response_length": 22,
+    "response_preview": "\u23f3 Gathering context...",
+    "errors": [
+      "\u274c <b>Error</b>\nFailed to execute /find. Check bot logs.",
+      "Short response (22 < 50)"
+    ],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "dashboard",
+    "group": "C",
+    "status": "pass",
+    "duration_s": 0.02,
+    "response_length": 443,
+    "response_preview": "<b>\ud83e\udde0 BRAIN LEVEL</b>\nComputing...\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n<b>DIMENSION MOMENTUM</b>\nComputing...\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n<b>\ud83c\udfaf SECOND BRAIN DASHBOARD</b>\n\ud83d\udd34 Health  \ud83d\udd34 Wealth  \ud83d\udd34 Relationships\n\ud83d\udd34 Mind  \ud83d\udd34 Purpose  \ud83d\udd34 Systems\nPending: 1 | Journaled: \u2705 Yes\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n<b>7-DAY ENGAGEMENT</b>\nComputing...\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
+    "errors": [],
+    "vault_file": null,
+    "html_valid": true
+  },
+  {
+    "name": "cost",
+    "group": "C",
+    "status": "pass",
+    "duration_s": 0.05,
+    "response_length": 290,
+    "response_preview": "\u23f3 Fetching cost data...\n<b>\ud83d\udcb0 API Cost Report (Last 30 Days)</b>\n\n<b>Total cost:</b> $0.0000 | <b>Total calls:</b> 0 | <b>Avg cost/call:</b> $0.0000\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n<b>Daily Breakdown</b>\nNo API calls in this period.\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\n<i>Generated at 2026-03-07 23:45</i>",
+    "errors": [],
+    "vault_file": null,
+    "html_valid": true
+  }
+]

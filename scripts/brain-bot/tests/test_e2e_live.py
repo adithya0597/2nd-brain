@@ -7,7 +7,7 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -35,7 +35,7 @@ import config  # noqa: E402 — conftest populates all attributes
 
 from core.db_ops import get_cost_summary, get_icor_hierarchy, query
 from core.formatter import format_cost_report, format_help
-from core.notion_sync import NotionSync, RegistryManager
+from core.notion_sync import NotionSync
 from core.vault_indexer import (
     build_link_graph,
     index_to_db,

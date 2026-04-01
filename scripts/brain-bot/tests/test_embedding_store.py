@@ -1,10 +1,8 @@
 """Tests for core.embedding_store — sqlite-vec embedding operations."""
 import struct
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 # Mock config before imports
 sys.modules.setdefault("config", MagicMock())

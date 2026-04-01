@@ -54,7 +54,6 @@ class TestConfigConsolidation:
 
     def test_topics_populated_from_env(self):
         """TOPICS in config.py should be a dict (populated dynamically from env vars)."""
-        import ast
         config_path = Path(__file__).parent.parent / "config.py"
         tree = ast.parse(config_path.read_text())
         for node in ast.walk(tree):
@@ -74,7 +73,6 @@ class TestConfigConsolidation:
 
     def test_dimension_topics_has_six_entries(self):
         """DIMENSION_TOPICS in config.py source should have exactly 6 entries with string values."""
-        import ast
         config_path = Path(__file__).parent.parent / "config.py"
         tree = ast.parse(config_path.read_text())
         for node in ast.walk(tree):

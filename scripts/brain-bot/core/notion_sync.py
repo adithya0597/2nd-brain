@@ -17,7 +17,6 @@ from core.notion_mappers import (
     notion_goal_to_local,
     notion_person_to_local,
     notion_project_to_local,
-    notion_tag_to_icor,
     notion_task_to_action,
 )
 

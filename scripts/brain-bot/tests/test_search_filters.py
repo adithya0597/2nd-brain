@@ -2,10 +2,9 @@
 import sys
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import MagicMock
 
-import pytest
 
 BRAIN_BOT_DIR = Path(__file__).parent.parent
 if str(BRAIN_BOT_DIR) not in sys.path:

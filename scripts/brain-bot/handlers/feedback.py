@@ -9,7 +9,6 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 
-import config
 from config import DIMENSION_TOPICS
 from core.db_ops import execute, query
 

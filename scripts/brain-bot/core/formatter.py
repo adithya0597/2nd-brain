@@ -481,7 +481,7 @@ def format_projects_dashboard(projects: list, tasks: list, dimensions: list) -> 
                 f"  {icon} <b>{dim_name}</b> \u2014 {proj_count} projects, "
                 f"{pending} tasks pending (attn: {score:.1f})"
             )
-        parts.append(f"<b>Cross-Dimensional View</b>\n\n" + "\n".join(dim_lines))
+        parts.append("<b>Cross-Dimensional View</b>\n\n" + "\n".join(dim_lines))
 
     parts.append(_DIV)
 
@@ -579,7 +579,7 @@ def format_resources_catalog(resources: list, concepts: list, recently_added: li
             f"  \U0001f7e1 Growing: {growing}",
             f"  \U0001f331 Seedling: {seedling}",
         ]
-        parts.append(f"<b>Knowledge Health</b>\n\n" + "\n".join(health_lines))
+        parts.append("<b>Knowledge Health</b>\n\n" + "\n".join(health_lines))
 
     parts.append(f"\n<i>Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>")
     return "\n".join(parts), None
@@ -678,7 +678,7 @@ def format_engagement_report(data: dict) -> FormatResult:
             icon = momentum_map.get(mom, "\u2753")
             trend_icon = trend_map.get(trend, "\u27a1\ufe0f")
             lines.append(f"{icon} <b>{dim}:</b> {_esc(mom)} ({tp} touches) {trend_icon}")
-        parts.append(f"<b>Dimension Momentum</b>\n" + "\n".join(lines))
+        parts.append("<b>Dimension Momentum</b>\n" + "\n".join(lines))
         parts.append(_DIV)
 
     # 7-day engagement trend
@@ -693,7 +693,7 @@ def format_engagement_report(data: dict) -> FormatResult:
             bar_len = round((score / max(max_score, 1)) * 8)
             bar = "\u2593" * bar_len + "\u2591" * (8 - bar_len)
             bars.append(f"<code>{date}</code> <code>{bar}</code> {score:.1f}")
-        parts.append(f"<b>7-Day Engagement</b>\n" + "\n".join(bars))
+        parts.append("<b>7-Day Engagement</b>\n" + "\n".join(bars))
         parts.append(_DIV)
 
     # Active alerts
@@ -710,7 +710,7 @@ def format_engagement_report(data: dict) -> FormatResult:
             alert_lines.append(
                 f"{icon} <b>{_esc(a.get('title', 'Alert'))}:</b> {_esc(a.get('detail', ''))}"
             )
-        parts.append(f"<b>Active Alerts</b>\n" + "\n".join(alert_lines))
+        parts.append("<b>Active Alerts</b>\n" + "\n".join(alert_lines))
         parts.append(_DIV)
 
     # 30-day averages
@@ -816,9 +816,9 @@ def format_cost_report(data: dict, days: int = 30) -> FormatResult:
             lines.append(
                 f"<code>{date}</code> \u2014 {calls} calls, ${cost:.4f}, {inp:,} in / {out:,} out"
             )
-        parts.append(f"<b>Daily Breakdown</b>\n" + "\n".join(lines))
+        parts.append("<b>Daily Breakdown</b>\n" + "\n".join(lines))
     else:
-        parts.append(f"<b>Daily Breakdown</b>\nNo API calls in this period.")
+        parts.append("<b>Daily Breakdown</b>\nNo API calls in this period.")
 
     parts.append(_DIV)
 
@@ -835,7 +835,7 @@ def format_cost_report(data: dict, days: int = 30) -> FormatResult:
                 f"  <code>{caller}</code> \u2014 {calls} calls, "
                 f"${cost:.4f} (avg {avg_in:,} in / {avg_out:,} out)"
             )
-        parts.append(f"<b>Top Callers</b>\n" + "\n".join(lines))
+        parts.append("<b>Top Callers</b>\n" + "\n".join(lines))
 
     parts.append(_DIV)
 
@@ -847,7 +847,7 @@ def format_cost_report(data: dict, days: int = 30) -> FormatResult:
             calls = row.get("calls", 0)
             cost = row.get("total_cost", 0) or 0
             lines.append(f"  <code>{model}</code> \u2014 {calls} calls, ${cost:.4f}")
-        parts.append(f"<b>Model Breakdown</b>\n" + "\n".join(lines))
+        parts.append("<b>Model Breakdown</b>\n" + "\n".join(lines))
 
     parts.append(f"\n<i>Generated at {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>")
     return "\n".join(parts), None
@@ -900,7 +900,7 @@ def format_sync_report(result) -> FormatResult:
         counts.append(f"\U0001f9e0 AI decisions: {result.ai_calls}")
 
     if counts:
-        parts.append(f"\n<b>Sync Summary</b>\n" + "\n".join(counts))
+        parts.append("\n<b>Sync Summary</b>\n" + "\n".join(counts))
     else:
         parts.append("\nNo changes needed \u2014 everything is in sync.")
 

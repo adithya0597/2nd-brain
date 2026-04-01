@@ -1,6 +1,5 @@
 """Tests for core.ai_client singleton."""
 import sys
-import pytest
 from unittest.mock import MagicMock, patch
 
 # Ensure config mock exists

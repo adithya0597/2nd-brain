@@ -21,8 +21,6 @@ from core.content_extractor import (
     _parse_extraction_json,
     _strip_code_fences,
     extract_knowledge,
-    _MIN_CONTENT_LENGTH,
-    _MAX_CONTENT_LENGTH,
 )
 
 

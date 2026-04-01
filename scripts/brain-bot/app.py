@@ -19,7 +19,6 @@ from telegram.ext import (
 )
 
 from config import (
-    GROUP_CHAT_ID,
     OWNER_TELEGRAM_ID,
     TELEGRAM_BOT_TOKEN,
     TOPICS,

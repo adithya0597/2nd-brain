@@ -2,7 +2,6 @@
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 sys.modules.setdefault("config", MagicMock())
 sys.modules.setdefault("core.db_connection", MagicMock())
