@@ -99,11 +99,11 @@ _DIMENSION_REFERENCES: dict[str, list[str]] = {
         "Meeting a new mentor for coffee this week to discuss career growth and build my professional network connections",
     ],
     "Mind & Growth": [
-        "Reading a new book on cognitive psychology taking detailed notes and connecting ideas to my existing mental models knowledge base",
+        "Reading a new book on cognitive psychology taking detailed notes and connecting ideas to my existing mental models and frameworks",
         "Enrolled in an online course on machine learning spending two hours daily on lectures practice problems and project work",
         "Deep personal reflection journaling about my values beliefs and life philosophy questioning assumptions and seeking deeper understanding",
-        "Listening to podcasts about stoicism productivity and self improvement applying key takeaways to daily habits and routines",
-        "Writing a detailed article synthesizing research from multiple sources developing critical thinking and improving communication skills",
+        "Prepping and studying for technical interviews grinding LeetCode problems and implementing algorithms to build skills",
+        "Found an interesting article or resource that I need to implement and learn from as soon as possible to grow my skills",
     ],
     "Purpose & Impact": [
         "Working on my career mission statement clarifying what legacy I want to leave and how my work contributes to society",
