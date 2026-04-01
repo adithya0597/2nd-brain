@@ -89,7 +89,7 @@ class TestAppendToDailyNote:
         content = (temp_vault / "Daily Notes" / "2026-03-06.md").read_text(encoding="utf-8")
         lines = content.split("\n")
         # Find "## Morning" and verify content inserted right after it
-        morning_idx = next(i for i, l in enumerate(lines) if l.strip().startswith("## Morning"))
+        morning_idx = next(i for i, line in enumerate(lines) if line.strip().startswith("## Morning"))
         assert lines[morning_idx + 1] == "Morning capture line"
 
     def test_append_under_log_section(self, temp_vault):
