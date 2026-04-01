@@ -695,6 +695,97 @@ async def job_rolling_memo(context: CallbackContext):
         await _notify_job_failure(context.bot, "rolling_memo", e)
 
 
+async def job_weekly_connections(context: CallbackContext):
+    """Weekly connections analysis — finds bridges between recent captures."""
+    try:
+        rows = await query(
+            """SELECT DISTINCT json_each.value AS dimension
+               FROM captures_log, json_each(captures_log.dimensions_json)
+               WHERE created_at > datetime('now', '-7 days')
+                 AND json_each.value IS NOT NULL AND json_each.value != ''
+               LIMIT 6"""
+        )
+        if not rows or len(rows) < 2:
+            logger.info("Not enough recent captures for connections analysis")
+            _record_job_run("weekly_connections")
+            return
+
+        topics = [r["dimension"] for r in rows]
+        # Pick two most different topics for connection
+        user_input = f'"{topics[0]}" and "{topics[-1]}"'
+
+        result = await _call_claude("connect", user_input)
+        await _send_to_topic(context.bot, "brain-insights", result)
+        _record_job_run("weekly_connections")
+    except Exception as e:
+        logger.exception("weekly_connections failed")
+        await _notify_job_failure(context.bot, "weekly_connections", e)
+
+
+async def job_weekly_contradiction_scan(context: CallbackContext):
+    """Weekly contradiction scan — finds conflicting statements in recent captures."""
+    try:
+        rows = await query(
+            """SELECT message_text, created_at, dimensions_json FROM captures_log
+               WHERE created_at > datetime('now', '-14 days')
+               ORDER BY created_at DESC LIMIT 30"""
+        )
+        if not rows or len(rows) < 5:
+            logger.info("Not enough recent captures for contradiction scan")
+            _record_job_run("weekly_contradiction_scan")
+            return
+
+        captures_text = "\n".join(
+            f"[{r['created_at'][:10]}] ({r.get('dimensions_json', '[]')}): {r['message_text'][:150]}"
+            for r in rows
+        )
+
+        prompt = (
+            "Analyze these recent captures for contradictions, inconsistencies, "
+            "or stated intentions that conflict with later actions. Only flag "
+            "genuine contradictions, not normal evolution of thinking.\n\n"
+            f"RECENT CAPTURES:\n{captures_text}\n\n"
+            "If you find contradictions, list each one with:\n"
+            "- The contradicting statements (with dates)\n"
+            "- Why this matters\n"
+            "- A question for the user to reflect on\n\n"
+            "If no meaningful contradictions found, say so briefly."
+        )
+
+        ai = get_ai_client()
+        if ai is None:
+            logger.info("No AI client configured — skipping contradiction scan")
+            return
+        model = get_ai_model()
+        response = await ai.messages.create(
+            model=model,
+            max_tokens=2048,
+            system=[{
+                "type": "text",
+                "text": "You are a thoughtful analyst reviewing someone's personal notes "
+                        "for internal contradictions. Be gentle but honest.",
+            }],
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        try:
+            from core.token_logger import log_token_usage
+            log_token_usage(response, caller="scheduled_contradiction_scan", model=model)
+        except Exception:
+            pass
+
+        result = response.content[0].text
+
+        if "no meaningful contradictions" not in result.lower():
+            header = "<b>Weekly Contradiction Scan</b>\n\n"
+            await _send_to_topic(context.bot, "brain-insights", header + result)
+
+        _record_job_run("weekly_contradiction_scan")
+    except Exception as e:
+        logger.exception("weekly_contradiction_scan failed")
+        await _notify_job_failure(context.bot, "weekly_contradiction_scan", e)
+
+
 async def job_graph_maintenance(context: CallbackContext):
     """Weekly Sunday 4:30am: Graph health check — find orphans and suggest connections."""
     try:
@@ -967,6 +1058,22 @@ def register_jobs(job_queue):
         time=time(14, 0, tzinfo=CST),
         days=(2,),  # 2 = Wednesday
         name="emerge_biweekly",
+    )
+
+    # Weekly Wednesday 3pm: Connections analysis (after emerge)
+    job_queue.run_daily(
+        job_weekly_connections,
+        time=time(15, 0, tzinfo=CST),
+        days=(2,),  # 2 = Wednesday
+        name="weekly_connections",
+    )
+
+    # Weekly Sunday 5pm: Contradiction scan
+    job_queue.run_daily(
+        job_weekly_contradiction_scan,
+        time=time(17, 0, tzinfo=CST),
+        days=(6,),  # 6 = Sunday
+        name="weekly_contradiction_scan",
     )
 
     # Monthly 1st at 10am: Resource digest (daily check with day guard)

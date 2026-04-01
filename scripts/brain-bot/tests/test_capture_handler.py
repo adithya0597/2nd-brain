@@ -226,4 +226,5 @@ class TestRegister:
         app = MagicMock()
         with patch("handlers.capture.ensure_dimension_pages"):
             register(app)
-        app.add_handler.assert_called_once()
+        # Message handler + 3 extraction callback handlers (ok, edit, skip)
+        assert app.add_handler.call_count == 4

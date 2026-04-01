@@ -961,6 +961,61 @@ def migrate(db_path: Path = DB_PATH):
     conn.commit()
     print("Step 26c: verified_at backfilled from created_at")
 
+    # 27. Due dates + reminders + extraction feedback (Intelligence Layer Phase 1)
+    try:
+        cursor.execute("PRAGMA table_info(action_items)")
+        ai_cols = [row[1] for row in cursor.fetchall()]
+        if "due_date" not in ai_cols:
+            cursor.execute("ALTER TABLE action_items ADD COLUMN due_date TEXT")
+            print("Step 27: Added due_date column to action_items")
+        else:
+            print("action_items.due_date column already exists")
+    except Exception as e:
+        print(f"Step 27 due_date column failed: {e}")
+
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='reminders'"
+    )
+    if cursor.fetchone():
+        print("reminders table already exists — skipping")
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_item_id INTEGER,
+                remind_at TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (action_item_id) REFERENCES action_items(id)
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_remind_at ON reminders(remind_at)")
+        print("reminders table: created with indexes")
+
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='extraction_feedback'"
+    )
+    if cursor.fetchone():
+        print("extraction_feedback table already exists — skipping")
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS extraction_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                capture_id INTEGER,
+                field_name TEXT,
+                proposed_value TEXT,
+                confirmed_value TEXT,
+                was_correct INTEGER,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ef_capture ON extraction_feedback(capture_id)")
+        print("extraction_feedback table: created with indexes")
+
+    conn.commit()
+    print("Step 27 complete: due_date + reminders + extraction_feedback ready")
+
     conn.close()
     print(f"\nMigration complete on {db_path}")
     print(f"  - sync_state table: created/verified")
@@ -981,6 +1036,7 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - vault_chunks + vec_chunks: section-level chunking created/verified")
     print(f"  - metadata filtering indexes: last_modified + type_nonempty created/verified")
     print(f"  - graduation_proposals table: concept graduation created/verified")
+    print(f"  - action_items.due_date + reminders + extraction_feedback: Phase 1 intelligence layer")
 
 
 if __name__ == "__main__":

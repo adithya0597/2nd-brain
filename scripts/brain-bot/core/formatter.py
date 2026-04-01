@@ -258,6 +258,28 @@ def format_action_list(actions: list[dict]) -> FormatResult:
 
 
 # ---------------------------------------------------------------------------
+# 4b. Due Actions
+# ---------------------------------------------------------------------------
+
+def format_due_actions(due_actions: list[dict], upcoming_actions: list[dict] = None) -> str:
+    """Format due and upcoming actions for morning briefing."""
+    parts = []
+    if due_actions:
+        parts.append("<b>\u26a0\ufe0f Due Today / Overdue:</b>")
+        for a in due_actions:
+            due = a.get("due_date", "")
+            parts.append(f"  \u2022 {_esc(a['description'][:80])} <i>(due {_esc(due)})</i>")
+    if upcoming_actions:
+        parts.append("\n<b>\U0001f4c5 Upcoming (next 3 days):</b>")
+        for a in upcoming_actions:
+            due = a.get("due_date", "")
+            parts.append(f"  \u2022 {_esc(a['description'][:80])} <i>(due {_esc(due)})</i>")
+    if not parts:
+        return ""
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # 5. Capture Confirmation
 # ---------------------------------------------------------------------------
 
@@ -1033,3 +1055,45 @@ def format_fading_memories(fading_items: list[dict]) -> tuple[str, InlineKeyboar
     ]])
 
     return "\n".join(lines), kb
+
+
+# ---------------------------------------------------------------------------
+# Extraction Confirmation
+# ---------------------------------------------------------------------------
+
+def format_extraction_confirmation(extraction) -> str:
+    """Format an extraction result as a confirmation message.
+
+    Args:
+        extraction: An ExtractionResult from intent_extractor.
+
+    Returns:
+        HTML string for the confirmation message.
+    """
+    parts = ["\U0001f4cb <b>Extracted from your capture:</b>\n"]
+
+    intent_emoji = {
+        "task": "\u2705",
+        "idea": "\U0001f4a1",
+        "reflection": "\U0001fa9e",
+        "update": "\U0001f4dd",
+        "link": "\U0001f517",
+        "question": "\u2753",
+    }
+    emoji = intent_emoji.get(extraction.intent, "\U0001f4e5")
+    parts.append(f"{emoji} <b>Type:</b> {extraction.intent}")
+
+    if extraction.title:
+        parts.append(f"\U0001f4cc <b>Title:</b> {_esc(extraction.title)}")
+    if extraction.due_date:
+        parts.append(f"\U0001f4c5 <b>Due:</b> {extraction.due_date}")
+    if extraction.people:
+        parts.append(
+            f"\U0001f464 <b>People:</b> {', '.join(_esc(p) for p in extraction.people)}"
+        )
+    if extraction.project:
+        parts.append(f"\U0001f4c1 <b>Project:</b> {_esc(extraction.project)}")
+    if extraction.priority:
+        parts.append(f"\u26a1 <b>Priority:</b> {extraction.priority}")
+
+    return "\n".join(parts)

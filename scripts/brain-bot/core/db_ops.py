@@ -81,13 +81,14 @@ async def insert_action_item(
     source: str,
     icor_element: str = None,
     icor_project: str = None,
+    due_date: str = None,
     db_path: Path = None,
 ) -> int:
     """Insert a new pending action item. Returns the new row ID."""
     return await execute(
-        "INSERT INTO action_items (description, source_file, source_date, icor_element, icor_project, status, created_at) "
-        "VALUES (?, ?, date('now'), ?, ?, 'pending', datetime('now'))",
-        (description, source, icor_element, icor_project),
+        "INSERT INTO action_items (description, source_file, source_date, icor_element, icor_project, due_date, status, created_at) "
+        "VALUES (?, ?, date('now'), ?, ?, ?, 'pending', datetime('now'))",
+        (description, source, icor_element, icor_project, due_date),
         db_path=db_path,
     )
 
@@ -417,5 +418,31 @@ async def get_icor_without_notion_id(db_path: Path = None) -> list[dict]:
         "SELECT id, level, name, parent_id "
         "FROM icor_hierarchy WHERE notion_page_id IS NULL "
         "ORDER BY id ASC",
+        db_path=db_path,
+    )
+
+
+async def get_due_actions(db_path: Path = None) -> list[dict]:
+    """Get action items with due dates on or before today."""
+    return await query(
+        "SELECT id, description, due_date, status, icor_element, icor_project, source_file, created_at "
+        "FROM action_items "
+        "WHERE due_date IS NOT NULL AND due_date <= date('now') AND status = 'pending' "
+        "ORDER BY due_date ASC",
+        db_path=db_path,
+    )
+
+
+async def get_upcoming_actions(days: int = 3, db_path: Path = None) -> list[dict]:
+    """Get action items due in the next N days."""
+    return await query(
+        "SELECT id, description, due_date, status, icor_element, icor_project, source_file, created_at "
+        "FROM action_items "
+        "WHERE due_date IS NOT NULL "
+        "AND due_date > date('now') "
+        "AND due_date <= date('now', ? || ' days') "
+        "AND status = 'pending' "
+        "ORDER BY due_date ASC",
+        (f"+{days}",),
         db_path=db_path,
     )

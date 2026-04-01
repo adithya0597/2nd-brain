@@ -161,7 +161,8 @@ CREATE TABLE IF NOT EXISTS action_items (
     created_at TEXT DEFAULT (datetime('now')),
     completed_at TEXT,
     delegated_to TEXT,
-    push_attempted_at TEXT
+    push_attempted_at TEXT,
+    due_date TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_actions_status ON action_items(status);
 CREATE INDEX IF NOT EXISTS idx_actions_date ON action_items(source_date);
@@ -562,6 +563,30 @@ CREATE TABLE IF NOT EXISTS graduation_proposals (
 );
 CREATE INDEX IF NOT EXISTS idx_gp_status ON graduation_proposals(status);
 CREATE INDEX IF NOT EXISTS idx_gp_hash ON graduation_proposals(cluster_hash);
+
+-- reminders (migrate-db.py step 27)
+CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_item_id INTEGER,
+    remind_at TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (action_item_id) REFERENCES action_items(id)
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status);
+CREATE INDEX IF NOT EXISTS idx_reminders_remind_at ON reminders(remind_at);
+
+-- extraction_feedback (migrate-db.py step 27)
+CREATE TABLE IF NOT EXISTS extraction_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    capture_id INTEGER,
+    field_name TEXT,
+    proposed_value TEXT,
+    confirmed_value TEXT,
+    was_correct INTEGER,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ef_capture ON extraction_feedback(capture_id);
 """
 
 _SEED_SYNC_STATE = """

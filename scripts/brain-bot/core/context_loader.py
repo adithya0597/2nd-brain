@@ -28,6 +28,21 @@ _COMMAND_QUERIES = {
             SELECT date, engagement_score FROM engagement_daily
             WHERE date >= date('now', '-7 days') ORDER BY date DESC
         """,
+        "due_actions": """
+            SELECT id, description, due_date, status, icor_element, icor_project, source_file, created_at
+            FROM action_items
+            WHERE due_date IS NOT NULL AND due_date <= date('now') AND status = 'pending'
+            ORDER BY due_date ASC
+        """,
+        "upcoming_actions": """
+            SELECT id, description, due_date, status, icor_element, icor_project, source_file, created_at
+            FROM action_items
+            WHERE due_date IS NOT NULL
+              AND due_date > date('now')
+              AND due_date <= date('now', '+3 days')
+              AND status = 'pending'
+            ORDER BY due_date ASC
+        """,
     },
     "close-day": {
         "today_journal": "SELECT id, content, mood, energy, icor_elements FROM journal_entries WHERE date = date('now') ORDER BY created_at",

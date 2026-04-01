@@ -219,7 +219,14 @@ async def post_init(application: Application) -> None:
     except Exception as e:
         logger.warning("Failed to register scheduled jobs: %s", e)
 
-    # 9. Health check
+    # 9. Reload pending reminders from database
+    try:
+        from core.reminder_manager import reload_pending_reminders
+        await reload_pending_reminders(application.job_queue)
+    except Exception as e:
+        logger.warning("Failed to reload pending reminders: %s", e)
+
+    # 10. Health check
     _run_health_check()
 
     logger.info("Post-init complete. Bot is ready.")

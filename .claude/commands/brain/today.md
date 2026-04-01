@@ -56,6 +56,12 @@ Compile all information into a morning briefing and append it to today's daily n
 ```markdown
 ### Morning Briefing (auto-generated)
 
+**Tasks Due Today / Overdue:**
+- [ ] [action with due date on or before today] (due YYYY-MM-DD)
+
+**Upcoming (next 3 days):**
+- [ ] [action due within 3 days] (due YYYY-MM-DD)
+
 **Carried Over Actions:**
 - [ ] [action from yesterday]
 
@@ -71,6 +77,8 @@ Based on your ICOR priorities and recent patterns, consider focusing on:
 2. [Specific suggestion]
 3. [Specific suggestion]
 ```
+
+**Note on due_actions / upcoming_actions context:** If `due_actions` or `upcoming_actions` data is present in the Context Data, include the "Tasks Due Today / Overdue" and "Upcoming" sections at the TOP of the briefing, before carried-over actions. These are time-sensitive and should be the first thing the user sees. If both are empty, omit these sections.
 
 ### 7. Cross-Session Trends
 
