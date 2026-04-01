@@ -280,10 +280,10 @@ class TestVoiceCaptureErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_import_error_gracefully(self):
         """Should send friendly message if faster-whisper is not installed."""
-        update = _make_voice_update()
-        ctx = _make_context()
+        _make_voice_update()
+        _make_context()
 
-        with patch("handlers.capture.run_in_executor") as mock_exec:
+        with patch("handlers.capture.run_in_executor"):
             # Simulate transcriber import failure
             original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
 

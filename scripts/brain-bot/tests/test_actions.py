@@ -167,7 +167,7 @@ class TestDelegateFlow:
 
         # ConversationHandler.END is imported from telegram.ext which is mocked
         # The function returns ConversationHandler.END when id is empty
-        result = await handle_delegate_start(callback_update, tg_context)
+        await handle_delegate_start(callback_update, tg_context)
         # Should return early — no user_data set
         assert "delegate_action_id" not in tg_context.user_data
 
@@ -190,7 +190,7 @@ class TestDelegateFlow:
         message_update.message.text = "Please handle this ASAP"
 
         with patch("handlers.actions.execute", new_callable=AsyncMock):
-            result = await receive_delegate_notes(message_update, tg_context)
+            await receive_delegate_notes(message_update, tg_context)
 
         # Should return ConversationHandler.END (mocked)
         message_update.message.reply_text.assert_awaited()
@@ -198,7 +198,7 @@ class TestDelegateFlow:
     @pytest.mark.asyncio
     async def test_receive_delegate_notes_missing_data(self, message_update, tg_context):
         # No delegate_name or delegate_action_id in user_data
-        result = await receive_delegate_notes(message_update, tg_context)
+        await receive_delegate_notes(message_update, tg_context)
 
         msg_text = message_update.message.reply_text.call_args[0][0]
         assert "cancelled" in msg_text.lower()
@@ -210,7 +210,7 @@ class TestDelegateFlow:
         tg_context.user_data["delegate_query_message"] = None
 
         with patch("handlers.actions.execute", new_callable=AsyncMock, side_effect=Exception("DB")):
-            result = await receive_delegate_notes(message_update, tg_context)
+            await receive_delegate_notes(message_update, tg_context)
 
         msg_text = message_update.message.reply_text.call_args[0][0]
         assert "failed" in msg_text.lower()
@@ -222,7 +222,7 @@ class TestDelegateFlow:
         tg_context.user_data["delegate_query_message"] = None
 
         with patch("handlers.actions.execute", new_callable=AsyncMock):
-            result = await skip_delegate_notes(message_update, tg_context)
+            await skip_delegate_notes(message_update, tg_context)
 
         # text should have been set to ""
         assert message_update.message.text == ""
@@ -233,7 +233,7 @@ class TestDelegateFlow:
         tg_context.user_data["delegate_name"] = "Eve"
         tg_context.user_data["delegate_query_message"] = MagicMock()
 
-        result = await cancel_delegate(message_update, tg_context)
+        await cancel_delegate(message_update, tg_context)
 
         assert "delegate_action_id" not in tg_context.user_data
         message_update.message.reply_text.assert_awaited_once()

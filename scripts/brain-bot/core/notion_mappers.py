@@ -296,7 +296,6 @@ def journal_to_notion_note(entry: dict, registry: dict) -> dict:
         Notion properties dict for Notes DB
     """
     date_str = entry.get("date", "")
-    summary = entry.get("summary", "")
     mood = entry.get("mood", "")
     energy = entry.get("energy", "")
     icor_elements_str = entry.get("icor_elements", "")

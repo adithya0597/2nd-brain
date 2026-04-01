@@ -220,7 +220,7 @@ class TestContextLoaderUsesCachedVariants:
             # Reload imports inside _gather_graph_context — it does a local import:
             #   from core.vault_indexer import cached_find_files_mentioning as find_files_mentioning
             # So we need to patch at the vault_indexer module level.
-            result = _gather_graph_context("trace", "some topic")
+            _gather_graph_context("trace", "some topic")
 
         # cached_find_files_mentioning should have been called for "topic" strategy
         mock_find.assert_called_once_with("some topic")

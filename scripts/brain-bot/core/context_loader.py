@@ -628,8 +628,8 @@ def build_claude_messages(command: str, user_input: str, context: dict) -> list:
 
     context_block = "\n\n".join(context_parts) if context_parts else "No additional context available."
 
-    # Load the command prompt
-    prompt = load_command_prompt(command)
+    # Load the command prompt (used by caller, not needed here)
+    load_command_prompt(command)
 
     # Build the user message
     user_parts = [f"Execute the /{command} command."]

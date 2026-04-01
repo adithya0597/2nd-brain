@@ -392,7 +392,6 @@ async def _handle_find(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check for --ai flag
     if user_input.startswith("--ai "):
-        ai_query = user_input[5:].strip()
         await _run_ai_command(update, context, "find", None)
         return
 

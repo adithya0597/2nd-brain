@@ -268,7 +268,7 @@ class TestFindContextIncludesFtsMatches:
         conn.close()
 
         with (
-            patch("core.fts_index.search_fts", return_value=fake_fts_results) as mock_search,
+            patch("core.fts_index.search_fts", return_value=fake_fts_results),
             patch("core.context_loader.config.DB_PATH", db_path),
             patch("core.context_loader.config.VAULT_PATH", tmp_path),
             patch("core.context_loader.config.NOTION_REGISTRY_PATH", tmp_path / "nonexistent.json"),

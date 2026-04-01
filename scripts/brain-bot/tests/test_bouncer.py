@@ -390,7 +390,7 @@ class TestTimeoutAutoFiles:
 
         with patch("handlers.scheduled.query", mock_query), \
              patch("handlers.scheduled.execute", mock_execute), \
-             patch("handlers.capture.process_bouncer_resolution", new_callable=AsyncMock) as mock_resolve, \
+             patch("handlers.capture.process_bouncer_resolution", new_callable=AsyncMock), \
              patch("config.BOUNCER_TIMEOUT_MINUTES", 15):
             await job_resolve_pending_captures(mock_context)
 

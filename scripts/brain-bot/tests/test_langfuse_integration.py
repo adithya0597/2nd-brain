@@ -144,7 +144,7 @@ class TestSearchLangfuse:
             patch("core.search._search_graph", return_value=[]),
         ):
             from core.search import hybrid_search
-            response = hybrid_search("test query")
+            hybrid_search("test query")
 
         mock_langfuse.span.assert_called_once()
         call_kwargs = mock_langfuse.span.call_args.kwargs

@@ -85,7 +85,7 @@ class TestCheckVecAvailable:
         with patch.dict(sys.modules, {"sqlite_vec": None}):
             embedding_store._VEC_AVAILABLE = None
             with patch("builtins.__import__", side_effect=ImportError("no sqlite_vec")):
-                result = embedding_store._check_vec_available()
+                embedding_store._check_vec_available()
             # Reset for other tests
             embedding_store._VEC_AVAILABLE = None
 

@@ -64,7 +64,6 @@ def test_ensure_daily_note_calls_hook(hook_env):
     from core.vault_ops import _on_vault_write, ensure_daily_note
 
     calls = []
-    original_hook = _on_vault_write
 
     def spy_hook(file_path):
         calls.append(file_path)

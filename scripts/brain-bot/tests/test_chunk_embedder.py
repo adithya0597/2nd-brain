@@ -206,7 +206,7 @@ class TestRechunkAndEmbedFile:
             + "More content. " * 50
         )
 
-        node_id = _insert_vault_node(test_db, "test.md", "test")
+        _insert_vault_node(test_db, "test.md", "test")
 
         # _get_model is imported from core.embedding_store inside the function,
         # so we patch it at the source module.
@@ -306,7 +306,7 @@ class TestRechunkAndEmbedFile:
         md_file = tmp_path / "abs.md"
         md_file.write_text("Short absolute path test.")
 
-        node_id = _insert_vault_node(test_db, "abs.md", "abs")
+        _insert_vault_node(test_db, "abs.md", "abs")
 
         # Explicitly mock the embedding pipeline so the function
         # returns cleanly regardless of any leaked model state

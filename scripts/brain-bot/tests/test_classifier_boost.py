@@ -52,7 +52,7 @@ class TestZeroShotTier:
         with patch.dict(sys.modules, {"core.embedding_store": None}):
             from core.classifier import MessageClassifier
 
-            clf = MessageClassifier()
+            MessageClassifier()
             # Should handle ImportError gracefully
 
 

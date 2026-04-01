@@ -147,8 +147,6 @@ class TestCaptureProcessing:
     @pytest.mark.asyncio
     async def test_capture_inserts_into_captures_log(self, _patch_db):
         """Classified capture should INSERT into captures_log table."""
-        test_db = _patch_db
-
         mock_result = MagicMock()
         mock_result.is_noise = False
         mock_result.is_actionable = False
