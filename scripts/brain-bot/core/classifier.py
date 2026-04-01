@@ -85,10 +85,10 @@ _DIMENSION_REFERENCES: dict[str, list[str]] = {
         "Struggling with sleep hygiene and insomnia need a consistent bedtime routine and less screen time before bed",
     ],
     "Wealth & Finance": [
-        "Applying for jobs and preparing for interviews to get hired as an engineer and earn a salary income",
-        "LinkedIn outreach and networking to find job opportunities and advance my career for financial stability",
-        "Creating a demo video for a job interview at a company as part of the hiring process first round",
-        "Automating job scraping and job applications to speed up my job search and land a position faster",
+        "Applying for jobs sending applications and going through interviews to get hired and earn a salary income",
+        "LinkedIn outreach reaching out to hiring managers and recruiters to find job openings for financial stability",
+        "Creating a demo video and sending it to a company recruiter as part of the job hiring process first round",
+        "Automating job scraping job fit analysis and job applications to speed up the job search and get hired faster",
         "Had a hard day trying to automate my job search and application process but results with nothing but failure",
     ],
     "Relationships": [
@@ -204,38 +204,34 @@ class MessageClassifier:
         # Check actionability
         result.is_actionable = self._check_actionable(text)
 
-        # Tier 1: Keyword match
+        # Tier 1: Keyword match (always collected, never short-circuits alone)
         keyword_scores = self._tier_keywords(text)
-        if keyword_scores and keyword_scores[0].confidence >= 0.8:
-            result.matches = keyword_scores
-            result.execution_time_ms = (time.monotonic() - start) * 1000
-            return result
 
-        # Tier 1.5: Zero-shot classification
-        zero_shot_scores = self._tier_zero_shot(text)
-        if zero_shot_scores and zero_shot_scores[0].confidence >= 0.75:
-            result.matches = self._merge_scores(keyword_scores, zero_shot_scores)
-            result.execution_time_ms = (time.monotonic() - start) * 1000
-            return result
-
-        # Tier 2: Embedding similarity
+        # Tier 2: Embedding similarity (always run to catch additional dimensions)
         embedding_scores = self._tier_embedding(text)
-        if embedding_scores and embedding_scores[0].confidence >= 0.7:
-            # Merge with any weak keyword matches
-            result.matches = self._merge_scores(keyword_scores, embedding_scores)
+
+        # Merge: keywords take priority, embeddings add NEW dimensions only
+        keyword_dims = {s.dimension for s in keyword_scores}
+        extra_embedding = [s for s in embedding_scores if s.dimension not in keyword_dims]
+        merged = keyword_scores + extra_embedding
+        merged.sort(key=lambda s: s.confidence, reverse=True)
+
+        if merged:
+            result.matches = merged
             result.execution_time_ms = (time.monotonic() - start) * 1000
             return result
 
-        # Tier 3: Claude LLM
+        # Tier 1.5: Zero-shot classification (fallback when no keywords or embeddings matched)
+        zero_shot_scores = self._tier_zero_shot(text)
+        if zero_shot_scores:
+            result.matches = zero_shot_scores
+            result.execution_time_ms = (time.monotonic() - start) * 1000
+            return result
+
+        # Tier 3: Claude LLM (last resort)
         llm_scores = self._tier_llm(text)
         if llm_scores:
-            result.matches = self._merge_scores(
-                self._merge_scores(keyword_scores, embedding_scores),
-                llm_scores,
-            )
-        else:
-            # Use whatever we have from earlier tiers
-            result.matches = self._merge_scores(keyword_scores, embedding_scores)
+            result.matches = llm_scores
 
         result.execution_time_ms = (time.monotonic() - start) * 1000
         return result
