@@ -1,6 +1,5 @@
 """Tests for handlers/actions.py — action item interactive handlers."""
 import json
-import sqlite3
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -327,8 +326,6 @@ class TestHandleReviewFading:
             core.db_ops.query = mock_query
             core.formatter._esc = mock_esc
             try:
-                import handlers.actions as actions_mod
-                import config as _cfg
                 with patch.dict("sys.modules", {"config": mock_cfg}):
                     # Can't easily mock local imports. The function does 'from core.db_ops import query'
                     # which captures at call time. Easier to just test the error path.

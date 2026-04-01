@@ -61,7 +61,7 @@ def _restore_pytest_env(saved):
 
 def test_ensure_daily_note_calls_hook(hook_env):
     """When ensure_daily_note creates a new file, _on_vault_write fires."""
-    from core.vault_ops import _on_vault_write, ensure_daily_note
+    from core.vault_ops import ensure_daily_note
 
     calls = []
 
