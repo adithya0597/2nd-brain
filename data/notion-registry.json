@@ -1,6 +1,6 @@
 {
   "_description": "Maps local ICOR hierarchy IDs to Notion page IDs. Updated by /brain:sync-notion.",
-  "_last_synced": "2026-03-08T06:32:39.269762Z",
+  "_last_synced": "2026-04-02T03:00:11.394063Z",
   "dimensions": {
     "Health & Vitality": {
       "local_id": 1,
@@ -152,10 +152,6 @@
     }
   },
   "projects": {
-    "Investment Portfolio": {
-      "notion_page_id": "231fda46-1a19-801c-b45b-de9b7f45c66c",
-      "tag": "Investments"
-    },
     "LinkedIn Portfolio": {
       "notion_page_id": "231fda46-1a19-8086-a71a-ed192059b6fd",
       "tag": "Personal Brand",
