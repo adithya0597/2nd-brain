@@ -5,13 +5,43 @@
 data/*.db
 data/*.db-journal
 data/*.db-wal
+data/*.db.pre-*
+data/backups/
+data/.dashboard_pinned_id
 
 # Obsidian workspace state
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
+vault/.obsidian/workspace.json
+vault/.obsidian/workspace-mobile.json
+vault/.obsidian/workspaces.json
+vault/.obsidian/graph.json
+vault/.obsidian/plugins/
+vault/.obsidian/community-plugins.json
 
-# Claude plans
+# Claude local state
 .claude/plans/
+.claude/settings.local.json
+.claude/worktrees/
+.claude/skills-workspace/
+.claude/migration-research/
+.claude/claude-setup-guide-*.md
+
+# Bot logs
+scripts/brain-bot/logs/
+scripts/slack-bot/logs/
+
+# Bot test/eval artifacts
+scripts/brain-bot/.coverage
+scripts/brain-bot/tests/eval_*
+scripts/brain-bot/tests/stress_results_*
+
+# Bot junk files (test pollution from MagicMock)
+scripts/brain-bot/None
+scripts/brain-bot/=*
+"scripts/brain-bot/<contextlib*"
+"<MagicMock*"
+
+# Playwright MCP
+.playwright-mcp/
 
 # Python
 __pycache__/
@@ -19,9 +49,6 @@ __pycache__/
 *.pyo
 .venv/
 venv/
-
-# Slack bot logs
-scripts/slack-bot/logs/
 
 # OS files
 .DS_Store
