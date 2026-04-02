@@ -50,6 +50,11 @@ __pycache__/
 .venv/
 venv/
 
+# Demo data
+data/brain_demo.db*
+vault/Demo/
+data/datasets/
+
 # OS files
 .DS_Store
 .worktrees/

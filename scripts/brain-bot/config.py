@@ -34,8 +34,8 @@ NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
 
 # Paths (resolve relative to project root)
 PROJECT_ROOT = Path(__file__).parent.parent.parent  # scripts/brain-bot/ -> project root
-VAULT_PATH = PROJECT_ROOT / "vault"
-DB_PATH = PROJECT_ROOT / "data" / "brain.db"
+VAULT_PATH = Path(os.environ.get("BRAIN_VAULT_PATH", PROJECT_ROOT / "vault"))
+DB_PATH = Path(os.environ.get("BRAIN_DB_PATH", PROJECT_ROOT / "data" / "brain.db"))
 COMMANDS_PATH = PROJECT_ROOT / ".claude" / "commands" / "brain"
 CLAUDE_MD_PATH = PROJECT_ROOT / "CLAUDE.md"
 NOTION_REGISTRY_PATH = PROJECT_ROOT / "data" / "notion-registry.json"
