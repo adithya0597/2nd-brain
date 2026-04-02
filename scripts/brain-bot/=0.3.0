@@ -1,8 +1,0 @@
-Collecting chatgpt-md-converter
-  Downloading chatgpt_md_converter-0.3.12-py3-none-any.whl.metadata (6.6 kB)
-Downloading chatgpt_md_converter-0.3.12-py3-none-any.whl (17 kB)
-Installing collected packages: chatgpt-md-converter
-Successfully installed chatgpt-md-converter-0.3.12
-
-[notice] A new release of pip is available: 25.2 -> 26.0.1
-[notice] To update, run: pip install --upgrade pip
