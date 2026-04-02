@@ -142,29 +142,31 @@ _COMMAND_QUERIES = {
     },
     "engage": {
         "brain_level": """
-            SELECT level, consistency, breadth, depth, growth, momentum, computed_at
+            SELECT level, consistency_score, breadth_score, depth_score,
+                   growth_score, momentum_score, computed_at
             FROM brain_level ORDER BY computed_at DESC LIMIT 1
         """,
         "engagement_7d": """
-            SELECT date, engagement_score, journal_count, action_created,
-                   action_completed, vault_files_modified, concepts_touched
+            SELECT date, engagement_score, journal_entry_count, actions_created,
+                   actions_completed, vault_files_modified
             FROM engagement_daily
             ORDER BY date DESC LIMIT 7
         """,
         "dimension_signals": """
-            SELECT dimension, touchpoints, momentum, trend, period_start, period_end
+            SELECT dimension, rolling_7d_mentions, rolling_7d_captures,
+                   momentum, momentum_score, trend, computed_at
             FROM dimension_signals
-            WHERE period_end = (SELECT MAX(period_end) FROM dimension_signals)
+            WHERE computed_at = (SELECT MAX(computed_at) FROM dimension_signals)
         """,
         "active_alerts": """
-            SELECT alert_type, severity, title, detail, created_at
-            FROM alerts WHERE dismissed = 0
+            SELECT alert_type, severity, title, details_json, created_at
+            FROM alerts WHERE status = 'active'
             ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END
         """,
         "engagement_30d_avg": """
             SELECT ROUND(AVG(engagement_score), 2) as avg_score,
-                   ROUND(AVG(journal_count), 1) as avg_journals,
-                   ROUND(AVG(action_completed), 1) as avg_completed,
+                   ROUND(AVG(journal_entry_count), 1) as avg_journals,
+                   ROUND(AVG(actions_completed), 1) as avg_completed,
                    COUNT(*) as days_tracked
             FROM engagement_daily
             WHERE date >= date('now', '-30 days')

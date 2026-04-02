@@ -43,7 +43,7 @@ def _search_vector(query_text: str, limit: int = 20, db_path: Path = None, metad
         return [
             (r["file_path"], {
                 "title": r["title"],
-                "snippet": f"(similarity: {1 - r['distance']:.2f})",
+                "snippet": f"(similarity: {max(0.0, 1 - r['distance'] ** 2 / 2):.2f})",
                 "distance": r["distance"],
             })
             for r in results

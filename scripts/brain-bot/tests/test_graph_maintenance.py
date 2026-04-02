@@ -58,7 +58,7 @@ class TestSuggestConnections:
         suggestions = suggest_connections_for_orphan("orphan", top_k=3, db_path=test_db)
         assert len(suggestions) == 3
         assert suggestions[0]["title"] == "A"
-        assert suggestions[0]["similarity_score"] == 0.8  # 1.0 - 0.2
+        assert suggestions[0]["similarity_score"] == 0.98  # 1.0 - 0.2²/2
 
     @patch("core.embedding_store.search_similar")
     def test_excludes_self(self, mock_search, test_db):

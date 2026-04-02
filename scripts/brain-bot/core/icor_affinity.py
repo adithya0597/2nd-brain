@@ -147,10 +147,12 @@ def update_icor_edges_for_file(
     """Update ICOR affinity edges for a single vault file.
 
     1. Look up the file's node in ``vault_nodes``.
-    2. Delete existing ``icor_affinity`` edges originating from that node.
-    3. Compute affinities via :func:`compute_file_icor_affinity`.
-    4. For each qualifying dimension, create an ``icor_affinity`` edge
-       from the document node to the ICOR dimension node.
+    2. Compute affinities via :func:`compute_file_icor_affinity`.
+    3. Resolve dimension node IDs.
+    4. Delete old + insert new edges in a single transaction.
+
+    Computation happens before deletion so that a failure preserves
+    the existing edges.
 
     Args:
         file_path: Relative path within the vault.
@@ -159,12 +161,7 @@ def update_icor_edges_for_file(
     Returns:
         Number of ICOR affinity edges created.
     """
-    from core.graph_ops import (
-        delete_edges_for_node,
-        get_node_by_path,
-        get_node_by_title,
-        upsert_edge,
-    )
+    from core.graph_ops import get_node_by_path, get_node_by_title
 
     node = get_node_by_path(file_path, db_path=db_path)
     if node is None:
@@ -173,15 +170,11 @@ def update_icor_edges_for_file(
 
     node_id = node["id"]
 
-    # Remove stale icor_affinity edges
-    delete_edges_for_node(node_id, edge_type="icor_affinity", direction="outgoing", db_path=db_path)
-
-    # Compute affinities
+    # Compute affinities BEFORE deleting (preserves old edges on failure)
     affinities = compute_file_icor_affinity(file_path, db_path=db_path)
-    if not affinities:
-        return 0
 
-    edge_count = 0
+    # Resolve dimension node IDs
+    edges_to_create = []
     for dimension, score in affinities:
         icor_node = get_node_by_title(dimension, db_path=db_path)
         if icor_node is None:
@@ -191,26 +184,28 @@ def update_icor_edges_for_file(
                 file_path,
             )
             continue
+        edges_to_create.append((icor_node["id"], score))
 
-        upsert_edge(
-            source_id=node_id,
-            target_id=icor_node["id"],
-            edge_type="icor_affinity",
-            weight=score,
-            db_path=db_path,
+    # Single transaction: delete old + insert new
+    resolved = db_path or config.DB_PATH
+    with get_connection(resolved) as conn:
+        conn.execute(
+            "DELETE FROM vault_edges WHERE source_node_id = ? AND edge_type = 'icor_affinity'",
+            (node_id,),
         )
-        edge_count += 1
+        for target_id, score in edges_to_create:
+            conn.execute(
+                """INSERT INTO vault_edges (source_node_id, target_node_id, edge_type, weight, metadata_json, verified_at)
+                   VALUES (?, ?, 'icor_affinity', ?, '{}', datetime('now'))
+                   ON CONFLICT(source_node_id, target_node_id, edge_type) DO UPDATE SET
+                       weight = excluded.weight, verified_at = datetime('now')""",
+                (node_id, target_id, score),
+            )
+        conn.commit()
 
-    if edge_count:
-        logger.debug(
-            "Created %d ICOR affinity edges for %s (top: %s %.2f)",
-            edge_count,
-            file_path,
-            affinities[0][0],
-            affinities[0][1],
-        )
-
-    return edge_count
+    if edges_to_create:
+        logger.debug("Created %d ICOR affinity edges for %s", len(edges_to_create), file_path)
+    return len(edges_to_create)
 
 
 # ---------------------------------------------------------------------------

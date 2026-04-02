@@ -170,7 +170,11 @@ def _load_embedding_model():
 def _cosine_similarity(a, b):
     """Compute cosine similarity between two vectors."""
     import numpy as np
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
 
 
 # ---------------------------------------------------------------------------

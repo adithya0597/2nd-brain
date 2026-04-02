@@ -82,7 +82,7 @@ def suggest_connections_for_orphan(
         suggestions.append({
             "file_path": r.get("file_path", ""),
             "title": r.get("title", ""),
-            "similarity_score": round(1.0 - r.get("distance", 1.0), 3),
+            "similarity_score": round(max(0.0, 1.0 - r.get("distance", 1.0) ** 2 / 2), 3),
         })
         if len(suggestions) >= top_k:
             break

@@ -76,22 +76,28 @@ def compute_daily_metrics(date_str: str = None, db_path=None) -> dict:
             "SELECT COUNT(*) FROM action_items WHERE status = 'pending'",
         ).fetchone()[0]
 
-        # -- Journal entries --
-        je_row = conn.execute(
+        # -- Journal entries (aggregates) --
+        agg_row = conn.execute(
             "SELECT COUNT(*) AS cnt, "
             "COALESCE(SUM(LENGTH(content)), 0) AS total_chars, "
-            "COALESCE(AVG(sentiment_score), 0.0) AS avg_sent, "
-            "mood, energy "
+            "COALESCE(AVG(sentiment_score), 0.0) AS avg_sent "
             "FROM journal_entries WHERE date = ?",
             (date_str,),
         ).fetchone()
 
-        journal_entry_count = je_row[0]
+        journal_entry_count = agg_row[0]
         # Approximate word count: ~5 chars per word
-        journal_word_count = je_row[1] // 5 if je_row[1] else 0
-        avg_sentiment = round(je_row[2], 4) if je_row[2] else 0.0
-        mood = je_row[3] if je_row[3] else None
-        energy = je_row[4] if je_row[4] else None
+        journal_word_count = agg_row[1] // 5 if agg_row[1] else 0
+        avg_sentiment = round(agg_row[2], 4) if agg_row[2] else 0.0
+
+        # Mood/energy from the latest entry of the day
+        me_row = conn.execute(
+            "SELECT mood, energy FROM journal_entries "
+            "WHERE date = ? ORDER BY created_at DESC LIMIT 1",
+            (date_str,),
+        ).fetchone()
+        mood = me_row[0] if me_row and me_row[0] else None
+        energy = me_row[1] if me_row and me_row[1] else None
 
         # -- Dimension mentions (from captures_log.dimensions_json) --
         dimension_mentions = {d: 0 for d in _ICOR_DIMENSIONS}

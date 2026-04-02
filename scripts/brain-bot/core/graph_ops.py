@@ -683,9 +683,9 @@ def rebuild_semantic_similarity_edges(
                 continue
 
             # sqlite-vec returns L2 distance; convert to similarity
-            # For normalized embeddings, similarity ≈ 1 - distance/2
+            # For normalized embeddings, similarity = 1 - d²/2
             distance = match["distance"]
-            similarity = max(0.0, 1.0 - distance / 2.0)
+            similarity = max(0.0, 1.0 - (distance * distance) / 2.0)
             if similarity < min_similarity:
                 continue
 
@@ -749,7 +749,7 @@ def update_semantic_similarity_edges_for_file(
             continue
 
         distance = match["distance"]
-        similarity = max(0.0, 1.0 - distance / 2.0)
+        similarity = max(0.0, 1.0 - (distance * distance) / 2.0)
         if similarity < min_similarity:
             continue
 
