@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 
 # Files with max cosine similarity below this threshold against ALL
 # reference embeddings for a dimension are NOT linked to that dimension.
-ICOR_AFFINITY_THRESHOLD = 0.52
-ICOR_AFFINITY_TOP_K = 2  # Keep at most top-K dimensions per file
+ICOR_AFFINITY_THRESHOLD = 0.58
+ICOR_AFFINITY_TOP_K = 3  # Keep at most top-K dimensions per file
 
 # Prefixes for files that should be skipped (non-knowledge content)
 _AFFINITY_SKIP_PREFIXES = ("Templates/", "Identity/", "CLAUDE")
@@ -119,9 +119,20 @@ def compute_file_icor_affinity(
         if max_sim >= ICOR_AFFINITY_THRESHOLD:
             results.append((dimension, max_sim))
 
-    # Sort by score descending, apply Top-K limit
+    # Sort by score descending, apply Top-K limit with gap pruning.
+    # Secondary dimensions must score within 90% of the top dimension
+    # to avoid weak spurious edges.
     results.sort(key=lambda t: t[1], reverse=True)
-    return results[:ICOR_AFFINITY_TOP_K]
+    if not results:
+        return []
+
+    top_score = results[0][1]
+    gap_floor = top_score * 0.90
+    pruned = [results[0]]
+    for dim, score in results[1:ICOR_AFFINITY_TOP_K]:
+        if score >= gap_floor:
+            pruned.append((dim, score))
+    return pruned
 
 
 # ---------------------------------------------------------------------------

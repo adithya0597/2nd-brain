@@ -1,0 +1,92 @@
+[
+  {
+    "file_path": "Inbox/2026-03-09-163017-871953-telegram.md",
+    "title": "Woke up late building 2nd brain, need interview prep, leg day workout",
+    "expected_dimensions": ["Health & Vitality", "Wealth & Finance", "Systems & Environment"],
+    "note": "Sleep issues + workout (Health), interview/job (Wealth), building 2nd brain (Systems)"
+  },
+  {
+    "file_path": "Inbox/2026-03-09-173330-354759-telegram.md",
+    "title": "LinkedIn outreach and 2nd brain updates",
+    "expected_dimensions": ["Wealth & Finance"],
+    "note": "LinkedIn outreach = job hunt = income"
+  },
+  {
+    "file_path": "Inbox/2026-03-09-211112-312170-telegram.md",
+    "title": "LinkedIn outreach, job applications, pushups, learn AI",
+    "expected_dimensions": ["Wealth & Finance", "Health & Vitality", "Mind & Growth"],
+    "note": "Job apps (Wealth), pushups/workout (Health), learn AI (Mind)"
+  },
+  {
+    "file_path": "Inbox/2026-03-11-001419-733639-telegram.md",
+    "title": "Hard day automating job scraping",
+    "expected_dimensions": ["Wealth & Finance"],
+    "note": "Job scraping/application automation = career"
+  },
+  {
+    "file_path": "Inbox/2026-03-11-001734-138128-telegram.md",
+    "title": "Perplexity job search automation plan",
+    "expected_dimensions": ["Wealth & Finance", "Systems & Environment"],
+    "note": "Job search (Wealth), building automation system (Systems)"
+  },
+  {
+    "file_path": "Inbox/2026-03-11-170651-503433-telegram.md",
+    "title": "Items to read: openknowledgegraphs.com",
+    "expected_dimensions": ["Mind & Growth"],
+    "note": "Reading/learning resource"
+  },
+  {
+    "file_path": "Inbox/2026-03-12-091151-815586-telegram.md",
+    "title": "Agent judging workflow for AI Product Council",
+    "expected_dimensions": ["Systems & Environment"],
+    "note": "Agent workflow design = systems"
+  },
+  {
+    "file_path": "Inbox/2026-03-12-091233-597613-telegram.md",
+    "title": "Can I add whoop stats to 2nd brain?",
+    "expected_dimensions": ["Health & Vitality"],
+    "note": "Whoop = health tracker"
+  },
+  {
+    "file_path": "Inbox/2026-03-12-220744-130375-telegram.md",
+    "title": "Wells Fargo networking, Scott Evans call, pitch deck",
+    "expected_dimensions": ["Wealth & Finance", "Relationships"],
+    "note": "Professional networking for job (Wealth + Relationships)"
+  },
+  {
+    "file_path": "Inbox/2026-03-13-233842-565858-telegram.md",
+    "title": "Learning Fabric, prep for John conversation, Norm Fleming",
+    "expected_dimensions": ["Wealth & Finance", "Mind & Growth"],
+    "note": "Interview prep (Wealth), learning Fabric (Mind)"
+  },
+  {
+    "file_path": "Inbox/2026-03-14-235259-598369-telegram.md",
+    "title": "Interview prep nonstop",
+    "expected_dimensions": ["Mind & Growth"],
+    "note": "User-corrected: pure study/prep activity"
+  },
+  {
+    "file_path": "Inbox/2026-03-25-184727-172152-telegram.md",
+    "title": "Write LinkedIn post about data engineers and knowledge graphs",
+    "expected_dimensions": ["Wealth & Finance", "Purpose & Impact"],
+    "note": "LinkedIn thought leadership (Wealth + Purpose)"
+  },
+  {
+    "file_path": "Inbox/2026-03-30-234131-872299-telegram.md",
+    "title": "Plan for dashboard webapp",
+    "expected_dimensions": ["Systems & Environment"],
+    "note": "Building infrastructure"
+  },
+  {
+    "file_path": "Inbox/2026-03-30-234131-901074-telegram.md",
+    "title": "Demo video for lawyer.com interview",
+    "expected_dimensions": ["Wealth & Finance"],
+    "note": "Job interview deliverable"
+  },
+  {
+    "file_path": "Inbox/2026-03-30-234131-903129-telegram.md",
+    "title": "Implementing cosine similarity and RRF functions",
+    "expected_dimensions": ["Systems & Environment"],
+    "note": "Building the system infrastructure"
+  }
+]

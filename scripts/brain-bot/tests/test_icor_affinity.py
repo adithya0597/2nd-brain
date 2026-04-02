@@ -158,22 +158,23 @@ class TestComputeFileIcorAffinity:
             assert isinstance(dim_name, str)
             assert isinstance(score, float)
 
-    def test_affinity_threshold_filtering(self, test_db):
-        """Scores below ICOR_AFFINITY_THRESHOLD (0.52) should be excluded.
+    def test_affinity_threshold_and_gap_filtering(self, test_db):
+        """Scores below ICOR_AFFINITY_THRESHOLD (0.58) are excluded.
 
-        Also tests Top-K limiting (ICOR_AFFINITY_TOP_K = 2).
+        Additionally, scores above threshold but below 85% of the top
+        score are pruned by gap filtering. Top-K=3 is the hard cap.
         """
         _setup_icor_nodes(test_db)
         _setup_doc_node(test_db)
 
         file_emb = _make_embedding(1.0, 0.0)
         icor_embs = {
-            "Health & Vitality": [_make_embedding(0.9, 0.436)],     # cos ≈ 0.9 ✓
-            "Wealth & Finance": [_make_embedding(0.2, 0.980)],      # cos ≈ 0.2 ✗
-            "Relationships": [_make_embedding(0.6, 0.8)],           # cos ≈ 0.6 ✓
-            "Mind & Growth": [_make_embedding(0.1, 0.995)],         # cos ≈ 0.1 ✗
-            "Purpose & Impact": [_make_embedding(0.7, 0.714)],      # cos ≈ 0.7 ✓
-            "Systems & Environment": [_make_embedding(0.05, 0.999)], # cos ≈ 0.05 ✗
+            "Health & Vitality": [_make_embedding(0.9, 0.436)],     # cos ≈ 0.9 ✓ (top)
+            "Wealth & Finance": [_make_embedding(0.2, 0.980)],      # cos ≈ 0.2 ✗ below threshold
+            "Relationships": [_make_embedding(0.6, 0.8)],           # cos ≈ 0.6 ✓ above threshold but below gap (0.765)
+            "Mind & Growth": [_make_embedding(0.1, 0.995)],         # cos ≈ 0.1 ✗ below threshold
+            "Purpose & Impact": [_make_embedding(0.7, 0.714)],      # cos ≈ 0.7 ✓ above threshold but below gap (0.765)
+            "Systems & Environment": [_make_embedding(0.05, 0.999)], # cos ≈ 0.05 ✗ below threshold
         }
 
         _mock_get_file_embedding.return_value = file_emb
@@ -187,13 +188,16 @@ class TestComputeFileIcorAffinity:
         )
 
         dims_returned = {s[0] for s in scores}
-        # Top-K=2: only the two highest above threshold (0.52) are kept
-        assert len(scores) <= 2
-        assert "Health & Vitality" in dims_returned  # cos ≈ 0.9 (highest)
-        # Below threshold (0.52)
+        # Only Health passes: others either below threshold or below 85% gap floor
+        assert len(scores) == 1
+        assert "Health & Vitality" in dims_returned
+        # Below threshold
         assert "Wealth & Finance" not in dims_returned
         assert "Mind & Growth" not in dims_returned
         assert "Systems & Environment" not in dims_returned
+        # Above threshold but below gap floor (0.9 * 0.85 = 0.765)
+        assert "Relationships" not in dims_returned
+        assert "Purpose & Impact" not in dims_returned
 
     def test_no_embeddings_returns_empty(self, test_db):
         """When file has no embedding, returns empty list."""
@@ -220,8 +224,8 @@ class TestUpdateIcorEdges:
     def test_update_icor_edges_for_file(self, test_db):
         """Verify edges created in vault_edges with type='icor_affinity'.
 
-        With threshold=0.52 and Top-K=2, only the top 2 dimensions above
-        the threshold should get edges.
+        With threshold=0.58, Top-K=3, and 85% gap pruning, dimensions
+        must score above threshold AND within 85% of the top score.
         """
         _setup_icor_nodes(test_db)
         doc_id = _setup_doc_node(test_db)
@@ -230,9 +234,9 @@ class TestUpdateIcorEdges:
         icor_embs = {
             "Health & Vitality": [_make_embedding(0.9, 0.436)],     # cos ≈ 0.9 ✓
             "Wealth & Finance": [_make_embedding(0.2, 0.980)],      # cos ≈ 0.2 ✗
-            "Relationships": [_make_embedding(0.7, 0.714)],         # cos ≈ 0.7 ✓
+            "Relationships": [_make_embedding(0.85, 0.527)],        # cos ≈ 0.85 ✓ (within 85% of 0.9)
             "Mind & Growth": [_make_embedding(0.1, 0.995)],         # cos ≈ 0.1 ✗
-            "Purpose & Impact": [_make_embedding(0.6, 0.8)],        # cos ≈ 0.6 ✓
+            "Purpose & Impact": [_make_embedding(0.6, 0.8)],        # cos ≈ 0.6 ✗ (below 85% of 0.9 = 0.765)
             "Systems & Environment": [_make_embedding(0.05, 0.999)], # cos ≈ 0.05 ✗
         }
 
@@ -253,7 +257,7 @@ class TestUpdateIcorEdges:
         ).fetchall()
         conn.close()
 
-        # Top-K=2: Health (0.9) + Relationships (0.7) above threshold (0.52)
+        # Health (0.9) + Relationships (0.85) pass threshold and gap; Purpose (0.6) pruned by gap
         assert count == 2
         assert len(edges) == 2
 
@@ -264,12 +268,12 @@ class TestUpdateIcorEdges:
 
         from core import icor_affinity
 
-        # First pass: Health and Wealth above threshold (0.52)
+        # First pass: Health and Wealth above threshold, within 85% gap
         file_emb = _make_embedding(1.0, 0.0)
         _mock_get_file_embedding.return_value = file_emb
         _mock_get_icor_embeddings.return_value = {
             "Health & Vitality": [_make_embedding(0.9, 0.436)],     # cos ≈ 0.9 ✓
-            "Wealth & Finance": [_make_embedding(0.7, 0.714)],      # cos ≈ 0.7 ✓
+            "Wealth & Finance": [_make_embedding(0.85, 0.527)],     # cos ≈ 0.85 ✓ (within 85%)
             "Relationships": [_make_embedding(0.1, 0.995)],         # ✗
             "Mind & Growth": [_make_embedding(0.1, 0.995)],         # ✗
             "Purpose & Impact": [_make_embedding(0.1, 0.995)],      # ✗
@@ -288,13 +292,13 @@ class TestUpdateIcorEdges:
         conn.close()
         assert first_pass_count == 2
 
-        # Second pass: different affinities (Relationships, Purpose above 0.52)
+        # Second pass: different affinities (Relationships, Purpose above threshold + within 90% gap)
         _mock_get_icor_embeddings.return_value = {
             "Health & Vitality": [_make_embedding(0.1, 0.995)],     # ✗
             "Wealth & Finance": [_make_embedding(0.1, 0.995)],      # ✗
             "Relationships": [_make_embedding(0.8, 0.6)],           # cos ≈ 0.8 ✓
             "Mind & Growth": [_make_embedding(0.1, 0.995)],         # ✗
-            "Purpose & Impact": [_make_embedding(0.7, 0.714)],      # cos ≈ 0.7 ✓
+            "Purpose & Impact": [_make_embedding(0.75, 0.661)],     # cos ≈ 0.75 ✓ (within 90% of 0.8)
             "Systems & Environment": [_make_embedding(0.05, 0.999)], # ✗
         }
 
@@ -309,7 +313,7 @@ class TestUpdateIcorEdges:
         ).fetchall()
         conn.close()
 
-        # Should have 2 new edges (Top-K=2)
+        # Should have 2 new edges (both within gap)
         assert len(second_pass_edges) == 2
 
         # Verify old Health & Vitality edge is gone

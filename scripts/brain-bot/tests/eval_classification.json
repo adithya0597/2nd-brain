@@ -1,0 +1,182 @@
+[
+  {
+    "text": "I woke up late as i was trying to build you my 2nd brain. Did a couple more fixes and sort of happy with the progress. I really should start prepping for my AI/ML engineer interview and focus on getting a job fast. I sleep right after a late lunch and evening naps are soo bad for me as i woke like the world is ending all gloomy and glum. An hour in the mood was enough to force myself to workout. Im hitting legs today",
+    "expected": "Health & Vitality",
+    "note": "Multi-topic but workout/sleep/energy is dominant theme"
+  },
+  {
+    "text": "I'm making more updates to my linkedin outreach and 2nd brain projects. Hope this works out soon",
+    "expected": "Wealth & Finance",
+    "note": "LinkedIn outreach = job hunt = income/career"
+  },
+  {
+    "text": "1. New changes to my linkedin outreach program and 2nd brain making it all functional. 2. Time management was hard and i couldn't focus on applying for jobs and interview prep. 3. Start every day with a set number of pushups, squats and pull ups. Then comes the linkedin check and then apply for jobs and reach out to people based on the daily scans. 2nd half should be workout and learn AI. 4. Notebooklm and AI to learn AI",
+    "expected": "Wealth & Finance",
+    "note": "Primary intent is job search and career planning"
+  },
+  {
+    "text": "Today was a very hard day with a lot of work trying to automate my job scrapping, job fit analysis and application project but results with nothing but failure.",
+    "expected": "Wealth & Finance",
+    "note": "Job scraping/application = career = wealth"
+  },
+  {
+    "text": "I will have to change my ways. I can use perplexity to scan the jobs in that current webpage to short list on roles. If I can probably use perplexity api's within the logged browser like comet when my job portals are already logged in, i can use the rag of portfolio to do a job fit analysis through semantic and keyword analysis. This would resolve my job search problem.",
+    "expected": "Wealth & Finance",
+    "note": "Job search automation = career strategy"
+  },
+  {
+    "text": "Items to read : https://openknowledgegraphs.com",
+    "expected": "Mind & Growth",
+    "note": "Reading/learning resource"
+  },
+  {
+    "text": "Multi-agent harness systems, expensive but gives structural diversity",
+    "expected": "Systems & Environment",
+    "note": "Technical systems architecture note"
+  },
+  {
+    "text": "Everytime i run a complex task with a swarm of agents. I need to run a judging agent that reads the working and see when no useful progressive work is being done it halt the run and then prompts to run a workflow. This prevents the agents and claude code from running too long with no productive work. This would save tokens, better judgement and explores for a new way to resolve it. This could be a major boost to AI Product COUNCIL",
+    "expected": "Systems & Environment",
+    "note": "Agent workflow optimization = systems design"
+  },
+  {
+    "text": "2nd brain: can i add my whoop stats to my 2nd brain everyday?",
+    "expected": "Health & Vitality",
+    "note": "User-corrected: whoop = health tracker"
+  },
+  {
+    "text": "Danielle Spiedel a cheif of staff of wells fargo from linkedin like the conversation we had and wants me to have a conversation with departing director of data engineering John parker. Im nervous and anxious about this conversation. I also had the call with Scott W Evans who is a program services manager at CBTS. On guidance for pitch deck and networking plan.",
+    "expected": "Wealth & Finance",
+    "note": "Job networking with enterprise contacts = career/income"
+  },
+  {
+    "text": "These are times 2nd brain, alot is at stake. I started learning fabric and how my conversation with job could go. Norm Fleming also reached out to and looking forward to our conversation. I need grind on fabric and other concepts tomorrow as well so that i can have a smooth conversation with john",
+    "expected": "Wealth & Finance",
+    "note": "Interview prep for job = career advancement"
+  },
+  {
+    "text": "Prepping for interview non stop and did nothing else",
+    "expected": "Mind & Growth",
+    "note": "User-corrected from Health & Vitality"
+  },
+  {
+    "text": "Implement this asap",
+    "expected": "Mind & Growth",
+    "note": "User-corrected from Purpose & Impact. Bare URL + action, learning context"
+  },
+  {
+    "text": "Send a write a post on linkedin how every major enterprise is looking for data engineers with a combo of knowledge graphs and ai so that they can reliably trust the agentic architecture built on top of it.",
+    "expected": "Wealth & Finance",
+    "note": "LinkedIn post about job market = career positioning"
+  },
+  {
+    "text": "Made a plan to add a dashboard webapp for the ease of viewing data than the boring telegram interface.",
+    "expected": "Systems & Environment",
+    "note": "Building tooling/infrastructure for the system"
+  },
+  {
+    "text": "Will have to create a demo video of 2nd brain in the next 2 days and send it ryan from lawyer.com inc as a part of first round of interview.",
+    "expected": "Wealth & Finance",
+    "note": "Interview deliverable = job hunt"
+  },
+  {
+    "text": "I implemented more grounding and more mathematical functions for establishing connections between nodes of the likes cosine similarity and reciprocal rank function and so on.",
+    "expected": "Systems & Environment",
+    "note": "Building the 2nd brain system infrastructure"
+  },
+  {
+    "text": "Just finished a 5k run in 28 minutes, new personal best! Feeling great.",
+    "expected": "Health & Vitality",
+    "note": "Synthetic: clear fitness capture"
+  },
+  {
+    "text": "Need to move $500 from checking to savings and pay rent tomorrow",
+    "expected": "Wealth & Finance",
+    "note": "Synthetic: clear financial task"
+  },
+  {
+    "text": "Had a great deep conversation with mom about life goals and family values",
+    "expected": "Relationships",
+    "note": "Synthetic: clear relationship capture"
+  },
+  {
+    "text": "Finished reading Thinking Fast and Slow, key insight: System 1 vs System 2 thinking applies to how I make career decisions",
+    "expected": "Mind & Growth",
+    "note": "Synthetic: clear learning capture"
+  },
+  {
+    "text": "Volunteered at the food bank today, helped serve 200 meals. Want to do this monthly.",
+    "expected": "Purpose & Impact",
+    "note": "Synthetic: clear purpose/community capture"
+  },
+  {
+    "text": "Set up automated backup for all my projects using rsync and cron jobs",
+    "expected": "Systems & Environment",
+    "note": "Synthetic: clear systems/automation capture"
+  },
+  {
+    "text": "Applied to 12 jobs today on LinkedIn and Indeed, got 2 callbacks for data engineering roles",
+    "expected": "Wealth & Finance",
+    "note": "Synthetic: job applications = career"
+  },
+  {
+    "text": "Meal prepped for the whole week - chicken, rice, broccoli. Tracking macros in MyFitnessPal",
+    "expected": "Health & Vitality",
+    "note": "Synthetic: nutrition/meal prep"
+  },
+  {
+    "text": "Called my college buddy Jake after 3 months, we're planning a trip to Austin next month",
+    "expected": "Relationships",
+    "note": "Synthetic: maintaining friendships"
+  },
+  {
+    "text": "Spent 3 hours on LeetCode grinding dynamic programming problems for upcoming technical interviews",
+    "expected": "Mind & Growth",
+    "note": "Synthetic: learning/skill building"
+  },
+  {
+    "text": "Writing a blog post about how knowledge graphs can transform enterprise data management",
+    "expected": "Purpose & Impact",
+    "note": "Synthetic: thought leadership / impact"
+  },
+  {
+    "text": "Reorganized my Obsidian vault with new folder structure and automated daily note template",
+    "expected": "Systems & Environment",
+    "note": "Synthetic: tooling/workflow optimization"
+  },
+  {
+    "text": "Negotiated salary from 150k to 175k for the new offer, also got signing bonus",
+    "expected": "Wealth & Finance",
+    "note": "Synthetic: compensation negotiation"
+  },
+  {
+    "text": "Blood pressure came back slightly high at the checkup, doc said reduce sodium and stress",
+    "expected": "Health & Vitality",
+    "note": "Synthetic: medical checkup"
+  },
+  {
+    "text": "Working on my pitch deck for the 2nd brain product, need to refine the value proposition slide",
+    "expected": "Wealth & Finance",
+    "note": "Synthetic: product/business development"
+  },
+  {
+    "text": "Had a mentoring session with a junior dev at the meetup, helped them understand RAG pipelines",
+    "expected": "Purpose & Impact",
+    "note": "Synthetic: mentoring = impact"
+  },
+  {
+    "text": "hey",
+    "expected": "NOISE",
+    "note": "Noise: greeting"
+  },
+  {
+    "text": "ok thanks",
+    "expected": "NOISE",
+    "note": "Noise: acknowledgment"
+  },
+  {
+    "text": "lol",
+    "expected": "NOISE",
+    "note": "Noise: reaction"
+  }
+]
