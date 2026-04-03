@@ -10,6 +10,8 @@ from core.ai_client import get_ai_client, get_ai_model
 
 logger = logging.getLogger(__name__)
 
+_VALID_INTENTS = {"task", "idea", "reflection", "update", "link", "question"}
+
 
 @dataclass
 class ExtractionResult:
@@ -141,14 +143,23 @@ async def extract_intent(text: str, registry_data: dict) -> ExtractionResult:
         # Fuzzy-match project
         matched_project = _fuzzy_match_project(parsed.get("project"), project_names)
 
+        # Validate LLM output: clamp intent, coerce confidence
+        intent = parsed.get("intent", "reflection")
+        if intent not in _VALID_INTENTS:
+            intent = "reflection"
+        try:
+            confidence = float(parsed.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
+
         return ExtractionResult(
-            intent=parsed.get("intent", "reflection"),
+            intent=intent,
             title=parsed.get("title", text[:80]),
             people=parsed.get("people", []),
             project=matched_project,
             due_date=parsed.get("due_date"),
             priority=parsed.get("priority"),
-            confidence=parsed.get("confidence", 0.5),
+            confidence=confidence,
             raw_response=raw,
         )
 

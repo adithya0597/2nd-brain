@@ -44,6 +44,16 @@ _EXTRACTION_TTL_SECONDS = 900  # 15 minutes
 _pending_extractions: dict[str, tuple[object, float]] = {}
 
 
+_INTENT_CONFIRM_LABELS = {
+    "task": "\u2705 Create Task",
+    "idea": "\U0001f4a1 Save Idea",
+    "reflection": "\U0001fa9e Add to Journal",
+    "update": "\U0001f4dd Save Update",
+    "link": "\U0001f517 Save Link",
+    "question": "\u2753 Save Question",
+}
+
+
 def get_classifier() -> MessageClassifier:
     """Return the module-level classifier (for hot-swapping keywords)."""
     return _classifier
@@ -275,8 +285,13 @@ async def handle_capture(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- Single response: extraction confirm OR dimension confirm ---
         # Run extraction BEFORE sending any reply so the user gets one message,
         # not two.
+        # Separate extraction gate from action-item gate:
+        #   is_actionable: drives action checkbox + raw action item (narrow regex)
+        #   should_extract: drives LLM extraction (broader, includes temporal patterns)
         sent_extraction = False
-        if result.is_actionable:
+        extraction = None
+        should_extract = _classifier.check_should_extract(text)
+        if should_extract:
             try:
                 from core.intent_extractor import extract_intent, _load_registry
 
@@ -290,7 +305,9 @@ async def handle_capture(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     extraction.confidence,
                 )
 
-                if extraction.intent == "task" and extraction.confidence > 0.3:
+                # Show extraction UI for ALL intents when confident enough.
+                # 0.3 threshold: at 2-5 captures/day, false positives cost one Skip tap.
+                if extraction and extraction.confidence > 0.3:
                     from core.formatter import format_extraction_confirmation
 
                     confirm_msg = format_extraction_confirmation(extraction)
@@ -302,11 +319,14 @@ async def handle_capture(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     for k in [k for k, v in _pending_extractions.items() if v[1] < cutoff]:
                         del _pending_extractions[k]
 
+                    confirm_label = _INTENT_CONFIRM_LABELS.get(
+                        extraction.intent, "\U0001f4e5 Save"
+                    )
                     confirm_keyboard = InlineKeyboardMarkup(
                         [
                             [
                                 InlineKeyboardButton(
-                                    "\u2705 Create Task",
+                                    confirm_label,
                                     callback_data=_cb(
                                         {"a": "ext_ok", "e": extraction_id}
                                     ),
@@ -530,44 +550,49 @@ async def handle_extraction_confirm(update: Update, context: ContextTypes.DEFAUL
         return
 
     try:
-        action_id = await insert_action_item(
-            description=extraction.title,
-            source="telegram-extraction",
-            icor_element=None,
-            due_date=extraction.due_date,
-        )
-
-        # Create Notion task immediately
-        await _create_notion_task_immediate(extraction, action_id)
-
-        # Schedule reminder if due soon (today or tomorrow)
-        if extraction.due_date:
-            try:
-                due = date.fromisoformat(extraction.due_date)
-                today = date.today()
-                if today <= due <= today + timedelta(days=1):
-                    from core.reminder_manager import schedule_reminder
-
-                    await schedule_reminder(
-                        context.job_queue, action_id, extraction.title, extraction.due_date
-                    )
-            except Exception:
-                logger.debug("Reminder scheduling failed", exc_info=True)
-
-        # Log feedback
-        await execute(
-            "INSERT OR IGNORE INTO extraction_feedback "
-            "(capture_id, field_name, proposed_value, confirmed_value, was_correct) "
-            "VALUES (?, 'all', ?, ?, 1)",
-            (int(extraction_id), extraction.title, extraction.title),
-        )
-
-        # Update message with result
         from core.formatter import _esc
 
-        result_parts = [f"\u2705 <b>Task created:</b> {_esc(extraction.title)}"]
-        if extraction.due_date:
-            result_parts.append(f"\U0001f4c5 Due: {extraction.due_date}")
+        if extraction.intent == "task":
+            # TASK: create action item + Notion push + reminder
+            action_id = await insert_action_item(
+                description=extraction.title,
+                source="telegram-extraction",
+                icor_element=None,
+                due_date=extraction.due_date,
+            )
+
+            # Create Notion task immediately
+            await _create_notion_task_immediate(extraction, action_id)
+
+            # Schedule reminder if due soon (today or tomorrow)
+            if extraction.due_date:
+                try:
+                    due = date.fromisoformat(extraction.due_date)
+                    today = date.today()
+                    if today <= due <= today + timedelta(days=1):
+                        from core.reminder_manager import schedule_reminder
+
+                        await schedule_reminder(
+                            context.job_queue, action_id, extraction.title, extraction.due_date
+                        )
+                except Exception:
+                    logger.debug("Reminder scheduling failed", exc_info=True)
+
+            result_parts = [f"\u2705 <b>Task created:</b> {_esc(extraction.title)}"]
+            if extraction.due_date:
+                result_parts.append(f"\U0001f4c5 Due: {extraction.due_date}")
+        else:
+            # NON-TASK: log feedback only. Data already in daily note + inbox.
+            intent_emoji = {
+                "idea": "\U0001f4a1", "reflection": "\U0001fa9e",
+                "update": "\U0001f4dd", "link": "\U0001f517",
+                "question": "\u2753",
+            }.get(extraction.intent, "\U0001f4e5")
+            result_parts = [
+                f"{intent_emoji} <b>{extraction.intent.title()} noted:</b> {_esc(extraction.title)}"
+            ]
+
+        # Common fields for all intents
         if extraction.project:
             result_parts.append(f"\U0001f4c1 Project: {_esc(extraction.project)}")
         if extraction.people:
@@ -575,11 +600,19 @@ async def handle_extraction_confirm(update: Update, context: ContextTypes.DEFAUL
                 f"\U0001f464 {', '.join(_esc(p) for p in extraction.people)}"
             )
 
+        # Log feedback for all intents
+        await execute(
+            "INSERT OR IGNORE INTO extraction_feedback "
+            "(capture_id, field_name, proposed_value, confirmed_value, was_correct) "
+            "VALUES (?, 'all', ?, ?, 1)",
+            (int(extraction_id), extraction.title, extraction.title),
+        )
+
         await query.edit_message_text("\n".join(result_parts), parse_mode="HTML")
 
     except Exception as e:
-        logger.error("Failed to create task from extraction: %s", e)
-        await query.edit_message_text(f"\u274c Failed to create task: {e}")
+        logger.error("Failed to process extraction confirm: %s", e)
+        await query.edit_message_text(f"\u274c Failed to process: {e}")
 
 
 async def handle_extraction_skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -626,10 +659,11 @@ async def handle_extraction_edit(update: Update, context: ContextTypes.DEFAULT_T
             f"\U0001f4c1 Project: {extraction.project[:30]}",
             callback_data=_cb({"a": "ext_field", "e": extraction_id, "f": "project"}),
         )])
-    # Always show Create and Skip at bottom
+    # Always show confirm and Skip at bottom
+    confirm_label = _INTENT_CONFIRM_LABELS.get(extraction.intent, "\U0001f4e5 Save")
     buttons.append([
         InlineKeyboardButton(
-            "\u2705 Create Task",
+            confirm_label,
             callback_data=_cb({"a": "ext_ok", "e": extraction_id}),
         ),
         InlineKeyboardButton(
