@@ -67,7 +67,7 @@ _NOISE_PATTERNS = re.compile(
 )
 
 _ACTION_PATTERNS = re.compile(
-    r"\b(need to|should|must|todo|action|reminder|deadline|follow.up|"
+    r"\b(need to|should|must|todo|action|remind|reminder|deadline|follow.up|"
     r"schedule|book|call|email|buy|pay|submit|send)\b",
     re.IGNORECASE,
 )
