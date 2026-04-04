@@ -1049,6 +1049,23 @@ def migrate(db_path: Path = DB_PATH):
     conn.commit()
     print("Step 29 complete: extraction result columns added to captures_log")
 
+    # 30. Distill log table (conversation distiller)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS distill_log (
+            id INTEGER PRIMARY KEY,
+            session_path TEXT UNIQUE,
+            session_id TEXT,
+            distilled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            note_count INTEGER,
+            status TEXT DEFAULT 'complete'
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_distill_session ON distill_log(session_id)"
+    )
+    conn.commit()
+    print("Step 30 complete: distill_log table created")
+
     conn.close()
     print(f"\nMigration complete on {db_path}")
     print(f"  - sync_state table: created/verified")
@@ -1071,6 +1088,7 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - graduation_proposals table: concept graduation created/verified")
     print(f"  - action_items.due_date + reminders + extraction_feedback: Phase 1 intelligence layer")
     print(f"  - retrieval_log table: search quality instrumentation created/verified")
+    print(f"  - distill_log table: conversation distiller tracking created/verified")
 
 
 if __name__ == "__main__":

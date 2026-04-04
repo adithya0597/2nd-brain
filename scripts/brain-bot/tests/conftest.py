@@ -595,6 +595,17 @@ CREATE TABLE IF NOT EXISTS extraction_feedback (
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ef_capture ON extraction_feedback(capture_id);
+
+-- distill_log (migrate-db.py step 30)
+CREATE TABLE IF NOT EXISTS distill_log (
+    id INTEGER PRIMARY KEY,
+    session_path TEXT UNIQUE,
+    session_id TEXT,
+    distilled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    note_count INTEGER,
+    status TEXT DEFAULT 'complete'
+);
+CREATE INDEX IF NOT EXISTS idx_distill_session ON distill_log(session_id);
 """
 
 _SEED_SYNC_STATE = """

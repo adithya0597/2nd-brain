@@ -440,6 +440,31 @@ async def _handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
+async def _handle_distill(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Distill recent Claude sessions into atomic vault notes."""
+    if not _owner_only(update):
+        return
+    msg = await update.message.reply_text("\u23f3 Scanning for undistilled sessions...")
+
+    try:
+        from core.distiller import distill_sessions
+        from core.db_ops import execute
+
+        sessions_done, notes_created = await distill_sessions(execute, limit=5)
+
+        if sessions_done == 0:
+            await msg.edit_text("No undistilled sessions found.")
+        else:
+            await msg.edit_text(
+                f"\u2705 Distilled {notes_created} notes from {sessions_done} sessions.\n"
+                f"Check vault/Inbox/ for new entries."
+            )
+    except Exception:
+        logger.exception("Error running distill")
+        error_text, _ = format_error("Distill failed. Check bot logs.")
+        await msg.edit_text(error_text, parse_mode="HTML")
+
+
 def register(application: Application):
     """Register all command handlers."""
 
@@ -460,3 +485,4 @@ def register(application: Application):
     application.add_handler(CommandHandler("cost", _handle_cost))
     application.add_handler(CommandHandler("find", _handle_find))
     application.add_handler(CommandHandler("help", _handle_help))
+    application.add_handler(CommandHandler("distill", _handle_distill))
