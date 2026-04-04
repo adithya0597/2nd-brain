@@ -402,7 +402,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_status ON sync_outbox(status);
 CREATE INDEX IF NOT EXISTS idx_outbox_entity ON sync_outbox(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_created ON sync_outbox(created_at);
 
--- captures_log (migrate-db.py step 21)
+-- captures_log (migrate-db.py step 21 + step 29 extraction columns)
 CREATE TABLE IF NOT EXISTS captures_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_text TEXT NOT NULL,
@@ -411,9 +411,17 @@ CREATE TABLE IF NOT EXISTS captures_log (
     method TEXT,
     is_actionable INTEGER DEFAULT 0,
     source_channel TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    intent TEXT,
+    extracted_title TEXT,
+    extracted_project TEXT,
+    extracted_due_date TEXT,
+    extracted_people TEXT,
+    extraction_confidence REAL
 );
 CREATE INDEX IF NOT EXISTS idx_captures_log_created ON captures_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_captures_intent ON captures_log(intent);
+CREATE INDEX IF NOT EXISTS idx_captures_due ON captures_log(extracted_due_date);
 
 -- notion_projects (migrate-db.py step 16)
 CREATE TABLE IF NOT EXISTS notion_projects (

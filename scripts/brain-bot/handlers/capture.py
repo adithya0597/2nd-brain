@@ -269,18 +269,18 @@ async def handle_capture(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Log classification to DB
         await _log_classification(text, msg_id, result)
 
-        # Log to captures_log
-        if dimensions:
-            try:
-                await execute(
-                    "INSERT INTO captures_log "
-                    "(message_text, dimensions_json, confidence, method, is_actionable, source_channel) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (text, json.dumps(dimensions), confidence, method,
-                     1 if result.is_actionable else 0, "brain-inbox"),
-                )
-            except Exception:
-                logger.exception("Failed to log capture to captures_log")
+        # Log to captures_log (always, even without dimensions — enables extraction persistence)
+        capture_id = None
+        try:
+            capture_id = await execute(
+                "INSERT INTO captures_log "
+                "(message_text, dimensions_json, confidence, method, is_actionable, source_channel) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (text, json.dumps(dimensions or []), confidence, method,
+                 1 if result.is_actionable else 0, "brain-inbox"),
+            )
+        except Exception:
+            logger.exception("Failed to log capture to captures_log")
 
         # --- Single response: extraction confirm OR dimension confirm ---
         # Run extraction BEFORE sending any reply so the user gets one message,
@@ -304,6 +304,27 @@ async def handle_capture(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     extraction.due_date,
                     extraction.confidence,
                 )
+
+                # Persist extraction result to captures_log
+                if capture_id and extraction.confidence > 0.3:
+                    try:
+                        await execute(
+                            "UPDATE captures_log SET intent=?, extracted_title=?, "
+                            "extracted_project=?, extracted_due_date=?, "
+                            "extracted_people=?, extraction_confidence=? "
+                            "WHERE id=?",
+                            (
+                                extraction.intent,
+                                extraction.title,
+                                extraction.project,
+                                extraction.due_date,
+                                json.dumps(extraction.people or []),
+                                extraction.confidence,
+                                capture_id,
+                            ),
+                        )
+                    except Exception:
+                        logger.exception("Failed to persist extraction to captures_log")
 
                 # Show extraction UI for ALL intents when confident enough.
                 # 0.3 threshold: at 2-5 captures/day, false positives cost one Skip tap.
@@ -607,6 +628,24 @@ async def handle_extraction_confirm(update: Update, context: ContextTypes.DEFAUL
             "VALUES (?, 'all', ?, ?, 1)",
             (int(extraction_id), extraction.title, extraction.title),
         )
+
+        # Strengthen keyword association on confirmed extraction
+        if extraction.project:
+            try:
+                from core.db_ops import query as db_query
+                rows = await db_query(
+                    "SELECT dimensions_json FROM captures_log WHERE id = ?",
+                    (int(extraction_id),),
+                )
+                dims = json.loads(rows[0][0]) if rows and rows[0][0] else []
+                dim = dims[0] if dims else "uncategorized"
+                await execute(
+                    "INSERT INTO keyword_feedback (keyword, dimension, weight, source) "
+                    "VALUES (?, ?, 1.0, 'extraction_confirm')",
+                    (extraction.project.lower(), dim),
+                )
+            except Exception:
+                logger.debug("Keyword feedback insert failed", exc_info=True)
 
         await query.edit_message_text("\n".join(result_parts), parse_mode="HTML")
 
