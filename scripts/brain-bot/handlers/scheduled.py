@@ -3,6 +3,7 @@
 Uses PTB v21's JobQueue for cron-like job scheduling.
 Jobs are registered at startup via register_jobs(job_queue).
 """
+import html
 import json
 import logging
 import sqlite3
@@ -778,7 +779,7 @@ async def job_weekly_contradiction_scan(context: CallbackContext):
 
         if "no meaningful contradictions" not in result.lower():
             header = "<b>Weekly Contradiction Scan</b>\n\n"
-            await _send_to_topic(context.bot, "brain-insights", header + result)
+            await _send_to_topic(context.bot, "brain-insights", header + html.escape(result))
 
         _record_job_run("weekly_contradiction_scan")
     except Exception as e:
