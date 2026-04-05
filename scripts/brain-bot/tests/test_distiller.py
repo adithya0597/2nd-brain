@@ -17,6 +17,7 @@ sys.modules.setdefault("telegram.ext", MagicMock())
 cfg = sys.modules["config"]
 cfg.CLASSIFIER_LLM_MODEL = "claude-haiku-4-5-20251001"
 cfg.VAULT_PATH = Path("/tmp/test-vault")
+cfg.CONVERSATIONS_PATH = Path("/tmp/nonexistent-conversations")
 
 
 @pytest.fixture
@@ -159,6 +160,46 @@ class TestDistillSession:
             notes = await distill_session(session, "test-session")
 
         assert len(notes) == 5
+
+
+class TestBuildBatches:
+    def test_single_item(self):
+        from core.distiller import _build_batches
+        items = [("s1", "text one")]
+        batches = _build_batches(items)
+        assert len(batches) == 1
+        assert len(batches[0]) == 1
+
+    def test_splits_on_char_limit(self):
+        from core.distiller import _build_batches
+        items = [
+            ("s1", "a" * 5000),
+            ("s2", "b" * 5000),
+            ("s3", "c" * 5000),
+        ]
+        batches = _build_batches(items, batch_char_limit=9000)
+        assert len(batches) == 3  # Each item is 5000 chars, limit 9000
+
+    def test_groups_small_items(self):
+        from core.distiller import _build_batches
+        items = [
+            ("s1", "a" * 1000),
+            ("s2", "b" * 1000),
+            ("s3", "c" * 1000),
+        ]
+        batches = _build_batches(items, batch_char_limit=5000)
+        assert len(batches) == 1  # All fit in one batch
+
+    def test_empty_input(self):
+        from core.distiller import _build_batches
+        assert _build_batches([]) == []
+
+    def test_truncates_long_text(self):
+        from core.distiller import _build_batches, _CHARS_PER_CONV
+        items = [("s1", "x" * 100_000)]  # Way over _CHARS_PER_CONV
+        batches = _build_batches(items)
+        assert len(batches) == 1
+        assert len(batches[0][0][1]) == _CHARS_PER_CONV
 
 
 class TestDistillSessions:
@@ -322,3 +363,25 @@ class TestDistillSessions:
         call_args = mock_execute.call_args
         assert "INSERT OR IGNORE INTO distill_log" in call_args[0][0]
         assert call_args[0][1][1] == "abc123"  # session_id
+
+    @pytest.mark.asyncio
+    async def test_returns_zero_when_no_ai_client(self, tmp_path):
+        session_dir = tmp_path / "projects"
+        session_dir.mkdir()
+        session = session_dir / "abc123.jsonl"
+        with open(session, "w") as f:
+            f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "x" * 300}]}}) + "\n")
+
+        mock_execute = AsyncMock()
+
+        with (
+            patch("core.distiller.get_ai_client", return_value=None),
+            patch("core.distiller.find_session_files", return_value=[session]),
+            patch("core.distiller.should_distill", return_value=True),
+            patch("core.db_ops.query", AsyncMock(return_value=[])),
+        ):
+            from core.distiller import distill_sessions
+            sessions_done, notes_created = await distill_sessions(mock_execute, limit=5)
+
+        assert sessions_done == 0
+        assert notes_created == 0
