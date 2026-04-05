@@ -1,6 +1,6 @@
 ---
 type: project
-date: "2026-04-03"
+date: "2026-04-05"
 notion_id: "2fbfda46-1a19-8087-ae0d-ea891e90574a"
 status: Planned
 tags: [Side Projects]

@@ -1,6 +1,6 @@
 ---
 type: identity
-last_updated: 2026-04-03
+last_updated: 2026-04-05
 auto_generated: true
 ---
 
@@ -23,4 +23,4 @@ This file is automatically updated by `/brain:sync-notion` and `/brain:close-day
 | My brand (Hoodies T-shirts) | Personal Brand | [Open](https://notion.so/231fda461a1981eb90b5caf485197d06) |
 
 ---
-*Last synced: 2026-04-03*
+*Last synced: 2026-04-05*

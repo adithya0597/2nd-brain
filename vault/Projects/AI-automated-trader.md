@@ -1,6 +1,6 @@
 ---
 type: project
-date: "2026-04-03"
+date: "2026-04-05"
 notion_id: "260fda46-1a19-8061-af15-e96d52b5609b"
 status: Planned
 tags: [Investments]

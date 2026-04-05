@@ -1,6 +1,6 @@
 ---
 type: goal
-date: "2026-04-03"
+date: "2026-04-05"
 notion_id: "231fda46-1a19-803c-b6bc-cc4c73166804"
 status: Dream
 tags: [Investments]
