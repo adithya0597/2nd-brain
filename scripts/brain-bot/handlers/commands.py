@@ -450,7 +450,7 @@ async def _handle_distill(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from core.distiller import distill_sessions
         from core.db_ops import execute
 
-        sessions_done, notes_created = await distill_sessions(execute, limit=5)
+        sessions_done, notes_created = await distill_sessions(execute, limit=10)
 
         if sessions_done == 0:
             await msg.edit_text("No undistilled sessions found.")

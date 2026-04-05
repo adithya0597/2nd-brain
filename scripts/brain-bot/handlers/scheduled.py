@@ -883,6 +883,24 @@ async def job_system_health_check(context: CallbackContext):
         logger.exception("System health check failed")
 
 
+async def job_nightly_distill(context: CallbackContext):
+    """Daily 3am: Distill undistilled Claude sessions into vault notes."""
+    try:
+        logger.info("Running nightly distill job")
+        from core.distiller import distill_sessions
+
+        sessions_done, notes_created = await distill_sessions(execute, limit=10)
+
+        if sessions_done > 0:
+            logger.info("Nightly distill: %d notes from %d sessions", notes_created, sessions_done)
+        else:
+            logger.info("Nightly distill: no undistilled sessions found")
+
+        _record_job_run("nightly_distill")
+    except Exception:
+        logger.exception("Nightly distill job failed")
+
+
 async def job_graduation_proposals(context: CallbackContext):
     """Weekly Sunday 5:15am: Detect and propose concept graduations."""
     try:
@@ -965,6 +983,9 @@ async def job_graduation_proposals(context: CallbackContext):
 
 def register_jobs(job_queue):
     """Register all scheduled jobs with PTB's JobQueue. Called from app.py."""
+
+    # Daily 3am: Nightly distill (Claude session → vault notes)
+    job_queue.run_daily(job_nightly_distill, time=time(3, 0, tzinfo=CST), name="nightly_distill")
 
     # Daily 4am: Database backup
     job_queue.run_daily(job_db_backup, time=time(4, 0, tzinfo=CST), name="db_backup")

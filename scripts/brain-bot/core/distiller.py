@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Batch processing constants
 _CHARS_PER_CONV = 8000
 _BATCH_CHAR_LIMIT = 80_000
-_MAX_WORKERS = 3
+_MAX_WORKERS = 1  # Sequential to avoid burning free-tier quota (20 req/day)
 _MAX_RETRIES = 3
 
 DISTILL_PROMPT = """Extract 3-5 atomic knowledge notes from this Claude conversation transcript.
@@ -169,8 +169,14 @@ async def _distill_batch(
                 # Single-item batch may return a plain array
                 return {batch[0][0]: parsed[:5]}
 
+            # Gemini sometimes returns a flat list even for multi-conv batches
+            if isinstance(parsed, list):
+                # Best-effort: assign all notes to first session
+                return {batch[0][0]: parsed[:5]}
+
             logger.warning(
-                "Unexpected distill response format for batch of %d", len(batch),
+                "Unexpected distill response format (type=%s) for batch of %d",
+                type(parsed).__name__, len(batch),
             )
             return {}
 
@@ -202,8 +208,10 @@ async def _write_notes(notes: list[dict], session_id: str) -> int:
                 f"[[{t}]]" for t in note["related_topics"]
             )
 
+        # Validate only the note body (not Related: wikilinks, which are new topics)
+        body_for_validation = content.split("\n\nRelated:")[0] if "\n\nRelated:" in content else content
         issues = validate_vault_write(
-            content, config.VAULT_PATH / "Inbox" / "temp.md"
+            body_for_validation, config.VAULT_PATH / "Inbox" / "temp.md"
         )
         if issues:
             logger.warning(
