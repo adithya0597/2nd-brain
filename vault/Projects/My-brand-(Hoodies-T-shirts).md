@@ -1,6 +1,6 @@
 ---
 type: project
-date: "2026-04-05"
+date: "2026-04-07"
 notion_id: "231fda46-1a19-81eb-90b5-caf485197d06"
 status: Doing
 tags: [Personal Brand]
