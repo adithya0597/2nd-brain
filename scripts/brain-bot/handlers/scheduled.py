@@ -75,7 +75,7 @@ def _record_job_run(job_name: str):
 async def _notify_job_failure(bot, job_name: str, error: Exception):
     """Send job failure notification to brain-daily topic (user-facing jobs only)."""
     try:
-        error_text = str(error)[:200]
+        error_text = html.escape(str(error)[:200])
         text = f"<b>Job Failed: {job_name}</b>\n<code>{error_text}</code>"
         await _send_to_topic(bot, "brain-daily", text)
     except Exception:
@@ -100,8 +100,24 @@ def _should_run_biweekly(job_name: str) -> bool:
         return True
 
 
+async def _check_daily_quota() -> bool:
+    """Check if daily token budget is exhausted. Returns True if OK to proceed."""
+    from config import DAILY_TOKEN_BUDGET
+    if not DAILY_TOKEN_BUDGET:
+        return True
+    from core.ai_client import get_daily_token_usage
+    usage = await get_daily_token_usage()
+    if usage >= DAILY_TOKEN_BUDGET:
+        logger.warning("Daily token budget exhausted (%d/%d), skipping AI call", usage, DAILY_TOKEN_BUDGET)
+        return False
+    return True
+
+
 async def _call_claude(brain_command: str, user_input: str = "") -> str:
     """Gather context, call Claude, return text response."""
+    if not await _check_daily_quota():
+        raise RuntimeError("Daily token budget exhausted")
+
     context = await gather_command_context(brain_command)
     system_ctx = load_system_context()
     prompt = load_command_prompt(brain_command)
@@ -111,6 +127,18 @@ async def _call_claude(brain_command: str, user_input: str = "") -> str:
     if ai is None:
         raise RuntimeError("AI client not initialized — check GEMINI_API_KEY or ANTHROPIC_API_KEY in .env")
     model = get_ai_model()
+
+    # Langfuse tracing (manual, no decorator)
+    lf = None
+    trace = None
+    try:
+        from core.langfuse_client import get_langfuse
+        lf = get_langfuse()
+        if lf:
+            trace = lf.trace(name=f"scheduled_{brain_command}")
+    except Exception:
+        pass
+
     response = await ai.messages.create(
         model=model,
         max_tokens=4096,
@@ -135,7 +163,24 @@ async def _call_claude(brain_command: str, user_input: str = "") -> str:
     except Exception:
         pass
 
-    return response.content[0].text
+    result = response.content[0].text
+
+    # Log generation to Langfuse
+    if trace:
+        try:
+            trace.generation(
+                name="ai_call",
+                model=model,
+                output=result[:500],
+                usage={
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens,
+                },
+            )
+        except Exception:
+            pass
+
+    return result
 
 
 async def _send_to_topic(bot, topic_name: str, text: str, keyboard=None):
@@ -162,7 +207,7 @@ async def job_morning_briefing(context: CallbackContext):
     try:
         logger.info("Running morning briefing job")
         result = await _call_claude("today")
-        await _send_to_topic(context.bot, "brain-daily", result)
+        await _send_to_topic(context.bot, "brain-daily", html.escape(result))
         _record_job_run("morning_briefing")
     except Exception as e:
         logger.exception("Morning briefing job failed")
@@ -255,7 +300,7 @@ async def job_dashboard_refresh(context: CallbackContext):
         # Add neglected elements
         if neglected:
             neglected_text = "\n".join(
-                f"\u2022 <b>{n['name']}</b> ({n.get('dimension', 'N/A')}) \u2014 "
+                f"\u2022 <b>{html.escape(n['name'])}</b> ({html.escape(n.get('dimension', 'N/A'))}) \u2014 "
                 f"{int(n.get('days_since') or 0)} days silent"
                 for n in neglected[:5]
             )
@@ -341,7 +386,7 @@ async def job_drift_report(context: CallbackContext):
     try:
         logger.info("Running weekly drift report job")
         result = await _call_claude("drift")
-        await _send_to_topic(context.bot, "brain-insights", result)
+        await _send_to_topic(context.bot, "brain-insights", html.escape(result))
         _record_job_run("drift_report")
     except Exception as e:
         logger.exception("Drift report job failed")
@@ -356,7 +401,7 @@ async def job_emerge_biweekly(context: CallbackContext):
     try:
         logger.info("Running bi-weekly emerge job")
         result = await _call_claude("emerge")
-        await _send_to_topic(context.bot, "brain-insights", result)
+        await _send_to_topic(context.bot, "brain-insights", html.escape(result))
         _record_job_run("emerge_biweekly")
     except Exception:
         logger.exception("Emerge job failed")
@@ -367,7 +412,7 @@ async def job_weekly_project_summary(context: CallbackContext):
     try:
         logger.info("Running weekly project summary job")
         result = await _call_claude("projects")
-        await _send_to_topic(context.bot, "brain-daily", result)
+        await _send_to_topic(context.bot, "brain-daily", html.escape(result))
         _record_job_run("weekly_project_summary")
     except Exception:
         logger.exception("Weekly project summary job failed")
@@ -381,7 +426,7 @@ async def job_monthly_resource_digest(context: CallbackContext):
     try:
         logger.info("Running monthly resource digest job")
         result = await _call_claude("resources")
-        await _send_to_topic(context.bot, "brain-daily", result)
+        await _send_to_topic(context.bot, "brain-daily", html.escape(result))
         _record_job_run("monthly_resource_digest")
     except Exception:
         logger.exception("Monthly resource digest job failed")
@@ -467,6 +512,10 @@ async def job_keyword_expansion(context: CallbackContext):
             for c in corrections
         )
 
+        if not await _check_daily_quota():
+            logger.info("Skipping keyword expansion — daily token budget exhausted")
+            return
+
         current_keywords = json.dumps(
             {d: kws[:10] for d, kws in DIMENSION_KEYWORDS.items()},
             indent=2,
@@ -550,7 +599,7 @@ async def job_weekly_review(context: CallbackContext):
     try:
         logger.info("Running weekly review job")
         result = await _call_claude("weekly-review")
-        await _send_to_topic(context.bot, "brain-daily", result)
+        await _send_to_topic(context.bot, "brain-daily", html.escape(result))
         _record_job_run("weekly_review")
     except Exception:
         logger.exception("Weekly review job failed")
@@ -716,7 +765,7 @@ async def job_weekly_connections(context: CallbackContext):
         user_input = f'"{topics[0]}" and "{topics[-1]}"'
 
         result = await _call_claude("connect", user_input)
-        await _send_to_topic(context.bot, "brain-insights", result)
+        await _send_to_topic(context.bot, "brain-insights", html.escape(result))
         _record_job_run("weekly_connections")
     except Exception as e:
         logger.exception("weekly_connections failed")
@@ -734,6 +783,10 @@ async def job_weekly_contradiction_scan(context: CallbackContext):
         if not rows or len(rows) < 5:
             logger.info("Not enough recent captures for contradiction scan")
             _record_job_run("weekly_contradiction_scan")
+            return
+
+        if not await _check_daily_quota():
+            logger.info("Skipping contradiction scan — daily token budget exhausted")
             return
 
         captures_text = "\n".join(

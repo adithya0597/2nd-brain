@@ -165,14 +165,15 @@ _COMMAND_CHANNEL_WEIGHTS: dict[str, dict[str, float]] = {
     "trace":   {"graph": 1.5, "chunks": 1.3},
     "connect": {"graph": 1.8, "vector": 1.3},
     "ideas":   {"chunks": 1.4, "fts": 1.2},
-    "emerge":  {"vector": 1.2, "graph": 1.0},
+    # emerge intentionally excluded — no user_input to search against.
+    # Its context comes from recent_daily graph seeds, not hybrid search.
 }
 
 
 def _rrf_fuse(
     ranked_lists: dict[str, list[str]],
     metadata: dict[str, dict],
-    k: int = 60,
+    k: int = 12,
     channel_weights: dict[str, float] | None = None,
 ) -> list[dict]:
     """Reciprocal Rank Fusion across multiple ranked lists.
@@ -180,7 +181,7 @@ def _rrf_fuse(
     Args:
         ranked_lists: {channel_name: [file_path ordered by rank]}
         metadata: {file_path: {title, snippet, ...}}
-        k: RRF constant (default 60, higher = more uniform weighting)
+        k: RRF constant (lower = sharper rank discrimination for small corpora)
         channel_weights: Optional per-channel weight multipliers. Default 1.0.
 
     Returns:
@@ -218,7 +219,7 @@ def hybrid_search(
     query_text: str,
     limit: int = 20,
     channels: list[str] | None = None,
-    k: int = 60,
+    k: int = 12,
     db_path: Path = None,
     metadata_filters=None,
     command: str | None = None,

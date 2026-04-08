@@ -521,9 +521,10 @@ def rebuild_tag_shared_edges(db_path: Path | None = None) -> int:
         # Delete all existing tag_shared edges
         cursor.execute("DELETE FROM vault_edges WHERE edge_type = 'tag_shared'")
 
-        # Load all document nodes with their tags
+        # Load all document nodes with their tags (exclude bot-generated content)
         rows = cursor.execute(
-            "SELECT id, tags_json FROM vault_nodes WHERE node_type = 'document'"
+            "SELECT id, tags_json FROM vault_nodes "
+            "WHERE node_type = 'document' AND type NOT IN ('report', 'inbox')"
         ).fetchall()
 
         # Build tag -> [node_id] index
@@ -574,6 +575,10 @@ def update_tag_shared_edges_for_file(
     if node is None:
         return 0
 
+    # Skip bot-generated content
+    if node.get("type") in ("report", "inbox"):
+        return 0
+
     node_id = node["id"]
     tags = json.loads(node.get("tags_json", "[]") or "[]")
     if not tags:
@@ -589,11 +594,11 @@ def update_tag_shared_edges_for_file(
     # Remove existing tag_shared edges for this node
     delete_edges_for_node(node_id, edge_type="tag_shared", direction="both", db_path=db_path)
 
-    # Find other nodes sharing any of these tags
+    # Find other nodes sharing any of these tags (exclude bot-generated content)
     with get_connection(db_path, row_factory=sqlite3.Row) as conn:
         rows = conn.execute(
             "SELECT id, tags_json FROM vault_nodes "
-            "WHERE node_type = 'document' AND id != ?",
+            "WHERE node_type = 'document' AND id != ? AND type NOT IN ('report', 'inbox')",
             (node_id,),
         ).fetchall()
 
@@ -636,7 +641,7 @@ def rebuild_semantic_similarity_edges(
         Number of semantic_similarity edges created.
     """
     try:
-        from core.embedding_store import search_similar, get_file_embedding
+        from core.embedding_store import search_similar_by_embedding, get_file_embedding
     except ImportError:
         logger.debug("embedding_store not available — skipping semantic similarity edges")
         return 0
@@ -648,9 +653,10 @@ def rebuild_semantic_similarity_edges(
         cursor.execute("DELETE FROM vault_edges WHERE edge_type = 'semantic_similarity'")
         conn.commit()
 
-        # Get all document nodes
+        # Get all document nodes (exclude bot-generated content)
         rows = cursor.execute(
-            "SELECT id, file_path, title FROM vault_nodes WHERE node_type = 'document'"
+            "SELECT id, file_path, title FROM vault_nodes "
+            "WHERE node_type = 'document' AND type NOT IN ('report', 'inbox')"
         ).fetchall()
 
     if not rows:
@@ -665,13 +671,13 @@ def rebuild_semantic_similarity_edges(
     seen_pairs: set[tuple[int, int]] = set()
 
     for row in rows:
-        # Use the file's title as the query (lightweight alternative to raw embedding KNN)
+        # Use the file's content embedding for KNN similarity search
         file_emb = get_file_embedding(row["file_path"], db_path=db_path)
         if file_emb is None:
             continue
 
-        # Search for similar files
-        similar = search_similar(row["title"], limit=top_k + 1, db_path=db_path)
+        # Search for similar files using content embedding (not title text)
+        similar = search_similar_by_embedding(file_emb, limit=top_k + 1, db_path=db_path)
         source_id = row["id"]
 
         for match in similar:
@@ -718,12 +724,16 @@ def update_semantic_similarity_edges_for_file(
     Returns number of semantic_similarity edges created.
     """
     try:
-        from core.embedding_store import search_similar, get_file_embedding
+        from core.embedding_store import search_similar_by_embedding, get_file_embedding
     except ImportError:
         return 0
 
     node = get_node_by_path(file_path, db_path=db_path)
     if node is None:
+        return 0
+
+    # Skip bot-generated content
+    if node.get("type") in ("report", "inbox"):
         return 0
 
     node_id = node["id"]
@@ -736,8 +746,8 @@ def update_semantic_similarity_edges_for_file(
     # Remove existing semantic_similarity edges for this node
     delete_edges_for_node(node_id, edge_type="semantic_similarity", direction="both", db_path=db_path)
 
-    # Find similar files
-    similar = search_similar(node["title"], limit=top_k + 1, db_path=db_path)
+    # Find similar files using content embedding (not title text)
+    similar = search_similar_by_embedding(file_emb, limit=top_k + 1, db_path=db_path)
 
     edge_count = 0
     for match in similar:

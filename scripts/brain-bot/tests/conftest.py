@@ -104,6 +104,7 @@ def _ensure_config_defaults():
         "AI_PROVIDER": "",
         "GEMINI_API_KEY": "",
         "GEMINI_MODEL": "gemini-2.5-flash",
+        "DAILY_TOKEN_BUDGET": 0,
     }
     for attr, default in _ALL_DEFAULTS.items():
         setattr(cfg, attr, default)

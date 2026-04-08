@@ -239,6 +239,11 @@ async def post_shutdown(application: Application) -> None:
     """Clean up resources on shutdown."""
     logger.info("Shutting down executor pool...")
     shutdown_executor()
+    try:
+        from core.langfuse_client import flush as langfuse_flush
+        langfuse_flush()
+    except Exception:
+        pass
     logger.info("Shutdown complete.")
 
 

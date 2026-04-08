@@ -14,6 +14,7 @@ Dependencies:
 - ``core.graph_ops`` for node/edge CRUD
 - ``core.db_connection`` for standard DB access
 """
+import json as _json
 import logging
 import math
 import sqlite3
@@ -32,6 +33,78 @@ ICOR_AFFINITY_TOP_K = 3  # Keep at most top-K dimensions per file
 
 # Prefixes for files that should be skipped (non-knowledge content)
 _AFFINITY_SKIP_PREFIXES = ("Templates/", "Identity/", "CLAUDE")
+
+# ---------------------------------------------------------------------------
+# Frontmatter-based ICOR classification (overrides embedding similarity)
+# ---------------------------------------------------------------------------
+
+_VALID_DIMENSIONS = {
+    "Health & Vitality", "Wealth & Finance", "Relationships",
+    "Mind & Growth", "Purpose & Impact", "Systems & Environment",
+}
+
+# Maps key element / tag names (lowercase) to their parent ICOR dimension
+_ELEMENT_TO_DIMENSION = {
+    "fitness": "Health & Vitality",
+    "nutrition": "Health & Vitality",
+    "sleep": "Health & Vitality",
+    "mental health": "Health & Vitality",
+    "income": "Wealth & Finance",
+    "investments": "Wealth & Finance",
+    "budgeting": "Wealth & Finance",
+    "career": "Wealth & Finance",
+    "family": "Relationships",
+    "friendships": "Relationships",
+    "professional network": "Relationships",
+    "romantic": "Relationships",
+    "learning": "Mind & Growth",
+    "creativity": "Mind & Growth",
+    "mindfulness": "Mind & Growth",
+    "reading": "Mind & Growth",
+    "mission": "Purpose & Impact",
+    "volunteering": "Purpose & Impact",
+    "legacy": "Purpose & Impact",
+    "community": "Purpose & Impact",
+    "personal brand": "Purpose & Impact",
+    "digital tools": "Systems & Environment",
+    "physical spaces": "Systems & Environment",
+    "routines": "Systems & Environment",
+    "automation": "Systems & Environment",
+    "side projects": "Systems & Environment",
+}
+
+
+def _resolve_frontmatter_dimensions(fm: dict) -> list[str]:
+    """Extract ICOR dimensions from frontmatter icor_elements/icor_tag.
+
+    Returns list of dimension names (deduped, order preserved).
+    Empty list if no explicit dimensions found.
+    """
+    dims: list[str] = []
+    seen: set[str] = set()
+
+    for elem in (fm.get("icor_elements") or []):
+        if elem in _VALID_DIMENSIONS and elem not in seen:
+            dims.append(elem)
+            seen.add(elem)
+            continue
+        dim = _ELEMENT_TO_DIMENSION.get(elem.lower().strip())
+        if dim and dim not in seen:
+            dims.append(dim)
+            seen.add(dim)
+
+    icor_tag = fm.get("icor_tag")
+    if icor_tag:
+        if icor_tag in _VALID_DIMENSIONS and icor_tag not in seen:
+            dims.append(icor_tag)
+            seen.add(icor_tag)
+        else:
+            dim = _ELEMENT_TO_DIMENSION.get(icor_tag.lower().strip())
+            if dim and dim not in seen:
+                dims.append(dim)
+                seen.add(dim)
+
+    return dims
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +161,24 @@ def compute_file_icor_affinity(
     if any(file_path.startswith(prefix) for prefix in _AFFINITY_SKIP_PREFIXES):
         return []
 
+    # Frontmatter override: explicit tags trump embedding similarity
+    resolved_db = db_path or config.DB_PATH
+    with get_connection(resolved_db, row_factory=sqlite3.Row) as conn:
+        fm_row = conn.execute(
+            "SELECT frontmatter_json FROM vault_nodes WHERE file_path = ?",
+            (file_path,),
+        ).fetchone()
+
+    if fm_row:
+        try:
+            fm = _json.loads(fm_row["frontmatter_json"] or "{}")
+        except (ValueError, TypeError):
+            fm = {}
+        explicit_dims = _resolve_frontmatter_dimensions(fm)
+        if explicit_dims:
+            return [(dim, 1.0) for dim in explicit_dims[:ICOR_AFFINITY_TOP_K]]
+
+    # Fall through to embedding-based affinity
     try:
         from core.embedding_store import get_file_embedding, get_icor_embeddings
     except ImportError:
@@ -234,10 +325,11 @@ def rebuild_all_icor_edges(db_path: Path | None = None) -> int:
     # Ensure ICOR dimension nodes are present
     ensure_icor_nodes(db_path=db_path)
 
-    # Get all document nodes
+    # Get all document nodes (exclude bot-generated content)
     with get_connection(db_path, row_factory=sqlite3.Row) as conn:
         rows = conn.execute(
-            "SELECT file_path FROM vault_nodes WHERE node_type = 'document'"
+            "SELECT file_path FROM vault_nodes "
+            "WHERE node_type = 'document' AND type NOT IN ('report', 'inbox')"
         ).fetchall()
 
     file_paths = [row["file_path"] for row in rows]
