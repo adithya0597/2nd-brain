@@ -21,6 +21,9 @@ _model_lock = threading.Lock()
 _embedding_model = None
 _VEC_AVAILABLE = None  # None = not yet checked, True/False after check
 
+# File types to skip during embedding (boilerplate dimension pages)
+_EMBEDDING_SKIP_TYPES = {"dimension", "icor_dimension"}
+
 
 def _check_vec_available(db_path: Path = None) -> bool:
     """Check if sqlite-vec extension is available."""
@@ -156,6 +159,18 @@ def embed_single_file(file_path: Path, vault_path: Path = None, db_path: Path = 
     title = file_path.stem
     new_hash = _content_hash(content)
 
+    # Skip known low-value file types (boilerplate dimension pages)
+    try:
+        from core.db_connection import get_connection
+        with get_connection(db_path) as type_conn:
+            type_row = type_conn.execute(
+                "SELECT type FROM vault_nodes WHERE file_path = ?", (rel_path,)
+            ).fetchone()
+            if type_row and type_row[0] in _EMBEDDING_SKIP_TYPES:
+                return False
+    except Exception:
+        pass  # Proceed with embedding if type check fails
+
     conn = _get_vec_connection(db_path)
     if conn is None:
         return False
@@ -237,6 +252,18 @@ def embed_all_files(vault_path: Path = None, db_path: Path = None, force: bool =
             for row in conn.execute("SELECT file_path, content_hash FROM vec_vault").fetchall():
                 existing_hashes[row["file_path"]] = row["content_hash"]
 
+        # Load skip-type file paths from vault_nodes
+        skip_paths = set()
+        try:
+            from core.db_connection import get_connection
+            with get_connection(db_path) as type_conn:
+                for row in type_conn.execute(
+                    "SELECT file_path FROM vault_nodes WHERE type IN ('dimension', 'icor_dimension')"
+                ).fetchall():
+                    skip_paths.add(row[0] if isinstance(row, tuple) else row["file_path"])
+        except Exception:
+            pass  # Proceed without filtering if type check fails
+
         # Scan vault files
         frontmatter_re = re.compile(r"^---\s*\n.*?\n---\s*\n?", re.DOTALL)
 
@@ -247,6 +274,8 @@ def embed_all_files(vault_path: Path = None, db_path: Path = None, force: bool =
                 continue
 
             rel_path = str(rel)
+            if rel_path in skip_paths:
+                continue
             try:
                 content = md_file.read_text(encoding="utf-8")
             except (OSError, IOError):
@@ -434,6 +463,44 @@ def search_similar(query_text: str, limit: int = 10, db_path: Path = None,
         ]
     except Exception:
         logger.debug("Vector search failed", exc_info=True)
+        return []
+    finally:
+        conn.close()
+
+
+def search_similar_by_embedding(
+    embedding_bytes: bytes,
+    limit: int = 10,
+    db_path: Path = None,
+) -> list[dict]:
+    """Search for vault files similar to a raw embedding vector.
+
+    Like search_similar() but takes pre-computed embedding bytes
+    instead of text. Used by graph_ops for content-based similarity.
+    """
+    db_path = db_path or config.DB_PATH
+    conn = _get_vec_connection(db_path)
+    if conn is None:
+        return []
+
+    try:
+        rows = conn.execute(
+            "SELECT rowid, distance, file_path, title "
+            "FROM vec_vault WHERE embedding MATCH ? AND k = ? "
+            "ORDER BY distance",
+            (embedding_bytes, limit),
+        ).fetchall()
+        return [
+            {
+                "file_path": r["file_path"],
+                "title": r["title"],
+                "distance": r["distance"],
+                "rowid": r["rowid"],
+            }
+            for r in rows
+        ]
+    except Exception:
+        logger.debug("search_similar_by_embedding failed", exc_info=True)
         return []
     finally:
         conn.close()

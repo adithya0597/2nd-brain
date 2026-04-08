@@ -1016,6 +1016,56 @@ def migrate(db_path: Path = DB_PATH):
     conn.commit()
     print("Step 27 complete: due_date + reminders + extraction_feedback ready")
 
+    # 28. Retrieval log table (search quality instrumentation)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS retrieval_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            command TEXT NOT NULL,
+            summary_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_retrieval_log_command ON retrieval_log(command)")
+    conn.commit()
+    print("Step 28 complete: retrieval_log table ready")
+
+    # 29. Extraction result persistence in captures_log
+    _step29_columns = [
+        ("intent", "TEXT"),
+        ("extracted_title", "TEXT"),
+        ("extracted_project", "TEXT"),
+        ("extracted_due_date", "TEXT"),
+        ("extracted_people", "TEXT"),
+        ("extraction_confidence", "REAL"),
+    ]
+    for col_name, col_type in _step29_columns:
+        try:
+            cursor.execute(f"ALTER TABLE captures_log ADD COLUMN {col_name} {col_type}")
+            print(f"  Added captures_log.{col_name}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_captures_intent ON captures_log(intent)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_captures_due ON captures_log(extracted_due_date)")
+    conn.commit()
+    print("Step 29 complete: extraction result columns added to captures_log")
+
+    # 30. Distill log table (conversation distiller)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS distill_log (
+            id INTEGER PRIMARY KEY,
+            session_path TEXT UNIQUE,
+            session_id TEXT,
+            distilled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            note_count INTEGER,
+            status TEXT DEFAULT 'complete'
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_distill_session ON distill_log(session_id)"
+    )
+    conn.commit()
+    print("Step 30 complete: distill_log table created")
+
     conn.close()
     print(f"\nMigration complete on {db_path}")
     print(f"  - sync_state table: created/verified")
@@ -1037,6 +1087,8 @@ def migrate(db_path: Path = DB_PATH):
     print(f"  - metadata filtering indexes: last_modified + type_nonempty created/verified")
     print(f"  - graduation_proposals table: concept graduation created/verified")
     print(f"  - action_items.due_date + reminders + extraction_feedback: Phase 1 intelligence layer")
+    print(f"  - retrieval_log table: search quality instrumentation created/verified")
+    print(f"  - distill_log table: conversation distiller tracking created/verified")
 
 
 if __name__ == "__main__":

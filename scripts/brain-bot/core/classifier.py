@@ -67,8 +67,15 @@ _NOISE_PATTERNS = re.compile(
 )
 
 _ACTION_PATTERNS = re.compile(
-    r"\b(need to|should|must|todo|action|reminder|deadline|follow.up|"
+    r"\b(need to|should|must|todo|action|remind|reminder|deadline|follow.up|"
     r"schedule|book|call|email|buy|pay|submit|send)\b",
+    re.IGNORECASE,
+)
+
+_TEMPORAL_PATTERNS = re.compile(
+    r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"tomorrow|tonight|next week|this week|by end of|"
+    r"\d{1,2}(?:am|pm)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2})\b",
     re.IGNORECASE,
 )
 
@@ -85,13 +92,13 @@ _DIMENSION_REFERENCES: dict[str, list[str]] = {
         "Struggling with sleep hygiene and insomnia need a consistent bedtime routine and less screen time before bed",
     ],
     "Wealth & Finance": [
-        "Applying for jobs and preparing for interviews to get hired as an engineer and earn a salary income",
-        "LinkedIn outreach and networking to find job opportunities and advance my career for financial stability",
-        "Creating a demo video for a job interview at a company as part of the hiring process first round",
-        "Automating job scraping and job applications to speed up my job search and land a position faster",
-        "Had a hard day trying to automate my job search and application process but results with nothing but failure",
-        "Professional networking with contacts at Wells Fargo and other companies to get referrals for job positions",
-        "Working on a pitch deck and networking plan to present my skills to potential employers and hiring managers",
+        "Reviewing my investment portfolio checking stock performance and rebalancing asset allocation",
+        "Budgeting and tracking monthly expenses to maintain financial discipline and savings goals",
+        "Building an automated trading bot to execute algorithmic strategies on financial markets",
+        "Analyzing career growth opportunities and negotiating compensation for long term financial security",
+        "Planning retirement savings and exploring passive income streams through real estate or dividends",
+        "Setting up automated bill payments and organizing financial accounts for better money management",
+        "Researching cryptocurrency markets and evaluating risk reward ratios for portfolio diversification",
     ],
     "Relationships": [
         "Planning to meet up with friends or family for dinner catching up and spending quality time together",
@@ -170,7 +177,11 @@ def _load_embedding_model():
 def _cosine_similarity(a, b):
     """Compute cosine similarity between two vectors."""
     import numpy as np
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +478,10 @@ class MessageClassifier:
 
     def _check_actionable(self, text: str) -> bool:
         return bool(_ACTION_PATTERNS.search(text))
+
+    def check_should_extract(self, text: str) -> bool:
+        """Broader than is_actionable: includes temporal references."""
+        return self._check_actionable(text) or bool(_TEMPORAL_PATTERNS.search(text))
 
     @staticmethod
     def _merge_scores(

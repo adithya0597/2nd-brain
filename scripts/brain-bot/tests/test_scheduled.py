@@ -52,6 +52,7 @@ from handlers.scheduled import (
     job_weekly_brain_level,
     job_resolve_pending_captures,
     job_rolling_memo,
+    job_nightly_distill,
     job_graph_maintenance,
     job_graduation_proposals,
     job_system_health_check,
@@ -530,6 +531,29 @@ class TestJobGraphMaintenance:
             patch("handlers.scheduled._record_job_run"),
         ):
             await job_graph_maintenance(mock_cb_context)
+
+
+class TestJobNightlyDistill:
+    @pytest.mark.asyncio
+    async def test_distills_sessions(self, mock_cb_context):
+        with (
+            patch("core.distiller.distill_sessions", new_callable=AsyncMock, return_value=(3, 7)),
+            patch("handlers.scheduled._record_job_run"),
+        ):
+            await job_nightly_distill(mock_cb_context)
+
+    @pytest.mark.asyncio
+    async def test_no_sessions(self, mock_cb_context):
+        with (
+            patch("core.distiller.distill_sessions", new_callable=AsyncMock, return_value=(0, 0)),
+            patch("handlers.scheduled._record_job_run"),
+        ):
+            await job_nightly_distill(mock_cb_context)
+
+    @pytest.mark.asyncio
+    async def test_exception_does_not_propagate(self, mock_cb_context):
+        with patch("core.distiller.distill_sessions", new_callable=AsyncMock, side_effect=Exception("boom")):
+            await job_nightly_distill(mock_cb_context)
 
 
 class TestJobGraduationProposals:

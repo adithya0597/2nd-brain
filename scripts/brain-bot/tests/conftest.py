@@ -104,6 +104,7 @@ def _ensure_config_defaults():
         "AI_PROVIDER": "",
         "GEMINI_API_KEY": "",
         "GEMINI_MODEL": "gemini-2.5-flash",
+        "DAILY_TOKEN_BUDGET": 0,
     }
     for attr, default in _ALL_DEFAULTS.items():
         setattr(cfg, attr, default)
@@ -402,7 +403,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_status ON sync_outbox(status);
 CREATE INDEX IF NOT EXISTS idx_outbox_entity ON sync_outbox(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_created ON sync_outbox(created_at);
 
--- captures_log (migrate-db.py step 21)
+-- captures_log (migrate-db.py step 21 + step 29 extraction columns)
 CREATE TABLE IF NOT EXISTS captures_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_text TEXT NOT NULL,
@@ -411,9 +412,17 @@ CREATE TABLE IF NOT EXISTS captures_log (
     method TEXT,
     is_actionable INTEGER DEFAULT 0,
     source_channel TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    intent TEXT,
+    extracted_title TEXT,
+    extracted_project TEXT,
+    extracted_due_date TEXT,
+    extracted_people TEXT,
+    extraction_confidence REAL
 );
 CREATE INDEX IF NOT EXISTS idx_captures_log_created ON captures_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_captures_intent ON captures_log(intent);
+CREATE INDEX IF NOT EXISTS idx_captures_due ON captures_log(extracted_due_date);
 
 -- notion_projects (migrate-db.py step 16)
 CREATE TABLE IF NOT EXISTS notion_projects (
@@ -587,6 +596,17 @@ CREATE TABLE IF NOT EXISTS extraction_feedback (
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ef_capture ON extraction_feedback(capture_id);
+
+-- distill_log (migrate-db.py step 30)
+CREATE TABLE IF NOT EXISTS distill_log (
+    id INTEGER PRIMARY KEY,
+    session_path TEXT UNIQUE,
+    session_id TEXT,
+    distilled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    note_count INTEGER,
+    status TEXT DEFAULT 'complete'
+);
+CREATE INDEX IF NOT EXISTS idx_distill_session ON distill_log(session_id);
 """
 
 _SEED_SYNC_STATE = """

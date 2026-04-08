@@ -31,7 +31,7 @@ FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 # ---------------------------------------------------------------------------
 # Exclusion denylist — non-knowledge files that pollute the graph
 # ---------------------------------------------------------------------------
-_EXCLUDED_DIRS = {"Templates", "Identity", ".obsidian"}
+_EXCLUDED_DIRS = {"Templates", "Identity", ".obsidian", "Demo"}
 _EXCLUDED_FILES = {"CLAUDE.md"}
 
 

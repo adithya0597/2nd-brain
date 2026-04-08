@@ -13,6 +13,35 @@ logger = logging.getLogger(__name__)
 # create_report_file -> append_to_daily_note)
 _vault_lock = threading.RLock()
 
+# Batch mode: suppress per-file hook execution during bulk writes.
+# exit_batch_mode() triggers a single reindex for all queued files.
+_batch_lock = threading.Lock()
+_batch_mode = False
+_batch_queue: list[Path] = []
+
+
+def enter_batch_mode():
+    """Suppress per-file post-write hooks. Call exit_batch_mode() when done."""
+    global _batch_mode
+    with _batch_lock:
+        _batch_mode = True
+        _batch_queue.clear()
+
+
+def exit_batch_mode():
+    """Resume normal hook execution and reindex all queued files."""
+    global _batch_mode
+    with _batch_lock:
+        _batch_mode = False
+        queue = list(_batch_queue)
+        _batch_queue.clear()
+    if queue:
+        try:
+            from core.vault_indexer import index_to_db
+            index_to_db()
+        except Exception:
+            logger.warning("Batch reindex failed after %d files", len(queue), exc_info=True)
+
 
 def _on_vault_write(file_path: Path):
     """Post-write hook: incrementally update vault_index and FTS5 for this file.
@@ -27,6 +56,11 @@ def _on_vault_write(file_path: Path):
     """
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return
+
+    with _batch_lock:
+        if _batch_mode:
+            _batch_queue.append(file_path)
+            return
 
     def _do_index():
         try:
@@ -226,15 +260,17 @@ def create_inbox_entry(
     dimensions: list[str] | None = None,
     confidence: float = 0.0,
     method: str = "none",
+    source_session: str | None = None,
 ) -> Path:
     """Create a new file in vault/Inbox/.
 
     Args:
         content: The raw capture text.
-        source: Where the capture came from (default "slack").
+        source: Where the capture came from (human|telegram|distiller|compile).
         dimensions: Matched dimension names (may be empty/None).
         confidence: Classification confidence score.
         method: Classification method used ("keyword", "embedding", "llm", "none").
+        source_session: Session ID for provenance tracking (optional).
 
     Returns:
         Path to the created file.
@@ -254,11 +290,12 @@ def create_inbox_entry(
         icor_line = f"icor_dimensions: [{', '.join(dims)}]" if dims else "icor_dimensions: []"
         status = "unprocessed" if not dims else "routed"
 
+        session_line = f"source_session: {source_session}\n" if source_session else ""
         frontmatter = f"""---
 type: inbox
 date: {timestamp.strftime('%Y-%m-%d')}
 source: {source}
-status: {status}
+{session_line}status: {status}
 {icor_line}
 confidence: {confidence}
 classification_method: {method}
@@ -300,6 +337,7 @@ def create_report_file(
     content: str,
     dimensions: list[str] | None = None,
     date: str | None = None,
+    source_session: str | None = None,
 ) -> Path:
     """Create a report file in vault/Reports/ with proper frontmatter.
 
@@ -308,6 +346,7 @@ def create_report_file(
         content: The report content (markdown).
         dimensions: Related ICOR dimensions for wikilinks.
         date: Date string (YYYY-MM-DD). Defaults to today.
+        source_session: Session ID for provenance tracking (optional).
 
     Returns:
         Path to the created file.
@@ -327,12 +366,13 @@ def create_report_file(
         dim_links = ", ".join(f"[[{d}]]" for d in dims) if dims else ""
         icor_line = f"icor_dimensions: [{', '.join(dims)}]" if dims else "icor_dimensions: []"
 
+        session_line = f"source_session: {source_session}\n" if source_session else ""
         frontmatter = f"""---
 type: report
 source: system
 command: {command}
 date: {date}
-{icor_line}
+{session_line}{icor_line}
 ---
 
 """

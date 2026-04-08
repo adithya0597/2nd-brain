@@ -14,6 +14,7 @@ Dependencies:
 - ``core.graph_ops`` for node/edge CRUD
 - ``core.db_connection`` for standard DB access
 """
+import json as _json
 import logging
 import math
 import sqlite3
@@ -32,6 +33,78 @@ ICOR_AFFINITY_TOP_K = 3  # Keep at most top-K dimensions per file
 
 # Prefixes for files that should be skipped (non-knowledge content)
 _AFFINITY_SKIP_PREFIXES = ("Templates/", "Identity/", "CLAUDE")
+
+# ---------------------------------------------------------------------------
+# Frontmatter-based ICOR classification (overrides embedding similarity)
+# ---------------------------------------------------------------------------
+
+_VALID_DIMENSIONS = {
+    "Health & Vitality", "Wealth & Finance", "Relationships",
+    "Mind & Growth", "Purpose & Impact", "Systems & Environment",
+}
+
+# Maps key element / tag names (lowercase) to their parent ICOR dimension
+_ELEMENT_TO_DIMENSION = {
+    "fitness": "Health & Vitality",
+    "nutrition": "Health & Vitality",
+    "sleep": "Health & Vitality",
+    "mental health": "Health & Vitality",
+    "income": "Wealth & Finance",
+    "investments": "Wealth & Finance",
+    "budgeting": "Wealth & Finance",
+    "career": "Wealth & Finance",
+    "family": "Relationships",
+    "friendships": "Relationships",
+    "professional network": "Relationships",
+    "romantic": "Relationships",
+    "learning": "Mind & Growth",
+    "creativity": "Mind & Growth",
+    "mindfulness": "Mind & Growth",
+    "reading": "Mind & Growth",
+    "mission": "Purpose & Impact",
+    "volunteering": "Purpose & Impact",
+    "legacy": "Purpose & Impact",
+    "community": "Purpose & Impact",
+    "personal brand": "Purpose & Impact",
+    "digital tools": "Systems & Environment",
+    "physical spaces": "Systems & Environment",
+    "routines": "Systems & Environment",
+    "automation": "Systems & Environment",
+    "side projects": "Systems & Environment",
+}
+
+
+def _resolve_frontmatter_dimensions(fm: dict) -> list[str]:
+    """Extract ICOR dimensions from frontmatter icor_elements/icor_tag.
+
+    Returns list of dimension names (deduped, order preserved).
+    Empty list if no explicit dimensions found.
+    """
+    dims: list[str] = []
+    seen: set[str] = set()
+
+    for elem in (fm.get("icor_elements") or []):
+        if elem in _VALID_DIMENSIONS and elem not in seen:
+            dims.append(elem)
+            seen.add(elem)
+            continue
+        dim = _ELEMENT_TO_DIMENSION.get(elem.lower().strip())
+        if dim and dim not in seen:
+            dims.append(dim)
+            seen.add(dim)
+
+    icor_tag = fm.get("icor_tag")
+    if icor_tag:
+        if icor_tag in _VALID_DIMENSIONS and icor_tag not in seen:
+            dims.append(icor_tag)
+            seen.add(icor_tag)
+        else:
+            dim = _ELEMENT_TO_DIMENSION.get(icor_tag.lower().strip())
+            if dim and dim not in seen:
+                dims.append(dim)
+                seen.add(dim)
+
+    return dims
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +161,24 @@ def compute_file_icor_affinity(
     if any(file_path.startswith(prefix) for prefix in _AFFINITY_SKIP_PREFIXES):
         return []
 
+    # Frontmatter override: explicit tags trump embedding similarity
+    resolved_db = db_path or config.DB_PATH
+    with get_connection(resolved_db, row_factory=sqlite3.Row) as conn:
+        fm_row = conn.execute(
+            "SELECT frontmatter_json FROM vault_nodes WHERE file_path = ?",
+            (file_path,),
+        ).fetchone()
+
+    if fm_row:
+        try:
+            fm = _json.loads(fm_row["frontmatter_json"] or "{}")
+        except (ValueError, TypeError):
+            fm = {}
+        explicit_dims = _resolve_frontmatter_dimensions(fm)
+        if explicit_dims:
+            return [(dim, 1.0) for dim in explicit_dims[:ICOR_AFFINITY_TOP_K]]
+
+    # Fall through to embedding-based affinity
     try:
         from core.embedding_store import get_file_embedding, get_icor_embeddings
     except ImportError:
@@ -147,10 +238,12 @@ def update_icor_edges_for_file(
     """Update ICOR affinity edges for a single vault file.
 
     1. Look up the file's node in ``vault_nodes``.
-    2. Delete existing ``icor_affinity`` edges originating from that node.
-    3. Compute affinities via :func:`compute_file_icor_affinity`.
-    4. For each qualifying dimension, create an ``icor_affinity`` edge
-       from the document node to the ICOR dimension node.
+    2. Compute affinities via :func:`compute_file_icor_affinity`.
+    3. Resolve dimension node IDs.
+    4. Delete old + insert new edges in a single transaction.
+
+    Computation happens before deletion so that a failure preserves
+    the existing edges.
 
     Args:
         file_path: Relative path within the vault.
@@ -159,12 +252,7 @@ def update_icor_edges_for_file(
     Returns:
         Number of ICOR affinity edges created.
     """
-    from core.graph_ops import (
-        delete_edges_for_node,
-        get_node_by_path,
-        get_node_by_title,
-        upsert_edge,
-    )
+    from core.graph_ops import get_node_by_path, get_node_by_title
 
     node = get_node_by_path(file_path, db_path=db_path)
     if node is None:
@@ -173,15 +261,11 @@ def update_icor_edges_for_file(
 
     node_id = node["id"]
 
-    # Remove stale icor_affinity edges
-    delete_edges_for_node(node_id, edge_type="icor_affinity", direction="outgoing", db_path=db_path)
-
-    # Compute affinities
+    # Compute affinities BEFORE deleting (preserves old edges on failure)
     affinities = compute_file_icor_affinity(file_path, db_path=db_path)
-    if not affinities:
-        return 0
 
-    edge_count = 0
+    # Resolve dimension node IDs
+    edges_to_create = []
     for dimension, score in affinities:
         icor_node = get_node_by_title(dimension, db_path=db_path)
         if icor_node is None:
@@ -191,26 +275,28 @@ def update_icor_edges_for_file(
                 file_path,
             )
             continue
+        edges_to_create.append((icor_node["id"], score))
 
-        upsert_edge(
-            source_id=node_id,
-            target_id=icor_node["id"],
-            edge_type="icor_affinity",
-            weight=score,
-            db_path=db_path,
+    # Single transaction: delete old + insert new
+    resolved = db_path or config.DB_PATH
+    with get_connection(resolved) as conn:
+        conn.execute(
+            "DELETE FROM vault_edges WHERE source_node_id = ? AND edge_type = 'icor_affinity'",
+            (node_id,),
         )
-        edge_count += 1
+        for target_id, score in edges_to_create:
+            conn.execute(
+                """INSERT INTO vault_edges (source_node_id, target_node_id, edge_type, weight, metadata_json, verified_at)
+                   VALUES (?, ?, 'icor_affinity', ?, '{}', datetime('now'))
+                   ON CONFLICT(source_node_id, target_node_id, edge_type) DO UPDATE SET
+                       weight = excluded.weight, verified_at = datetime('now')""",
+                (node_id, target_id, score),
+            )
+        conn.commit()
 
-    if edge_count:
-        logger.debug(
-            "Created %d ICOR affinity edges for %s (top: %s %.2f)",
-            edge_count,
-            file_path,
-            affinities[0][0],
-            affinities[0][1],
-        )
-
-    return edge_count
+    if edges_to_create:
+        logger.debug("Created %d ICOR affinity edges for %s", len(edges_to_create), file_path)
+    return len(edges_to_create)
 
 
 # ---------------------------------------------------------------------------
@@ -239,10 +325,11 @@ def rebuild_all_icor_edges(db_path: Path | None = None) -> int:
     # Ensure ICOR dimension nodes are present
     ensure_icor_nodes(db_path=db_path)
 
-    # Get all document nodes
+    # Get all document nodes (exclude bot-generated content)
     with get_connection(db_path, row_factory=sqlite3.Row) as conn:
         rows = conn.execute(
-            "SELECT file_path FROM vault_nodes WHERE node_type = 'document'"
+            "SELECT file_path FROM vault_nodes "
+            "WHERE node_type = 'document' AND type NOT IN ('report', 'inbox')"
         ).fetchall()
 
     file_paths = [row["file_path"] for row in rows]

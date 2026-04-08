@@ -25,6 +25,9 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 CLASSIFIER_LLM_MODEL = os.environ.get("CLASSIFIER_LLM_MODEL", "claude-haiku-4-5-20251001")
 
+# Quota management — daily token budget across all AI calls (0 = unlimited)
+DAILY_TOKEN_BUDGET = int(os.environ.get("DAILY_TOKEN_BUDGET", "0"))
+
 # Embedding model — nomic-embed-text-v1.5 supports Matryoshka dimensions (64, 128, 256, 512, 768)
 EMBEDDING_MODEL = os.environ.get("BRAIN_EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
 EMBEDDING_DIM = 512
@@ -34,11 +37,12 @@ NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
 
 # Paths (resolve relative to project root)
 PROJECT_ROOT = Path(__file__).parent.parent.parent  # scripts/brain-bot/ -> project root
-VAULT_PATH = PROJECT_ROOT / "vault"
-DB_PATH = PROJECT_ROOT / "data" / "brain.db"
+VAULT_PATH = Path(os.environ.get("BRAIN_VAULT_PATH", PROJECT_ROOT / "vault"))
+DB_PATH = Path(os.environ.get("BRAIN_DB_PATH", PROJECT_ROOT / "data" / "brain.db"))
 COMMANDS_PATH = PROJECT_ROOT / ".claude" / "commands" / "brain"
 CLAUDE_MD_PATH = PROJECT_ROOT / "CLAUDE.md"
 NOTION_REGISTRY_PATH = PROJECT_ROOT / "data" / "notion-registry.json"
+CONVERSATIONS_PATH = PROJECT_ROOT / "data" / "Claude Conversations"
 
 # Notion Collection IDs
 NOTION_COLLECTIONS = {

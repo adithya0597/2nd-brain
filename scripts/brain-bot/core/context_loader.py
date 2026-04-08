@@ -1,6 +1,7 @@
 """Context loading for slash command execution via Anthropic API."""
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import config
@@ -42,6 +43,14 @@ _COMMAND_QUERIES = {
               AND due_date <= date('now', '+3 days')
               AND status = 'pending'
             ORDER BY due_date ASC
+        """,
+        "unlinked_captures": """
+            SELECT intent, extracted_title, extracted_project, extracted_due_date
+            FROM captures_log
+            WHERE intent IS NOT NULL
+              AND (dimensions_json = '[]' OR dimensions_json IS NULL)
+              AND created_at > datetime('now', '-7 days')
+            ORDER BY created_at DESC LIMIT 20
         """,
     },
     "close-day": {
@@ -142,29 +151,31 @@ _COMMAND_QUERIES = {
     },
     "engage": {
         "brain_level": """
-            SELECT level, consistency, breadth, depth, growth, momentum, computed_at
+            SELECT level, consistency_score, breadth_score, depth_score,
+                   growth_score, momentum_score, computed_at
             FROM brain_level ORDER BY computed_at DESC LIMIT 1
         """,
         "engagement_7d": """
-            SELECT date, engagement_score, journal_count, action_created,
-                   action_completed, vault_files_modified, concepts_touched
+            SELECT date, engagement_score, journal_entry_count, actions_created,
+                   actions_completed, vault_files_modified
             FROM engagement_daily
             ORDER BY date DESC LIMIT 7
         """,
         "dimension_signals": """
-            SELECT dimension, touchpoints, momentum, trend, period_start, period_end
+            SELECT dimension, rolling_7d_mentions, rolling_7d_captures,
+                   momentum, momentum_score, trend, computed_at
             FROM dimension_signals
-            WHERE period_end = (SELECT MAX(period_end) FROM dimension_signals)
+            WHERE computed_at = (SELECT MAX(computed_at) FROM dimension_signals)
         """,
         "active_alerts": """
-            SELECT alert_type, severity, title, detail, created_at
-            FROM alerts WHERE dismissed = 0
+            SELECT alert_type, severity, title, details_json, created_at
+            FROM alerts WHERE status = 'active'
             ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END
         """,
         "engagement_30d_avg": """
             SELECT ROUND(AVG(engagement_score), 2) as avg_score,
-                   ROUND(AVG(journal_count), 1) as avg_journals,
-                   ROUND(AVG(action_completed), 1) as avg_completed,
+                   ROUND(AVG(journal_entry_count), 1) as avg_journals,
+                   ROUND(AVG(actions_completed), 1) as avg_completed,
                    COUNT(*) as days_tracked
             FROM engagement_daily
             WHERE date >= date('now', '-30 days')
@@ -271,7 +282,13 @@ _HYBRID_SEARCH_COMMANDS = {
     "trace": {"limit": 10},
     "ideas": {"limit": 10},
     "connect": {"limit": 10},
+    "ghost": {"limit": 8},      # question text is a natural search query
+    "challenge": {"limit": 8},  # belief text is a natural search query
 }
+
+# Commands where hybrid search results must be kept separate from identity files
+# to preserve provenance clarity (user-authored vs system-retrieved)
+_PROVENANCE_SEPARATE_COMMANDS = {"ghost", "challenge"}
 
 
 def _gather_hybrid_context(command_name: str, user_input: str, db_path: Path = None) -> dict[str, str]:
@@ -575,10 +592,14 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
     if command_name in _HYBRID_SEARCH_COMMANDS and user_input:
         hybrid_files = _gather_hybrid_context(command_name, user_input, db_path=db_path)
         if hybrid_files:
-            # Merge with graph context (hybrid may find additional files)
-            for path, content in hybrid_files.items():
-                if path not in context.get("graph", {}):
-                    context.setdefault("graph", {})[path] = content
+            if command_name in _PROVENANCE_SEPARATE_COMMANDS:
+                # Keep separate from identity files for provenance clarity
+                context["search_results"] = hybrid_files
+            else:
+                # Merge with graph context (hybrid may find additional files)
+                for path, content in hybrid_files.items():
+                    if path not in context.get("graph", {}):
+                        context.setdefault("graph", {})[path] = content
 
     if progress_callback:
         progress_callback("graph_complete")
@@ -594,7 +615,34 @@ async def gather_command_context(command_name: str, user_input: str = "", db_pat
     if analytics:
         context["analytics"] = analytics
 
+    # Log retrieval summary for search quality measurement
+    _log_retrieval_summary(command_name, context, user_input, db_path)
+
     return context
+
+
+def _log_retrieval_summary(command_name, context, user_input, db_path=None):
+    """Log retrieval context summary for search quality measurement."""
+    summary = {
+        "command": command_name,
+        "graph_files": len(context.get("graph", {})),
+        "search_files": len(context.get("search_results", {})),
+        "vault_files": len(context.get("vault", {})),
+        "notion_keys": len(context.get("notion", {})),
+        "has_user_input": bool(user_input),
+    }
+    resolved = db_path or config.DB_PATH
+    try:
+        from core.db_connection import get_connection
+        with get_connection(resolved) as conn:
+            conn.execute(
+                "INSERT INTO retrieval_log (command, summary_json, created_at) "
+                "VALUES (?, ?, datetime('now'))",
+                (command_name, json.dumps(summary)),
+            )
+            conn.commit()
+    except Exception:
+        logger.debug("retrieval_log insert failed", exc_info=True)
 
 
 def build_claude_messages(command: str, user_input: str, context: dict) -> list:
@@ -619,6 +667,12 @@ def build_claude_messages(command: str, user_input: str, context: dict) -> list:
         context_parts.append("### Linked Vault Files (via graph traversal)")
         for path, content in context["graph"].items():
             # Truncate long files to prevent token overload
+            truncated = content[:2000] + "..." if len(content) > 2000 else content
+            context_parts.append(f"#### {path}\n{truncated}")
+
+    if context.get("search_results"):
+        context_parts.append("### Search Results (system-retrieved, may include bot-generated content)")
+        for path, content in context["search_results"].items():
             truncated = content[:2000] + "..." if len(content) > 2000 else content
             context_parts.append(f"#### {path}\n{truncated}")
 
@@ -647,7 +701,8 @@ def build_claude_messages(command: str, user_input: str, context: dict) -> list:
     load_command_prompt(command)
 
     # Build the user message
-    user_parts = [f"Execute the /{command} command."]
+    today = datetime.now().strftime("%Y-%m-%d")
+    user_parts = [f"Today's date is **{today}**.", f"Execute the /{command} command."]
     if user_input:
         user_parts.append(f"User input: {user_input}")
     user_parts.append(f"\n## Context Data\n{context_block}")

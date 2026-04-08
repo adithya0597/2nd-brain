@@ -17,6 +17,7 @@ All callers use the same interface:
 
 To switch providers, change AI_PROVIDER, AI_API_KEY, and AI_MODEL in .env.
 """
+import asyncio
 import logging
 import sys
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 _client = None
 _initialized = False
+_ai_semaphore = asyncio.Semaphore(1)
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +118,23 @@ class _GeminiMessages:
             )
 
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, _sync_call)
+
+        async with _ai_semaphore:
+            response = None
+            for attempt in range(3):
+                try:
+                    response = await loop.run_in_executor(None, _sync_call)
+                    break
+                except Exception as e:
+                    err_str = str(e).lower()
+                    is_rate_limit = "429" in err_str or "rate" in err_str
+                    is_quota = "quota" in err_str or "resource_exhausted" in err_str
+                    if is_rate_limit and not is_quota and attempt < 2:
+                        wait = 2 ** (attempt + 1)
+                        logger.warning("Gemini rate limited (attempt %d/3), retrying in %ds", attempt + 1, wait)
+                        await asyncio.sleep(wait)
+                        continue
+                    raise
 
         input_tokens = 0
         output_tokens = 0
@@ -224,8 +242,55 @@ def get_ai_model():
     return "unknown"
 
 
+_anthropic_client = None
+_anthropic_initialized = False
+
+
+def get_anthropic_client():
+    """Return a dedicated Anthropic client for high-volume/cheap calls (e.g. distiller).
+
+    Bypasses the AI_PROVIDER auto-detect so callers always get Anthropic/Haiku
+    regardless of whether the main provider is Gemini.
+    Returns None if ANTHROPIC_API_KEY is not set.
+    """
+    global _anthropic_client, _anthropic_initialized
+    if _anthropic_initialized:
+        return _anthropic_client
+
+    config = sys.modules.get("config")
+    api_key = getattr(config, "ANTHROPIC_API_KEY", "") if config else ""
+    if api_key:
+        try:
+            _anthropic_client = _AnthropicClient(api_key)
+            logger.info("Dedicated Anthropic client initialized for distiller")
+        except Exception as e:
+            logger.error("Failed to initialize Anthropic client: %s", e)
+            _anthropic_client = None
+    else:
+        _anthropic_client = None
+
+    _anthropic_initialized = True
+    return _anthropic_client
+
+
 def reset_client():
     """Reset singleton for testing."""
-    global _client, _initialized
+    global _client, _initialized, _anthropic_client, _anthropic_initialized
     _client = None
     _initialized = False
+    _anthropic_client = None
+    _anthropic_initialized = False
+
+
+async def get_daily_token_usage() -> int:
+    """Sum tokens used today from api_token_logs."""
+    try:
+        from core.db_ops import query
+        rows = await query(
+            "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as total "
+            "FROM api_token_logs WHERE created_at >= date('now')"
+        )
+        return rows[0]["total"] if rows else 0
+    except Exception:
+        logger.debug("Could not query daily token usage", exc_info=True)
+        return 0
